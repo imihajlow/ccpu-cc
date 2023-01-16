@@ -13,5 +13,3 @@ const_assert!(LLONG_SIZE >= 8);
 const_assert!(SHORT_SIZE <= INT_SIZE);
 const_assert!(INT_SIZE <= LONG_SIZE);
 const_assert!(LONG_SIZE <= LLONG_SIZE);
-
-

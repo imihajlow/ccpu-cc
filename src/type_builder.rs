@@ -123,7 +123,7 @@ impl TypeBuilder {
 
         let extra_qualifiers = match &self.base_type {
             Some(BaseType::Alias(_, t)) => t.qualifiers,
-            _ => Qualifiers::empty()
+            _ => Qualifiers::empty(),
         };
         let t = match self.base_type.take() {
             None | Some(BaseType::Int) => {
@@ -144,7 +144,7 @@ impl TypeBuilder {
                 _ => unreachable!(),
             },
             Some(BaseType::Bool) => CType::Bool,
-            Some(BaseType::Alias(_, t)) => t.t
+            Some(BaseType::Alias(_, t)) => t.t,
         };
 
         Ok(TypeBuilderStage2 {
@@ -290,13 +290,14 @@ impl TypeBuilder {
                     }
                     Ok(())
                 }
-                BaseType::Alias(name, _) => {
-                    match (&self.modifier, &self.sign) {
-                        (TypeModifier::None, SignModifier::Default) => Ok(()),
-                        _ => {
-                            ec.record_error(CompileError::WrongModifiers(format!("typedef {}", &name)), span)?;
-                            Err(())
-                        }
+                BaseType::Alias(name, _) => match (&self.modifier, &self.sign) {
+                    (TypeModifier::None, SignModifier::Default) => Ok(()),
+                    _ => {
+                        ec.record_error(
+                            CompileError::WrongModifiers(format!("typedef {}", &name)),
+                            span,
+                        )?;
+                        Err(())
                     }
                 },
             },
@@ -324,7 +325,7 @@ impl TypeBuilderStage2 {
                 }
                 self.base_type.wrap_pointer(qualifiers);
             }
-            _ => todo!()
+            _ => todo!(),
         }
         Ok(())
     }

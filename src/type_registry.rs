@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ctype::{TypeIdentifier, QualifiedType};
-
+use crate::ctype::{QualifiedType, TypeIdentifier};
 
 pub struct TypeRegistry {
     structs: HashMap<TypeIdentifier, Vec<Field>>,
@@ -21,11 +20,15 @@ impl TypeRegistry {
             structs: HashMap::new(),
             unions: HashMap::new(),
             aliases: HashMap::new(),
-            last_id: 0
+            last_id: 0,
         }
     }
 
-    pub fn add_struct(&mut self, name: Option<&str>, fields: Vec<Field>) -> Result<TypeIdentifier, ()> {
+    pub fn add_struct(
+        &mut self,
+        name: Option<&str>,
+        fields: Vec<Field>,
+    ) -> Result<TypeIdentifier, ()> {
         let id = self.get_id(name);
         if self.structs.contains_key(&id) {
             Err(())
@@ -35,7 +38,11 @@ impl TypeRegistry {
         }
     }
 
-    pub fn add_union(&mut self, name: Option<&str>, fields: Vec<Field>) -> Result<TypeIdentifier, ()> {
+    pub fn add_union(
+        &mut self,
+        name: Option<&str>,
+        fields: Vec<Field>,
+    ) -> Result<TypeIdentifier, ()> {
         let id = self.get_id(name);
         if self.unions.contains_key(&id) {
             Err(())

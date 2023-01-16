@@ -239,11 +239,11 @@ fn match_storage_classes(old: &GlobalStorageClass, new: &GlobalStorageClass) -> 
 
 #[cfg(test)]
 mod test {
-    use crate::ctype::{self, Qualifiers};
+    use crate::ctype::{self, CType, QualifiedType, Qualifiers};
 
     use super::*;
 
-    use lang_c::driver::{Config, Flavor, parse_preprocessed};
+    use lang_c::driver::{parse_preprocessed, Config, Flavor};
 
     fn translate(code: &str) -> (Result<TranslationUnit, ()>, ErrorCollector) {
         let mut cfg = Config::default();
@@ -254,7 +254,7 @@ mod test {
     }
 
     #[test]
-    fn test_global_var() {
+    fn test_global_var_1() {
         let (tu_result, ec) = translate("int x;");
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
@@ -262,6 +262,65 @@ mod test {
         let (t, sc) = tu.global_declarations.get("x").unwrap();
         assert_eq!(t.t, ctype::INT_TYPE);
         assert_eq!(t.qualifiers, Qualifiers::empty());
-        assert_ne!(*sc, GlobalStorageClass::Default);
+        assert_eq!(*sc, GlobalStorageClass::Default);
+    }
+
+    #[test]
+    fn test_global_var_2() {
+        let (tu_result, ec) = translate("long long unsigned int x;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let (t, sc) = tu.global_declarations.get("x").unwrap();
+        assert_eq!(t.t, ctype::ULLONG_TYPE);
+        assert_eq!(t.qualifiers, Qualifiers::empty());
+        assert_eq!(*sc, GlobalStorageClass::Default);
+    }
+
+    #[test]
+    fn test_global_var_3() {
+        let (tu_result, ec) = translate("static const char x;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let (t, sc) = tu.global_declarations.get("x").unwrap();
+        assert_eq!(t.t, ctype::UCHAR_TYPE);
+        assert_eq!(t.qualifiers, Qualifiers::CONST);
+        assert_eq!(*sc, GlobalStorageClass::Static);
+    }
+
+    #[test]
+    fn test_global_var_4() {
+        let (tu_result, ec) = translate("signed int x, * const volatile y;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let (t, sc) = tu.global_declarations.get("x").unwrap();
+        assert_eq!(t.t, ctype::INT_TYPE);
+        assert_eq!(t.qualifiers, Qualifiers::empty());
+        assert_eq!(*sc, GlobalStorageClass::Default);
+
+        let (t, sc) = tu.global_declarations.get("y").unwrap();
+        assert_eq!(t.qualifiers, Qualifiers::CONST | Qualifiers::VOLATILE);
+        assert_eq!(*sc, GlobalStorageClass::Default);
+        assert_eq!(
+            t.t,
+            CType::Pointer(Box::new(QualifiedType {
+                t: ctype::INT_TYPE,
+                qualifiers: Qualifiers::empty()
+            }))
+        );
+    }
+
+    #[test]
+    fn test_global_var_5() {
+        let (tu_result, ec) = translate("typedef char new_char; static const new_char x;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let (t, sc) = tu.global_declarations.get("x").unwrap();
+        assert_eq!(t.t, ctype::UCHAR_TYPE);
+        assert_eq!(t.qualifiers, Qualifiers::CONST);
+        assert_eq!(*sc, GlobalStorageClass::Static);
     }
 }

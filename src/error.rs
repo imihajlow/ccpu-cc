@@ -1,5 +1,5 @@
-use std::fmt::Formatter;
 use lang_c::span::Span;
+use std::fmt::Formatter;
 
 pub enum CompileError {
     TooManyErrors,
@@ -61,16 +61,24 @@ impl std::fmt::Display for CompileError {
             CompileError::TooManyErrors => write!(f, "too many errors"),
             CompileError::Unimplemented(s) => write!(f, "unimplemented: {}", &s),
             CompileError::WrongStorageClass => f.write_str("wrong storage class"),
-            CompileError::MultipleStorageClasses => write!(f, "multiple storage classes in declaration specifiers"),
+            CompileError::MultipleStorageClasses => {
+                write!(f, "multiple storage classes in declaration specifiers")
+            }
             CompileError::UnknownType(s) => write!(f, "unknown type `{}'", &s),
-            CompileError::MultipleTypes => write!(f, "two or more data types in declaration specifiers"),
-            CompileError::MultipleSignSpecifiers => write!(f, "only one signed/unsigned is allowed"),
+            CompileError::MultipleTypes => {
+                write!(f, "two or more data types in declaration specifiers")
+            }
+            CompileError::MultipleSignSpecifiers => {
+                write!(f, "only one signed/unsigned is allowed")
+            }
             CompileError::LongShortTogether => write!(f, "long and short cannot be together"),
             CompileError::TypeTooLong => write!(f, "too long"),
             CompileError::WrongModifiers(t) => write!(f, "wrong modifiers for {}", t),
             CompileError::TypeRedefinition(t) => write!(f, "type `{}' is redefined", t),
             CompileError::ConflictingTypes(s) => write!(f, "conflicting types for {}", s),
-            CompileError::ConflictingStorageClass(s) => write!(f, "conflicting storage classes for {}", s),
+            CompileError::ConflictingStorageClass(s) => {
+                write!(f, "conflicting storage classes for {}", s)
+            }
         }
     }
 }
@@ -80,7 +88,9 @@ impl std::fmt::Display for CompileWarning {
         match self {
             CompileWarning::Unimplemented(s) => write!(f, "unimplemented: {}", &s),
             CompileWarning::ImplicitInt => f.write_str("implicit int"),
-            CompileWarning::EmptyDeclaration => f.write_str("empty declration doesn't declare anything"),
+            CompileWarning::EmptyDeclaration => {
+                f.write_str("empty declration doesn't declare anything")
+            }
         }
     }
 }
