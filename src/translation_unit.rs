@@ -1,0 +1,267 @@
+use std::collections::HashMap;
+
+use crate::ctype::QualifiedType;
+use crate::error::{CompileError, CompileErrorWithSpan, CompileWarning, ErrorCollector};
+use crate::type_builder::{TypeBuilder, TypeBuilderStage2};
+use crate::type_registry::TypeRegistry;
+use bitflags::bitflags;
+use lang_c::ast::{
+    Declaration, DeclarationSpecifier, Declarator, DeclaratorKind, ExternalDeclaration,
+    FunctionDefinition, FunctionSpecifier, StorageClassSpecifier,
+};
+use lang_c::span::{Node, Span};
+
+pub struct TranslationUnit {
+    type_registry: TypeRegistry,
+    global_declarations: HashMap<String, (QualifiedType, GlobalStorageClass)>,
+    global_symbols: Vec<String>,
+}
+
+#[derive(Debug, PartialEq)]
+enum GlobalStorageClass {
+    Default,
+    Static,
+    Extern,
+}
+
+impl TranslationUnit {
+    pub fn translate(
+        tu: lang_c::ast::TranslationUnit,
+        ec: &mut ErrorCollector,
+    ) -> Result<Self, ()> {
+        let mut r = Self {
+            type_registry: TypeRegistry::new(),
+            global_declarations: HashMap::new(),
+            global_symbols: Vec::new(),
+        };
+        for Node {
+            node: ed,
+            span: ed_span,
+        } in tu.0.into_iter()
+        {
+            match ed {
+                ExternalDeclaration::StaticAssert(_) => {
+                    ec.record_warning(
+                        CompileWarning::Unimplemented("static_assert".to_string()),
+                        ed_span,
+                    )?;
+                }
+                ExternalDeclaration::Declaration(n) => r.add_declaration(n, ec)?,
+                ExternalDeclaration::FunctionDefinition(n) => r.add_function_definition(n, ec)?,
+            }
+        }
+        Ok(r)
+    }
+
+    fn add_declaration(&mut self, n: Node<Declaration>, ec: &mut ErrorCollector) -> Result<(), ()> {
+        let Node {
+            node: decl,
+            span: decl_span,
+        } = n;
+        let mut storage_class = None;
+        let mut type_builder = TypeBuilder::new();
+        let mut is_inline = false;
+        for Node {
+            node: declspec,
+            span: declspec_span,
+        } in decl.specifiers
+        {
+            match declspec {
+                DeclarationSpecifier::StorageClass(Node {
+                    node: stclass,
+                    span: stclass_span,
+                }) => {
+                    if storage_class.is_none() {
+                        if let StorageClassSpecifier::Auto | StorageClassSpecifier::Register =
+                            stclass
+                        {
+                            // recoverable error
+                            ec.record_error(CompileError::WrongStorageClass, stclass_span)?;
+                            return Ok(());
+                        }
+                        storage_class = Some(stclass);
+                    } else {
+                        // recoverable error
+                        ec.record_error(CompileError::MultipleStorageClasses, stclass_span)?;
+                        return Ok(());
+                    }
+                }
+                DeclarationSpecifier::TypeSpecifier(typespec) => {
+                    type_builder.add_type_specifier_node(typespec, &self.type_registry, ec)?
+                }
+                DeclarationSpecifier::TypeQualifier(typequal) => {
+                    type_builder.add_type_qualifier_node(typequal, ec)?
+                }
+                DeclarationSpecifier::Function(Node {
+                    node: fnspec,
+                    span: fnspec_span,
+                }) => match fnspec {
+                    FunctionSpecifier::Inline => is_inline = true,
+                    FunctionSpecifier::Noreturn => ec.record_warning(
+                        CompileWarning::Unimplemented("_Noreturn".to_string()),
+                        fnspec_span,
+                    )?,
+                },
+                DeclarationSpecifier::Alignment(_) => ec.record_warning(
+                    CompileWarning::Unimplemented("alignment".to_string()),
+                    declspec_span,
+                )?,
+                DeclarationSpecifier::Extension(_) => ec.record_error(
+                    CompileError::Unimplemented("extension".to_string()),
+                    declspec_span,
+                )?,
+            }
+        }
+        for Node {
+            node: init_declarator,
+            span: init_declarator_span,
+        } in decl.declarators
+        {
+            let type_builder = type_builder.stage2(decl_span, ec)?;
+            let (id, t) = process_declarator_node(init_declarator.declarator, type_builder, ec)?;
+            match id {
+                None => {
+                    ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator_span)?
+                }
+                Some(id) => {
+                    match storage_class {
+                        Some(StorageClassSpecifier::Typedef) => {
+                            if self.type_registry.add_alias(&id, t).is_err() {
+                                // recoverable error
+                                ec.record_error(
+                                    CompileError::TypeRedefinition(id),
+                                    init_declarator_span,
+                                )?;
+                                return Ok(());
+                            }
+                        }
+                        None
+                        | Some(StorageClassSpecifier::Extern)
+                        | Some(StorageClassSpecifier::Static) => {
+                            let st_class = match storage_class {
+                                None => GlobalStorageClass::Default,
+                                Some(StorageClassSpecifier::Extern) => GlobalStorageClass::Extern,
+                                Some(StorageClassSpecifier::Static) => GlobalStorageClass::Static,
+                                _ => unreachable!(),
+                            };
+                            match self.global_declarations.get(&id) {
+                                Some((old_t, old_storage_class)) => {
+                                    // redefinition, check type match and storage class
+                                    if !old_t.is_same_as(&t) {
+                                        // recoverable error
+                                        ec.record_error(
+                                            CompileError::ConflictingTypes(id),
+                                            init_declarator_span,
+                                        )?;
+                                        return Ok(());
+                                    }
+                                    if !match_storage_classes(old_storage_class, &st_class) {
+                                        // recoverable error
+                                        ec.record_error(
+                                            CompileError::ConflictingStorageClass(id),
+                                            init_declarator_span,
+                                        )?;
+                                        return Ok(());
+                                    }
+                                }
+                                None => {
+                                    self.global_declarations.insert(id, (t, st_class));
+                                }
+                            }
+                        }
+                        Some(StorageClassSpecifier::Auto)
+                        | Some(StorageClassSpecifier::Register) => unreachable!(),
+                        Some(StorageClassSpecifier::ThreadLocal) => unimplemented!(),
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn add_function_definition(
+        &mut self,
+        n: Node<FunctionDefinition>,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        todo!()
+    }
+}
+
+/**
+ * Recursively continue building the type and return the name and the type.
+ */
+fn process_declarator_node(
+    declarator: Node<Declarator>,
+    mut type_builder: TypeBuilderStage2,
+    ec: &mut ErrorCollector,
+) -> Result<(Option<String>, QualifiedType), ()> {
+    let Node {
+        node: declarator,
+        span,
+    } = declarator;
+
+    for derived in declarator.derived {
+        type_builder.add_derived_declarator_node(derived, ec)?;
+    }
+
+    if !declarator.extensions.is_empty() {
+        ec.record_warning(CompileWarning::Unimplemented("extension".to_string()), span)?;
+    }
+
+    let kind = declarator.kind.node;
+    match kind {
+        DeclaratorKind::Abstract | DeclaratorKind::Identifier(_) => {
+            let qt = type_builder.finalize();
+            match kind {
+                DeclaratorKind::Abstract => Ok((None, qt)),
+                DeclaratorKind::Identifier(id) => Ok((Some(id.node.name), qt)),
+                DeclaratorKind::Declarator(_) => unreachable!(),
+            }
+        }
+        DeclaratorKind::Declarator(decl) => process_declarator_node(*decl, type_builder, ec),
+    }
+}
+
+fn match_storage_classes(old: &GlobalStorageClass, new: &GlobalStorageClass) -> bool {
+    use GlobalStorageClass::*;
+    // same classes match
+    // static may not follow non-static
+    // extern may follow static
+    match (old, new) {
+        (x, y) if x == y => true,
+        (_, Static) => false,
+        (Static, Extern) => true,
+        (Static, Default) => false,
+        (_, _) => true,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ctype::{self, Qualifiers};
+
+    use super::*;
+
+    use lang_c::driver::{Config, Flavor, parse_preprocessed};
+
+    fn translate(code: &str) -> (Result<TranslationUnit, ()>, ErrorCollector) {
+        let mut cfg = Config::default();
+        cfg.flavor = Flavor::StdC11;
+        let p = parse_preprocessed(&cfg, code.to_string()).unwrap();
+        let mut ec = ErrorCollector::new();
+        (TranslationUnit::translate(p.unit, &mut ec), ec)
+    }
+
+    #[test]
+    fn test_global_var() {
+        let (tu_result, ec) = translate("int x;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let (t, sc) = tu.global_declarations.get("x").unwrap();
+        assert_eq!(t.t, ctype::INT_TYPE);
+        assert_eq!(t.qualifiers, Qualifiers::empty());
+        assert_ne!(*sc, GlobalStorageClass::Default);
+    }
+}
