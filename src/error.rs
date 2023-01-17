@@ -42,7 +42,7 @@ impl ErrorCollector {
 
     pub fn record_error(&mut self, error: CompileError, span: Span) -> Result<(), ()> {
         self.errors.push((error, span));
-        Ok(())
+        Err(())
     }
 
     pub fn record_warning(&mut self, error: CompileWarning, span: Span) -> Result<(), ()> {

@@ -103,6 +103,16 @@ impl TypeBuilder {
         Ok(())
     }
 
+    pub fn add_specifier_qualifier_node(&mut self, sq: Node<lang_c::ast::SpecifierQualifier>, reg: &TypeRegistry, ec: &mut ErrorCollector) -> Result<(), ()> {
+        use lang_c::ast::SpecifierQualifier;
+        let sq = sq.node;
+        match sq {
+            SpecifierQualifier::TypeQualifier(q) => self.add_type_qualifier_node(q, ec),
+            SpecifierQualifier::TypeSpecifier(spec) => self.add_type_specifier_node(spec, reg, ec),
+            SpecifierQualifier::Extension(_) => unimplemented!()
+        }
+    }
+
     pub fn stage2(&mut self, span: Span, ec: &mut ErrorCollector) -> Result<TypeBuilderStage2, ()> {
         if self.base_type.is_none() {
             ec.record_warning(CompileWarning::ImplicitInt, span)?;
