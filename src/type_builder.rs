@@ -103,13 +103,18 @@ impl TypeBuilder {
         Ok(())
     }
 
-    pub fn add_specifier_qualifier_node(&mut self, sq: Node<lang_c::ast::SpecifierQualifier>, reg: &TypeRegistry, ec: &mut ErrorCollector) -> Result<(), ()> {
+    pub fn add_specifier_qualifier_node(
+        &mut self,
+        sq: Node<lang_c::ast::SpecifierQualifier>,
+        reg: &TypeRegistry,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
         use lang_c::ast::SpecifierQualifier;
         let sq = sq.node;
         match sq {
             SpecifierQualifier::TypeQualifier(q) => self.add_type_qualifier_node(q, ec),
             SpecifierQualifier::TypeSpecifier(spec) => self.add_type_specifier_node(spec, reg, ec),
-            SpecifierQualifier::Extension(_) => unimplemented!()
+            SpecifierQualifier::Extension(_) => unimplemented!(),
         }
     }
 
@@ -316,7 +321,47 @@ impl TypeBuilder {
 }
 
 impl TypeBuilderStage2 {
-    pub fn add_derived_declarator_node(
+    /**
+     * Recursively continue building the type and return the name and the type.
+     */
+    pub fn process_declarator_node(
+        mut self,
+        declarator: Node<lang_c::ast::Declarator>,
+        ec: &mut ErrorCollector,
+    ) -> Result<(Option<String>, QualifiedType), ()> {
+        use lang_c::ast::DeclaratorKind;
+        let Node {
+            node: declarator,
+            span,
+        } = declarator;
+
+        for derived in declarator.derived {
+            self.add_derived_declarator_node(derived, ec)?;
+        }
+
+        if !declarator.extensions.is_empty() {
+            ec.record_warning(CompileWarning::Unimplemented("extension".to_string()), span)?;
+        }
+
+        let kind = declarator.kind.node;
+        match kind {
+            DeclaratorKind::Abstract | DeclaratorKind::Identifier(_) => {
+                let qt = self.finalize();
+                match kind {
+                    DeclaratorKind::Abstract => Ok((None, qt)),
+                    DeclaratorKind::Identifier(id) => Ok((Some(id.node.name), qt)),
+                    DeclaratorKind::Declarator(_) => unreachable!(),
+                }
+            }
+            DeclaratorKind::Declarator(decl) => self.process_declarator_node(*decl, ec),
+        }
+    }
+
+    pub fn finalize(self) -> QualifiedType {
+        self.base_type
+    }
+
+    fn add_derived_declarator_node(
         &mut self,
         dd: Node<lang_c::ast::DerivedDeclarator>,
         ec: &mut ErrorCollector,
@@ -338,10 +383,6 @@ impl TypeBuilderStage2 {
             _ => todo!(),
         }
         Ok(())
-    }
-
-    pub fn finalize(self) -> QualifiedType {
-        self.base_type
     }
 }
 

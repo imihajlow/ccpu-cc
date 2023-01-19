@@ -4,6 +4,7 @@ use std::fmt::Formatter;
 pub enum CompileError {
     TooManyErrors,
     Unimplemented(String),
+    UnknownIdentifier(String),
     // Errors concerning types in declarations
     MultipleStorageClasses,
     WrongStorageClass,
@@ -17,6 +18,11 @@ pub enum CompileError {
     TypeRedefinition(String),
     ConflictingTypes(String),
     ConflictingStorageClass(String),
+    TypedefInitialized,
+    // Constant expression errors
+    VariablesForbidden,
+    NonConstInConstExpr,
+    BadCast(String, String),
 }
 
 pub enum CompileWarning {
@@ -60,6 +66,7 @@ impl std::fmt::Display for CompileError {
         match self {
             CompileError::TooManyErrors => write!(f, "too many errors"),
             CompileError::Unimplemented(s) => write!(f, "unimplemented: {}", &s),
+            CompileError::UnknownIdentifier(s) => write!(f, "unknown identifier: {}", &s),
             CompileError::WrongStorageClass => f.write_str("wrong storage class"),
             CompileError::MultipleStorageClasses => {
                 write!(f, "multiple storage classes in declaration specifiers")
@@ -79,6 +86,10 @@ impl std::fmt::Display for CompileError {
             CompileError::ConflictingStorageClass(s) => {
                 write!(f, "conflicting storage classes for {}", s)
             }
+            CompileError::VariablesForbidden => f.write_str("variables are forbidden here"),
+            CompileError::NonConstInConstExpr => f.write_str("non-const value in a constant expression"),
+            CompileError::BadCast(t1, t2) => write!(f, "bad cast from `{}' to `{}'", t1, t2),
+            CompileError::TypedefInitialized => f.write_str("typedef is initialized"),
         }
     }
 }

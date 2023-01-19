@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+#![feature(assert_matches)]
+
 
 mod ctype;
 mod error;
@@ -7,6 +9,8 @@ mod machine;
 mod translation_unit;
 mod type_builder;
 mod type_registry;
+mod constant;
+mod initializer;
 
 #[macro_use]
 extern crate static_assertions;
@@ -19,8 +23,7 @@ fn main() {
     let p = parse_preprocessed(
         &cfg,
         "
-        typedef int t;
-        const t x;
+        struct t c = { .a = 1, .b = 2 };
     "
         .to_string(),
     )

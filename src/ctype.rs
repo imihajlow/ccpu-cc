@@ -64,6 +64,15 @@ pub const DOUBLE_TYPE: CType = CType::Float(8);
 pub const LDOUBLE_TYPE: CType = CType::Float(16);
 
 impl QualifiedType {
+    /**
+     * Checks if two types are equal and can be used interchangebly in definition.
+     *
+     * Example:
+     * ```
+     * extern int x[];
+     * int x[25];
+     * ```
+     */
     pub fn is_same_as(&self, other: &Self) -> bool {
         if self.qualifiers != other.qualifiers {
             return false;
@@ -91,11 +100,64 @@ impl QualifiedType {
         }
     }
 
+    pub fn is_explicit_castable_to(&self, other: &Self) -> bool {
+        self.t.is_explicit_castable_to(&other.t)
+    }
+
     pub fn wrap_pointer(&mut self, qualifiers: Qualifiers) {
         replace_with_or_abort(self, |self_| QualifiedType {
             t: CType::Pointer(Box::new(self_)),
             qualifiers,
         });
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.qualifiers.contains(Qualifiers::CONST)
+    }
+}
+
+impl CType {
+    pub fn is_explicit_castable_to(&self, other: &Self) -> bool {
+        if let CType::Void = self {
+            return true;
+        }
+        if (self.is_numeric() || self.is_pointer())
+            && (other.is_numeric() || other.is_pointer() || other.is_array())
+        {
+            return true;
+        }
+        match (self, other) {
+            (CType::Struct(x), CType::Struct(y)) if x == y => true,
+            (CType::Union(x), CType::Union(y)) if x == y => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_numeric(&self) -> bool {
+        use CType::*;
+        match self {
+            Int(_, _) => true,
+            Bool => true,
+            Float(_) => true,
+            Enum(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_pointer(&self) -> bool {
+        if let CType::Pointer(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_array(&self) -> bool {
+        if let CType::Array(_, _) = self {
+            true
+        } else {
+            false
+        }
     }
 }
 
