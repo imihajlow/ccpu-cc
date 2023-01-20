@@ -1,3 +1,4 @@
+use lang_c::ast::UnaryOperatorExpression;
 use lang_c::span::Span;
 use lang_c::{
     ast::{CastExpression, Constant, Expression, Initializer},
@@ -92,6 +93,7 @@ pub fn compute_constant_expr(
             }
         }
         Expression::Cast(c) => process_cast_expression_node(*c, allow_var, tu, ec),
+        Expression::UnaryOperator(node) => process_unary_operator_expression_node(*node, allow_var, tu, ec),
         Expression::StringLiteral(_) => todo!(),
         Expression::Member(_) => todo!(),
         Expression::Call(_) => todo!(),
@@ -99,7 +101,6 @@ pub fn compute_constant_expr(
         Expression::SizeOfTy(_) => todo!(),
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(_) => todo!(),
-        Expression::UnaryOperator(_) => todo!(),
         Expression::BinaryOperator(_) => todo!(),
         Expression::Conditional(_) => todo!(),
         Expression::Comma(_) => todo!(),
@@ -107,6 +108,58 @@ pub fn compute_constant_expr(
         Expression::VaArg(_) => todo!(),
         Expression::Statement(_) => unimplemented!(), // GNU extension
         Expression::GenericSelection(_) => unimplemented!(),
+    }
+}
+
+fn process_unary_operator_expression_node(
+    node: Node<UnaryOperatorExpression>,
+    allow_var: bool,
+    tu: &TranslationUnit,
+    ec: &mut ErrorCollector,
+) -> Result<TypedValue, ()> {
+    use lang_c::ast::UnaryOperator;
+    let op_node = node.node.operator;
+    let op = op_node.node;
+    let span = op_node.span;
+    let val = compute_constant_expr(*node.node.operand, allow_var, tu, ec)?;
+    match op {
+        UnaryOperator::PostIncrement |
+        UnaryOperator::PostDecrement |
+        UnaryOperator::PreIncrement |
+        UnaryOperator::PreDecrement => {
+            ec.record_error(CompileError::AssignmentToConst, span)?;
+            unreachable!()
+        }
+        UnaryOperator::Address => unimplemented!(),
+        UnaryOperator::Indirection => unimplemented!(),
+        UnaryOperator::Plus => {
+            if !val.t.t.is_arithmetic() {
+                ec.record_error(CompileError::ArithmeticTypeRequired, span)?;
+                unreachable!()
+            }
+            Ok(val.promote())
+        }
+        UnaryOperator::Minus => {
+            if !val.t.t.is_arithmetic() {
+                ec.record_error(CompileError::ArithmeticTypeRequired, span)?;
+                unreachable!();
+            }
+            Ok(val.promote().negate())
+        }
+        UnaryOperator::Complement => {
+            if !val.t.t.is_integer() {
+                ec.record_error(CompileError::IntegerTypeRequired, span)?;
+                unreachable!();
+            }
+            Ok(val.promote().complement())
+        }
+        UnaryOperator::Negate => {
+            if !val.t.t.is_scalar() {
+                ec.record_error(CompileError::ScalarTypeRequired, span)?;
+                unreachable!();
+            }
+            Ok(val.promote().boolean_not())
+        }
     }
 }
 
@@ -130,11 +183,16 @@ fn process_cast_expression_node(
 
     Ok(TypedValue {
         val: cast(value, &new_type, c.span, ec)?,
-        t: new_type
+        t: new_type,
     })
 }
 
-fn cast(value: TypedValue, new_type: &QualifiedType, span: Span, ec: &mut ErrorCollector) -> Result<Value, ()> {
+fn cast(
+    value: TypedValue,
+    new_type: &QualifiedType,
+    span: Span,
+    ec: &mut ErrorCollector,
+) -> Result<Value, ()> {
     if !value.t.is_explicit_castable_to(&new_type) {
         ec.record_error(
             CompileError::BadCast(format!("{}", value.t), format!("{}", new_type)),

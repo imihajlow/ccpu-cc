@@ -249,7 +249,6 @@ fn match_storage_classes(old: &GlobalStorageClass, new: &GlobalStorageClass) -> 
 
 #[cfg(test)]
 mod test {
-    #![feature(assert_matches)]
     use std::assert_matches::assert_matches;
 
     use crate::ctype::{self, CType, QualifiedType, Qualifiers};
@@ -353,7 +352,7 @@ mod test {
     }
 
     #[test]
-    fn test_global_var_init() {
+    fn test_global_var_init_1() {
         let (tu_result, ec) = translate("const long x = 42;");
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
@@ -363,6 +362,109 @@ mod test {
         assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.storage_class, GlobalStorageClass::Default);
         assert_matches!(decl.initializer, Some(Value::Int(42)));
-        // assert_eq!(initializer.)
+    }
+
+    #[test]
+    fn test_global_var_init_2() {
+        let (tu_result, ec) = translate("unsigned char x = 0x01020304LLU;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UCHAR_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::empty());
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0x04)));
+    }
+
+    #[test]
+    fn test_global_var_init_3() {
+        let (tu_result, ec) = translate("const long x = (char)0x55667788;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::SLONG_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0x88)));
+    }
+
+    #[test]
+    fn test_global_var_init_unary_1() {
+        let (tu_result, ec) = translate("const int x = +22;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::SINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(22)));
+    }
+
+    #[test]
+    fn test_global_var_init_unary_2() {
+        let (tu_result, ec) = translate("const int x = -2200;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::SINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(-2200)));
+    }
+
+    #[test]
+    fn test_global_var_init_unary_3() {
+        let (tu_result, ec) = translate("const unsigned char x = ~0x55;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UCHAR_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0xaa)));
+    }
+
+    #[test]
+    fn test_global_var_init_unary_4() {
+        let (tu_result, ec) = translate("const long x = !2;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::SLONG_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0)));
+    }
+
+    #[test]
+    fn test_global_var_init_unary_5() {
+        let (tu_result, ec) = translate("const unsigned long x = -1;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::ULONG_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0xffffffff)));
+    }
+
+    #[test]
+    fn test_global_var_init_unary_6() {
+        let (tu_result, ec) = translate("const unsigned long x = -1u;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::ULONG_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0xffff)));
     }
 }

@@ -114,6 +114,16 @@ impl QualifiedType {
     pub fn is_const(&self) -> bool {
         self.qualifiers.contains(Qualifiers::CONST)
     }
+
+    /**
+     * Do the integer type promotion.
+     */
+    pub fn promote(self) -> Self {
+        Self {
+            t: self.t.promote(),
+            ..self
+        }
+    }
 }
 
 impl CType {
@@ -121,8 +131,8 @@ impl CType {
         if let CType::Void = self {
             return true;
         }
-        if (self.is_numeric() || self.is_pointer())
-            && (other.is_numeric() || other.is_pointer() || other.is_array())
+        if (self.is_arithmetic() || self.is_pointer())
+            && (other.is_arithmetic() || other.is_pointer() || other.is_array())
         {
             return true;
         }
@@ -133,13 +143,45 @@ impl CType {
         }
     }
 
-    pub fn is_numeric(&self) -> bool {
+    pub fn is_arithmetic(&self) -> bool {
         use CType::*;
         match self {
             Int(_, _) => true,
             Bool => true,
             Float(_) => true,
             Enum(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_integer(&self) -> bool {
+        use CType::*;
+        match self {
+            Int(_, _) => true,
+            Bool => true,
+            Enum(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_scalar(&self) -> bool {
+        use CType::*;
+        match self {
+            Int(_, _) => true,
+            Bool => true,
+            Float(_) => true,
+            Enum(_) => true,
+            Pointer(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_aggregate(&self) -> bool {
+        use CType::*;
+        match self {
+            Array(_, _) => true,
+            Struct(_) => true,
+            Union(_) => true,
             _ => false,
         }
     }
@@ -157,6 +199,17 @@ impl CType {
             true
         } else {
             false
+        }
+    }
+
+    /**
+     * Do the integer type promotion.
+     */
+    pub fn promote(self) -> Self {
+        match self {
+            CType::Int(size, _) if size < machine::INT_SIZE => CType::Int(machine::INT_SIZE, true),
+            CType::Bool => CType::Int(machine::INT_SIZE, true),
+            x => x,
         }
     }
 }

@@ -23,6 +23,11 @@ pub enum CompileError {
     VariablesForbidden,
     NonConstInConstExpr,
     BadCast(String, String),
+    AssignmentToConst,
+    // General expression error
+    ArithmeticTypeRequired,
+    IntegerTypeRequired,
+    ScalarTypeRequired,
 }
 
 pub enum CompileWarning {
@@ -87,9 +92,15 @@ impl std::fmt::Display for CompileError {
                 write!(f, "conflicting storage classes for {}", s)
             }
             CompileError::VariablesForbidden => f.write_str("variables are forbidden here"),
-            CompileError::NonConstInConstExpr => f.write_str("non-const value in a constant expression"),
+            CompileError::NonConstInConstExpr => {
+                f.write_str("non-const value in a constant expression")
+            }
             CompileError::BadCast(t1, t2) => write!(f, "bad cast from `{}' to `{}'", t1, t2),
             CompileError::TypedefInitialized => f.write_str("typedef is initialized"),
+            CompileError::AssignmentToConst => f.write_str("assignment to a constant expression"),
+            CompileError::ArithmeticTypeRequired => f.write_str("an arithmetic type is required here"),
+            CompileError::IntegerTypeRequired => f.write_str("an integer type is required here"),
+            CompileError::ScalarTypeRequired => f.write_str("a scalar type is required here"),
         }
     }
 }
