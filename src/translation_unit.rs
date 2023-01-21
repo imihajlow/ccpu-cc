@@ -742,4 +742,43 @@ mod test {
         assert_eq!(decl.storage_class, GlobalStorageClass::Default);
         assert_matches!(decl.initializer, Some(Value::Int(1)));
     }
+
+    #[test]
+    fn test_global_var_init_bitwise_1() {
+        let (tu_result, ec) = translate("const unsigned int x = 0xf0 | 0x0f;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0xff)));
+    }
+
+    #[test]
+    fn test_global_var_init_bitwise_2() {
+        let (tu_result, ec) = translate("const unsigned int x = 0x10e0 & 0xff;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0xe0)));
+    }
+
+    #[test]
+    fn test_global_var_init_bitwise_3() {
+        let (tu_result, ec) = translate("const unsigned int x = 0xff ^ 0x111;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0x1ee)));
+    }
 }

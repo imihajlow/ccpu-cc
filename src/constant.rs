@@ -210,26 +210,20 @@ fn process_binary_operator_expression_node(
                 unreachable!()
             }
         }
-        BinaryOperator::Modulo => {
-            if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
-                let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
-                let lhs_val = lhs.unwrap_integer();
-                let rhs_val = rhs.unwrap_integer();
-                if rhs_val == 0 {
+        BinaryOperator::Modulo => integer_op(
+            |lhs, rhs, ec| {
+                if rhs == 0 {
                     ec.record_error(CompileError::DivisionByZero, rhs_span)?;
                     unreachable!();
                 }
-                Ok(TypedValue::new_integer(lhs_val % rhs_val, lhs.t.t))
-            } else {
-                let span = if !lhs.t.t.is_integer() {
-                    lhs_span
-                } else {
-                    rhs_span
-                };
-                ec.record_error(CompileError::IntegerTypeRequired, span)?;
-                unreachable!()
-            }
-        }
+                Ok(lhs % rhs)
+            },
+            lhs,
+            rhs,
+            lhs_span,
+            rhs_span,
+            ec,
+        ),
         BinaryOperator::ShiftLeft => {
             if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
                 let lhs = lhs.promote();
@@ -312,9 +306,30 @@ fn process_binary_operator_expression_node(
                 ctype::INT_TYPE,
             ))
         }
-        BinaryOperator::BitwiseAnd => todo!(),
-        BinaryOperator::BitwiseXor => todo!(),
-        BinaryOperator::BitwiseOr => todo!(),
+        BinaryOperator::BitwiseAnd => integer_op(
+            |lhs, rhs, _ec| Ok(lhs & rhs),
+            lhs,
+            rhs,
+            lhs_span,
+            rhs_span,
+            ec,
+        ),
+        BinaryOperator::BitwiseXor => integer_op(
+            |lhs, rhs, _ec| Ok(lhs ^ rhs),
+            lhs,
+            rhs,
+            lhs_span,
+            rhs_span,
+            ec,
+        ),
+        BinaryOperator::BitwiseOr => integer_op(
+            |lhs, rhs, _ec| Ok(lhs | rhs),
+            lhs,
+            rhs,
+            lhs_span,
+            rhs_span,
+            ec,
+        ),
         BinaryOperator::LogicalAnd => todo!(),
         BinaryOperator::LogicalOr => todo!(),
         BinaryOperator::Index => todo!(),
@@ -366,6 +381,37 @@ fn compare(
         todo!()
     } else {
         ec.record_error(CompileError::CannotCompare(lhs.t, rhs.t), span)?;
+        unreachable!()
+    }
+}
+
+/**
+ * Common method for integer arithmetic operations.
+ */
+fn integer_op<F>(
+    f: F,
+    lhs: TypedValue,
+    rhs: TypedValue,
+    lhs_span: Span,
+    rhs_span: Span,
+    ec: &mut ErrorCollector,
+) -> Result<TypedValue, ()>
+where
+    F: FnOnce(i128, i128, &mut ErrorCollector) -> Result<i128, ()>,
+{
+    if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
+        let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+        let lhs_val = lhs.unwrap_integer();
+        let rhs_val = rhs.unwrap_integer();
+        let r = f(lhs_val, rhs_val, ec)?;
+        Ok(TypedValue::new_integer(r, lhs.t.t))
+    } else {
+        let span = if !lhs.t.t.is_integer() {
+            lhs_span
+        } else {
+            rhs_span
+        };
+        ec.record_error(CompileError::IntegerTypeRequired, span)?;
         unreachable!()
     }
 }
