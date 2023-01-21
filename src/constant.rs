@@ -330,8 +330,12 @@ fn process_binary_operator_expression_node(
             rhs_span,
             ec,
         ),
-        BinaryOperator::LogicalAnd => todo!(),
-        BinaryOperator::LogicalOr => todo!(),
+        BinaryOperator::LogicalAnd => {
+            logical_op(|lhs, rhs| lhs && rhs, lhs, rhs, lhs_span, rhs_span, ec)
+        }
+        BinaryOperator::LogicalOr => {
+            logical_op(|lhs, rhs| lhs || rhs, lhs, rhs, lhs_span, rhs_span, ec)
+        }
         BinaryOperator::Index => todo!(),
         BinaryOperator::Assign
         | BinaryOperator::AssignMultiply
@@ -412,6 +416,37 @@ where
             rhs_span
         };
         ec.record_error(CompileError::IntegerTypeRequired, span)?;
+        unreachable!()
+    }
+}
+
+/**
+ * Common method for logical operations over two scalar types.
+ */
+fn logical_op<F>(
+    f: F,
+    lhs: TypedValue,
+    rhs: TypedValue,
+    lhs_span: Span,
+    rhs_span: Span,
+    ec: &mut ErrorCollector,
+) -> Result<TypedValue, ()>
+where
+    F: FnOnce(bool, bool) -> bool,
+{
+    if lhs.t.t.is_scalar() && rhs.t.t.is_scalar() {
+        let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+        let lhs_zero = lhs.is_zero();
+        let rhs_zero = rhs.is_zero();
+        let r = f(!lhs_zero, !rhs_zero);
+        Ok(TypedValue::new_integer(if r { 1 } else { 0 }, lhs.t.t))
+    } else {
+        let span = if !lhs.t.t.is_scalar() {
+            lhs_span
+        } else {
+            rhs_span
+        };
+        ec.record_error(CompileError::ScalarTypeRequired, span)?;
         unreachable!()
     }
 }

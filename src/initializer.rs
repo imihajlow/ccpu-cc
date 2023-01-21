@@ -274,6 +274,13 @@ impl TypedValue {
         }
     }
 
+    pub fn is_zero(&self) -> bool {
+        match self.val {
+            Value::Int(x) => x == 0,
+            _ => false,
+        }
+    }
+
     pub fn negate(self) -> Self {
         let negated = match self.val {
             Value::Int(x) => Self {
