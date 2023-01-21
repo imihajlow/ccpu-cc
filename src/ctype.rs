@@ -164,6 +164,26 @@ impl CType {
         }
     }
 
+    pub fn is_long_double(&self) -> bool {
+        false
+    }
+
+    pub fn is_double(&self) -> bool {
+        if let CType::Float(8) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_float(&self) -> bool {
+        if let CType::Float(4) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_scalar(&self) -> bool {
         use CType::*;
         match self {

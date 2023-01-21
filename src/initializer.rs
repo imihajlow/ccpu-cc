@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use lang_c::ast::IntegerSuffix;
 
-use crate::{ctype::{QualifiedType, CType, self, Qualifiers}, machine};
+use crate::{
+    ctype::{self, CType, QualifiedType, Qualifiers},
+    machine,
+};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -24,6 +27,17 @@ pub struct TypedValue {
 }
 
 impl TypedValue {
+    pub fn new_integer(value: i128, t: CType) -> Self {
+        Self {
+            t: QualifiedType {
+                t,
+                qualifiers: Qualifiers::CONST,
+            },
+            val: Value::Int(value),
+        }
+        .clamp_to_type()
+    }
+
     /**
      * Construct an integer constant according to 6.4.4.1
      */
@@ -114,14 +128,16 @@ impl TypedValue {
                     }
                 }
             }
-            (true, IntegerSize::LongLong) => {
-                ctype::ULLONG_TYPE
-            }
+            (true, IntegerSize::LongLong) => ctype::ULLONG_TYPE,
         };
         Self {
-            t: QualifiedType { t: t, qualifiers: Qualifiers::CONST },
-            val: Value::Int(n as i128)
-        }.clamp_to_type()
+            t: QualifiedType {
+                t: t,
+                qualifiers: Qualifiers::CONST,
+            },
+            val: Value::Int(n as i128),
+        }
+        .clamp_to_type()
     }
 
     /**
@@ -131,6 +147,87 @@ impl TypedValue {
         Self {
             t: self.t.promote(),
             ..self
+        }
+    }
+
+    /**
+     * Perform usual arithmetic conversions according to 6.3.1.8
+     */
+    pub fn usual_arithmetic_convert(lhs: Self, rhs: Self) -> (Self, Self) {
+        if lhs.t.t.is_long_double() || rhs.t.t.is_long_double() {
+            todo!()
+        } else if lhs.t.t.is_double() || rhs.t.t.is_double() {
+            todo!()
+        } else if lhs.t.t.is_float() || rhs.t.t.is_float() {
+            todo!()
+        } else if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
+            // Otherwise, the integer promotions are performed on both operands.
+            let lhs = lhs.promote();
+            let rhs = rhs.promote();
+            // Then the following rules are applied to the promoted operands
+            if lhs.t.is_same_as(&rhs.t) {
+                // If both operands have the same type, then no further conversion is needed.
+                (lhs, rhs)
+            } else {
+                let (lhs_size, lhs_sign) = match lhs.t.t {
+                    CType::Int(size, sign) => (size, sign),
+                    _ => unreachable!(),
+                };
+                let (rhs_size, rhs_sign) = match rhs.t.t {
+                    CType::Int(size, sign) => (size, sign),
+                    _ => unreachable!(),
+                };
+                let common_type = if lhs_sign == rhs_sign {
+                    // Otherwise, if both operands have signed integer types or both have unsigned integer types,
+                    // the operand with the type of lesser integer conversion rank is converted to the type
+                    // of the operand with greater rank.
+                    let max_size = std::cmp::max(lhs_size, rhs_size);
+                    CType::Int(max_size, lhs_sign)
+                } else {
+                    let (signed_size, unsigned_size) = if lhs_sign {
+                        (lhs_size, rhs_size)
+                    } else {
+                        (rhs_size, lhs_size)
+                    };
+                    if unsigned_size >= signed_size {
+                        // Otherwise, if the operand that has unsigned integer type has rank greater or equal
+                        // to the rank of the type of the other operand, then the operand with signed integer type
+                        // is converted to the type of the operand with unsigned integer type.
+                        CType::Int(unsigned_size, false)
+                    } else if signed_size > unsigned_size {
+                        // Otherwise, if the type of the operand with signed integer type can represent
+                        // all of the values of the type of the operand with unsigned integer type,
+                        // then the operand with unsigned integer type is converted to the type
+                        // of the operand with signed integer type.
+                        CType::Int(signed_size, true)
+                    } else {
+                        // Otherwise, both operands are converted to the unsigned integer type
+                        // corresponding to the type of the operand with signed integer type.
+                        // -- this will never happen
+                        CType::Int(signed_size, false)
+                    }
+                };
+                (
+                    Self {
+                        t: QualifiedType {
+                            t: common_type.clone(),
+                            ..lhs.t
+                        },
+                        ..lhs
+                    }
+                    .clamp_to_type(),
+                    Self {
+                        t: QualifiedType {
+                            t: common_type,
+                            ..rhs.t
+                        },
+                        ..rhs
+                    }
+                    .clamp_to_type(),
+                )
+            }
+        } else {
+            unreachable!()
         }
     }
 
@@ -169,9 +266,20 @@ impl TypedValue {
         }
     }
 
+    pub fn unwrap_integer(&self) -> i128 {
+        if let Value::Int(x) = self.val {
+            x
+        } else {
+            panic!("not an integer")
+        }
+    }
+
     pub fn negate(self) -> Self {
         let negated = match self.val {
-            Value::Int(x) => Self { val: Value::Int(-x), ..self },
+            Value::Int(x) => Self {
+                val: Value::Int(-x),
+                ..self
+            },
             _ => panic!(),
         };
         negated.clamp_to_type()
@@ -179,7 +287,10 @@ impl TypedValue {
 
     pub fn complement(self) -> Self {
         let comp = match self.val {
-            Value::Int(x) => Self { val: Value::Int(!x), ..self },
+            Value::Int(x) => Self {
+                val: Value::Int(!x),
+                ..self
+            },
             _ => panic!(),
         };
         comp.clamp_to_type()
@@ -187,8 +298,14 @@ impl TypedValue {
 
     pub fn boolean_not(self) -> Self {
         match self.val {
-            Value::Int(0) => Self { val: Value::Int(1), ..self },
-            Value::Int(_) => Self { val: Value::Int(0), ..self },
+            Value::Int(0) => Self {
+                val: Value::Int(1),
+                ..self
+            },
+            Value::Int(_) => Self {
+                val: Value::Int(0),
+                ..self
+            },
             _ => panic!(),
         }
     }

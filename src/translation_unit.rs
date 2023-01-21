@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use crate::constant::compute_constant_initializer;
 use crate::ctype::QualifiedType;
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
+use crate::initializer::{self, Value};
 use crate::type_builder::{TypeBuilder, TypeBuilderStage2};
 use crate::type_registry::TypeRegistry;
-use crate::initializer::{Value, self};
 use lang_c::ast::{
     Declaration, DeclarationSpecifier, Declarator, DeclaratorKind, ExternalDeclaration,
     FunctionDefinition, FunctionSpecifier, InitDeclarator, StorageClassSpecifier,
@@ -158,7 +158,8 @@ impl TranslationUnit {
                 match storage_class {
                     Some(StorageClassSpecifier::Typedef) => {
                         if let Some(initializer) = init_declarator.initializer {
-                            return ec.record_error(CompileError::TypedefInitialized, initializer.span);
+                            return ec
+                                .record_error(CompileError::TypedefInitialized, initializer.span);
                         }
                         if self.type_registry.add_alias(&id, t).is_err() {
                             return ec.record_error(
@@ -193,11 +194,18 @@ impl TranslationUnit {
                                 }
                             }
                             None => {
-                                let initializer = if let Some(initializer) = init_declarator.initializer {
-                                    Some(compute_constant_initializer(initializer, &t, false, self, ec)?)
-                                } else {
-                                    None
-                                };
+                                let initializer =
+                                    if let Some(initializer) = init_declarator.initializer {
+                                        Some(compute_constant_initializer(
+                                            initializer,
+                                            &t,
+                                            false,
+                                            self,
+                                            ec,
+                                        )?)
+                                    } else {
+                                        None
+                                    };
                                 self.global_declarations.insert(
                                     id,
                                     GlobalDeclaration {
@@ -505,5 +513,44 @@ mod test {
         assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.storage_class, GlobalStorageClass::Default);
         assert_matches!(decl.initializer, Some(Value::Int(-32768)));
+    }
+
+    #[test]
+    fn test_global_var_init_sum_1() {
+        let (tu_result, ec) = translate("const int x = 5 + 8;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::INT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(13)));
+    }
+
+    #[test]
+    fn test_global_var_init_sum_2() {
+        let (tu_result, ec) = translate("const unsigned char x = 200 + 57;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UCHAR_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(1)));
+    }
+
+    #[test]
+    fn test_global_var_init_sum_3() {
+        let (tu_result, ec) = translate("const int x = 5 + 0x10001;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::INT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(6)));
     }
 }

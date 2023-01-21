@@ -1,4 +1,4 @@
-use lang_c::ast::UnaryOperatorExpression;
+use lang_c::ast::{BinaryOperatorExpression, UnaryOperatorExpression};
 use lang_c::span::Span;
 use lang_c::{
     ast::{CastExpression, Constant, Expression, Initializer},
@@ -80,7 +80,12 @@ pub fn compute_constant_expr(
             }
         }
         Expression::Cast(c) => process_cast_expression_node(*c, allow_var, tu, ec),
-        Expression::UnaryOperator(node) => process_unary_operator_expression_node(*node, allow_var, tu, ec),
+        Expression::UnaryOperator(node) => {
+            process_unary_operator_expression_node(*node, allow_var, tu, ec)
+        }
+        Expression::BinaryOperator(node) => {
+            process_binary_operator_expression_node(*node, allow_var, tu, ec)
+        }
         Expression::StringLiteral(_) => todo!(),
         Expression::Member(_) => todo!(),
         Expression::Call(_) => todo!(),
@@ -88,13 +93,85 @@ pub fn compute_constant_expr(
         Expression::SizeOfTy(_) => todo!(),
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(_) => todo!(),
-        Expression::BinaryOperator(_) => todo!(),
         Expression::Conditional(_) => todo!(),
         Expression::Comma(_) => todo!(),
         Expression::OffsetOf(_) => todo!(),
         Expression::VaArg(_) => todo!(),
         Expression::Statement(_) => unimplemented!(), // GNU extension
         Expression::GenericSelection(_) => unimplemented!(),
+    }
+}
+
+fn process_binary_operator_expression_node(
+    node: Node<BinaryOperatorExpression>,
+    allow_var: bool,
+    tu: &TranslationUnit,
+    ec: &mut ErrorCollector,
+) -> Result<TypedValue, ()> {
+    use lang_c::ast::BinaryOperator;
+    let lhs_span = node.node.lhs.span;
+    let rhs_span = node.node.rhs.span;
+    let lhs = compute_constant_expr(*node.node.lhs, allow_var, tu, ec)?;
+    let rhs = compute_constant_expr(*node.node.rhs, allow_var, tu, ec)?;
+    let op = node.node.operator.node;
+    let op_span = node.node.operator.span;
+    match op {
+        BinaryOperator::Plus => {
+            if lhs.t.t.is_arithmetic() || rhs.t.t.is_arithmetic() {
+                // make rhs be arithmetic
+                let (lhs, rhs, sus_span) = if rhs.t.t.is_arithmetic() {
+                    (lhs, rhs, lhs_span)
+                } else {
+                    (rhs, lhs, rhs_span)
+                };
+                if lhs.t.t.is_arithmetic() {
+                    let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                    let lhs_val = lhs.unwrap_integer();
+                    let rhs_val = rhs.unwrap_integer();
+                    Ok(TypedValue::new_integer(lhs_val + rhs_val, lhs.t.t))
+                } else if lhs.t.t.is_pointer() {
+                    todo!()
+                } else {
+                    ec.record_error(CompileError::ArithmeticTypeRequired, sus_span)?;
+                    unreachable!();
+                }
+            } else {
+                ec.record_error(CompileError::ArithmeticTypeRequired, lhs_span)?;
+                unreachable!()
+            }
+        }
+        BinaryOperator::Index => todo!(),
+        BinaryOperator::Multiply => todo!(),
+        BinaryOperator::Divide => todo!(),
+        BinaryOperator::Modulo => todo!(),
+        BinaryOperator::Minus => todo!(),
+        BinaryOperator::ShiftLeft => todo!(),
+        BinaryOperator::ShiftRight => todo!(),
+        BinaryOperator::Less => todo!(),
+        BinaryOperator::Greater => todo!(),
+        BinaryOperator::LessOrEqual => todo!(),
+        BinaryOperator::GreaterOrEqual => todo!(),
+        BinaryOperator::Equals => todo!(),
+        BinaryOperator::NotEquals => todo!(),
+        BinaryOperator::BitwiseAnd => todo!(),
+        BinaryOperator::BitwiseXor => todo!(),
+        BinaryOperator::BitwiseOr => todo!(),
+        BinaryOperator::LogicalAnd => todo!(),
+        BinaryOperator::LogicalOr => todo!(),
+        BinaryOperator::Assign
+        | BinaryOperator::AssignMultiply
+        | BinaryOperator::AssignDivide
+        | BinaryOperator::AssignModulo
+        | BinaryOperator::AssignPlus
+        | BinaryOperator::AssignMinus
+        | BinaryOperator::AssignShiftLeft
+        | BinaryOperator::AssignShiftRight
+        | BinaryOperator::AssignBitwiseAnd
+        | BinaryOperator::AssignBitwiseXor
+        | BinaryOperator::AssignBitwiseOr => {
+            ec.record_error(CompileError::AssignmentToConst, op_span)?;
+            unreachable!()
+        }
     }
 }
 
@@ -110,10 +187,10 @@ fn process_unary_operator_expression_node(
     let span = op_node.span;
     let val = compute_constant_expr(*node.node.operand, allow_var, tu, ec)?;
     match op {
-        UnaryOperator::PostIncrement |
-        UnaryOperator::PostDecrement |
-        UnaryOperator::PreIncrement |
-        UnaryOperator::PreDecrement => {
+        UnaryOperator::PostIncrement
+        | UnaryOperator::PostDecrement
+        | UnaryOperator::PreIncrement
+        | UnaryOperator::PreDecrement => {
             ec.record_error(CompileError::AssignmentToConst, span)?;
             unreachable!()
         }
