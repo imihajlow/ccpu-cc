@@ -65,28 +65,15 @@ pub fn compute_constant_expr(
         Expression::Constant(c) => {
             match c.node {
                 Constant::Integer(i) => {
-                    use lang_c::ast::{IntegerBase, IntegerSize};
+                    use lang_c::ast::IntegerBase;
                     let radix = match i.base {
                         IntegerBase::Decimal => 10,
                         IntegerBase::Octal => 8,
                         IntegerBase::Hexadecimal => 16,
                         IntegerBase::Binary => 2,
                     };
-                    let num = i128::from_str_radix(&i.number, radix).unwrap(); // should be already checked by lang_c
-                    if i.suffix.imaginary {
-                        unimplemented!();
-                    }
-                    let size = match i.suffix.size {
-                        IntegerSize::Int => machine::INT_SIZE,
-                        IntegerSize::Long => machine::LONG_SIZE,
-                        IntegerSize::LongLong => machine::LLONG_SIZE,
-                    };
-                    let t = QualifiedType {
-                        t: CType::Int(size, !i.suffix.unsigned),
-                        qualifiers: Qualifiers::CONST,
-                    };
-                    let val = Value::Int(num);
-                    Ok(TypedValue { t, val })
+                    let num = u128::from_str_radix(&i.number, radix).unwrap(); // should be already checked by lang_c
+                    Ok(TypedValue::new_from_int_literal(num, i.suffix, radix == 10))
                 }
                 Constant::Float(_) => todo!(),
                 Constant::Character(_) => todo!(),

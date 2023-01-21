@@ -391,6 +391,19 @@ mod test {
     }
 
     #[test]
+    fn test_global_var_init_4() {
+        let (tu_result, ec) = translate("const long x = 0x0102030405;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::SLONG_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0x02030405)));
+    }
+
+    #[test]
     fn test_global_var_init_unary_1() {
         let (tu_result, ec) = translate("const int x = +22;");
         assert!(tu_result.is_ok());
@@ -466,5 +479,31 @@ mod test {
         assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.storage_class, GlobalStorageClass::Default);
         assert_matches!(decl.initializer, Some(Value::Int(0xffff)));
+    }
+
+    #[test]
+    fn test_global_var_init_unary_7() {
+        let (tu_result, ec) = translate("const int x = -32768;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::INT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(-32768)));
+    }
+
+    #[test]
+    fn test_global_var_init_unary_8() {
+        let (tu_result, ec) = translate("const long x = -32768;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::LONG_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(-32768)));
     }
 }

@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{ctype::QualifiedType, machine};
+use lang_c::ast::IntegerSuffix;
+
+use crate::{ctype::{QualifiedType, CType, self, Qualifiers}, machine};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -23,6 +25,106 @@ pub struct TypedValue {
 
 impl TypedValue {
     /**
+     * Construct an integer constant according to 6.4.4.1
+     */
+    pub fn new_from_int_literal(n: u128, suffix: IntegerSuffix, is_decimal: bool) -> Self {
+        use lang_c::ast::IntegerSize;
+        let len: u8 = 128 - n.leading_zeros() as u8;
+        let int_len = machine::INT_SIZE * 8 - 1;
+        let uint_len = machine::INT_SIZE * 8;
+        let long_len = machine::LONG_SIZE * 8 - 1;
+        let ulong_len = machine::LONG_SIZE * 8;
+        let llong_len = machine::LLONG_SIZE * 8 - 1;
+
+        if suffix.imaginary {
+            unimplemented!();
+        }
+
+        let t = match (suffix.unsigned, suffix.size) {
+            (false, IntegerSize::Int) => {
+                if len <= int_len {
+                    ctype::INT_TYPE
+                } else if len <= uint_len {
+                    if is_decimal {
+                        ctype::LONG_TYPE
+                    } else {
+                        ctype::UINT_TYPE
+                    }
+                } else if len <= long_len {
+                    ctype::LONG_TYPE
+                } else if len <= ulong_len {
+                    if is_decimal {
+                        ctype::LLONG_TYPE
+                    } else {
+                        ctype::ULONG_TYPE
+                    }
+                } else if len <= llong_len {
+                    ctype::LLONG_TYPE
+                } else {
+                    if is_decimal {
+                        ctype::LLONG_TYPE
+                    } else {
+                        ctype::ULLONG_TYPE
+                    }
+                }
+            }
+            (true, IntegerSize::Int) => {
+                if len <= uint_len {
+                    ctype::UINT_TYPE
+                } else if len <= ulong_len {
+                    ctype::ULONG_TYPE
+                } else {
+                    ctype::ULLONG_TYPE
+                }
+            }
+            (false, IntegerSize::Long) => {
+                if len <= long_len {
+                    ctype::LONG_TYPE
+                } else if len <= ulong_len {
+                    if is_decimal {
+                        ctype::LLONG_TYPE
+                    } else {
+                        ctype::ULONG_TYPE
+                    }
+                } else if len <= llong_len {
+                    ctype::LLONG_TYPE
+                } else {
+                    if is_decimal {
+                        ctype::LLONG_TYPE
+                    } else {
+                        ctype::ULLONG_TYPE
+                    }
+                }
+            }
+            (true, IntegerSize::Long) => {
+                if len <= ulong_len {
+                    ctype::ULONG_TYPE
+                } else {
+                    ctype::ULLONG_TYPE
+                }
+            }
+            (false, IntegerSize::LongLong) => {
+                if len <= llong_len {
+                    ctype::LLONG_TYPE
+                } else {
+                    if is_decimal {
+                        ctype::LLONG_TYPE
+                    } else {
+                        ctype::ULLONG_TYPE
+                    }
+                }
+            }
+            (true, IntegerSize::LongLong) => {
+                ctype::ULLONG_TYPE
+            }
+        };
+        Self {
+            t: QualifiedType { t: t, qualifiers: Qualifiers::CONST },
+            val: Value::Int(n as i128)
+        }.clamp_to_type()
+    }
+
+    /**
      * Do the integer type promotion.
      */
     pub fn promote(self) -> Self {
@@ -36,7 +138,6 @@ impl TypedValue {
      * Drop extra bits which don't fit into the target type (ensure the TypedValue invariant).
      */
     pub fn clamp_to_type(self) -> Self {
-        use crate::ctype::CType;
         match self.val {
             Value::Int(x) => {
                 let clamped = match self.t.t {
