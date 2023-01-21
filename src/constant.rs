@@ -230,9 +230,47 @@ fn process_binary_operator_expression_node(
                 unreachable!()
             }
         }
+        BinaryOperator::ShiftLeft => {
+            if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
+                let lhs = lhs.promote();
+                let rhs = rhs.promote();
+                let lhs_val = lhs.unwrap_integer();
+                let rhs_val = rhs.unwrap_integer();
+                if rhs_val < 0 {
+                    ec.record_warning(CompileWarning::ShiftByNegative, rhs_span)?;
+                }
+                Ok(TypedValue::new_integer(lhs_val << rhs_val, lhs.t.t))
+            } else {
+                let span = if !lhs.t.t.is_integer() {
+                    lhs_span
+                } else {
+                    rhs_span
+                };
+                ec.record_error(CompileError::IntegerTypeRequired, span)?;
+                unreachable!()
+            }
+        }
+        BinaryOperator::ShiftRight => {
+            if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
+                let lhs = lhs.promote();
+                let rhs = rhs.promote();
+                let lhs_val = lhs.unwrap_integer();
+                let rhs_val = rhs.unwrap_integer();
+                if rhs_val < 0 {
+                    ec.record_warning(CompileWarning::ShiftByNegative, rhs_span)?;
+                }
+                Ok(TypedValue::new_integer(lhs_val >> rhs_val, lhs.t.t))
+            } else {
+                let span = if !lhs.t.t.is_integer() {
+                    lhs_span
+                } else {
+                    rhs_span
+                };
+                ec.record_error(CompileError::IntegerTypeRequired, span)?;
+                unreachable!()
+            }
+        }
         BinaryOperator::Index => todo!(),
-        BinaryOperator::ShiftLeft => todo!(),
-        BinaryOperator::ShiftRight => todo!(),
         BinaryOperator::Less => todo!(),
         BinaryOperator::Greater => todo!(),
         BinaryOperator::LessOrEqual => todo!(),

@@ -36,6 +36,7 @@ pub enum CompileWarning {
     Unimplemented(String),
     ImplicitInt,
     EmptyDeclaration,
+    ShiftByNegative,
 }
 
 pub struct CompileErrorWithSpan(pub CompileError, pub Span);
@@ -119,6 +120,7 @@ impl std::fmt::Display for CompileWarning {
             CompileWarning::EmptyDeclaration => {
                 f.write_str("empty declration doesn't declare anything")
             }
+            CompileWarning::ShiftByNegative => f.write_str("shift by a negative value"),
         }
     }
 }
