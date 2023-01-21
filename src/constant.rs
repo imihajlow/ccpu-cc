@@ -6,7 +6,7 @@ use lang_c::{
 };
 
 use crate::{
-    ctype::{CType, QualifiedType, Qualifiers},
+    ctype::{self, CType, QualifiedType},
     error::{CompileError, CompileWarning, ErrorCollector},
     initializer::{TypedValue, Value},
     machine,
@@ -270,18 +270,54 @@ fn process_binary_operator_expression_node(
                 unreachable!()
             }
         }
-        BinaryOperator::Index => todo!(),
-        BinaryOperator::Less => todo!(),
-        BinaryOperator::Greater => todo!(),
-        BinaryOperator::LessOrEqual => todo!(),
-        BinaryOperator::GreaterOrEqual => todo!(),
-        BinaryOperator::Equals => todo!(),
-        BinaryOperator::NotEquals => todo!(),
+        BinaryOperator::Less => {
+            let r = compare(lhs, rhs, false, node.span, ec)?;
+            Ok(TypedValue::new_integer(
+                if r < 0 { 1 } else { 0 },
+                ctype::INT_TYPE,
+            ))
+        }
+        BinaryOperator::Greater => {
+            let r = compare(lhs, rhs, false, node.span, ec)?;
+            Ok(TypedValue::new_integer(
+                if r > 0 { 1 } else { 0 },
+                ctype::INT_TYPE,
+            ))
+        }
+        BinaryOperator::LessOrEqual => {
+            let r = compare(lhs, rhs, false, node.span, ec)?;
+            Ok(TypedValue::new_integer(
+                if r <= 0 { 1 } else { 0 },
+                ctype::INT_TYPE,
+            ))
+        }
+        BinaryOperator::GreaterOrEqual => {
+            let r = compare(lhs, rhs, false, node.span, ec)?;
+            Ok(TypedValue::new_integer(
+                if r <= 0 { 1 } else { 0 },
+                ctype::INT_TYPE,
+            ))
+        }
+        BinaryOperator::Equals => {
+            let r = compare(lhs, rhs, true, node.span, ec)?;
+            Ok(TypedValue::new_integer(
+                if r == 0 { 1 } else { 0 },
+                ctype::INT_TYPE,
+            ))
+        }
+        BinaryOperator::NotEquals => {
+            let r = compare(lhs, rhs, true, node.span, ec)?;
+            Ok(TypedValue::new_integer(
+                if r != 0 { 1 } else { 0 },
+                ctype::INT_TYPE,
+            ))
+        }
         BinaryOperator::BitwiseAnd => todo!(),
         BinaryOperator::BitwiseXor => todo!(),
         BinaryOperator::BitwiseOr => todo!(),
         BinaryOperator::LogicalAnd => todo!(),
         BinaryOperator::LogicalOr => todo!(),
+        BinaryOperator::Index => todo!(),
         BinaryOperator::Assign
         | BinaryOperator::AssignMultiply
         | BinaryOperator::AssignDivide
@@ -296,6 +332,41 @@ fn process_binary_operator_expression_node(
             ec.record_error(CompileError::AssignmentToConst, op_span)?;
             unreachable!()
         }
+    }
+}
+
+/**
+ * Common method for relation operators.
+ *
+ * Returns -1, 0, 1
+ */
+fn compare(
+    lhs: TypedValue,
+    rhs: TypedValue,
+    equality: bool,
+    span: Span,
+    ec: &mut ErrorCollector,
+) -> Result<isize, ()> {
+    if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
+        let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+        if lhs.t.t.is_integer() {
+            let lhs = lhs.unwrap_integer();
+            let rhs = rhs.unwrap_integer();
+            Ok(if lhs < rhs {
+                -1
+            } else if lhs == rhs {
+                0
+            } else {
+                1
+            })
+        } else {
+            todo!()
+        }
+    } else if lhs.t.t.is_pointer() && rhs.t.t.is_pointer() {
+        todo!()
+    } else {
+        ec.record_error(CompileError::CannotCompare(lhs.t, rhs.t), span)?;
+        unreachable!()
     }
 }
 

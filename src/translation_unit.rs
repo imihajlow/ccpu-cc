@@ -664,4 +664,82 @@ mod test {
         assert_eq!(decl.storage_class, GlobalStorageClass::Default);
         assert_matches!(decl.initializer, Some(Value::Int(0xf000)));
     }
+
+    #[test]
+    fn test_global_var_init_cmp_1() {
+        let (tu_result, ec) = translate("const unsigned int x = 5 > 8;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0)));
+    }
+
+    #[test]
+    fn test_global_var_init_cmp_2() {
+        let (tu_result, ec) = translate("const unsigned int x = 8 >= 8;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(1)));
+    }
+
+    #[test]
+    fn test_global_var_init_cmp_3() {
+        let (tu_result, ec) = translate("const unsigned int x = 50 < 100;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(1)));
+    }
+
+    #[test]
+    fn test_global_var_init_cmp_4() {
+        let (tu_result, ec) = translate("const unsigned int x = 50 <= 8;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(0)));
+    }
+
+    #[test]
+    fn test_global_var_init_cmp_5() {
+        let (tu_result, ec) = translate("const unsigned int x = 1000 == 1000;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(1)));
+    }
+
+    #[test]
+    fn test_global_var_init_cmp_6() {
+        let (tu_result, ec) = translate("const unsigned int x = 5 != 8;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(1)));
+    }
 }

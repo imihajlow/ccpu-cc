@@ -1,6 +1,8 @@
 use lang_c::span::Span;
 use std::fmt::Formatter;
 
+use crate::ctype::QualifiedType;
+
 pub enum CompileError {
     TooManyErrors,
     Unimplemented(String),
@@ -30,6 +32,7 @@ pub enum CompileError {
     IntegerTypeRequired,
     ScalarTypeRequired,
     BadTypesForOperator(String),
+    CannotCompare(QualifiedType, QualifiedType),
 }
 
 pub enum CompileWarning {
@@ -108,6 +111,7 @@ impl std::fmt::Display for CompileError {
             CompileError::ScalarTypeRequired => f.write_str("a scalar type is required here"),
             CompileError::BadTypesForOperator(op) => write!(f, "bad types for operator `{}`", op),
             CompileError::DivisionByZero => f.write_str("division by zero"),
+            CompileError::CannotCompare(t1, t2) => write!(f, "cannot compare `{}` and `{}`", t1, t2),
         }
     }
 }
