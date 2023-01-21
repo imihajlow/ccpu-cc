@@ -7,6 +7,7 @@ pub enum CompileError {
     TooManyErrors,
     Unimplemented(String),
     UnknownIdentifier(String),
+    StaticAssertionFailed(String),
     // Errors concerning types in declarations
     MultipleStorageClasses,
     WrongStorageClass,
@@ -89,6 +90,7 @@ impl std::fmt::Display for CompileError {
             CompileError::TooManyErrors => write!(f, "too many errors"),
             CompileError::Unimplemented(s) => write!(f, "unimplemented: {}", &s),
             CompileError::UnknownIdentifier(s) => write!(f, "unknown identifier: {}", &s),
+            CompileError::StaticAssertionFailed(s) => write!(f, "static assertion failed, message: {}", s),
             CompileError::WrongStorageClass => f.write_str("wrong storage class"),
             CompileError::MultipleStorageClasses => {
                 write!(f, "multiple storage classes in declaration specifiers")

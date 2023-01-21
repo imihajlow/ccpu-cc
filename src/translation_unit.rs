@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::constant::compute_constant_initializer;
+use crate::constant::{self, compute_constant_initializer};
 use crate::ctype::QualifiedType;
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
 use crate::initializer::{self, Value};
@@ -44,7 +44,21 @@ impl TranslationUnit {
         let mut has_error = false;
         for Node { node: ed, .. } in tu.0.into_iter() {
             match ed {
-                ExternalDeclaration::StaticAssert(_) => todo!(),
+                ExternalDeclaration::StaticAssert(node) => {
+                    let expr_span = node.node.expression.span;
+                    let val =
+                        constant::compute_constant_expr(*node.node.expression, false, &r, ec)?;
+                    if val.t.t.is_integer() {
+                        if val.is_zero() {
+                            ec.record_error(
+                                CompileError::StaticAssertionFailed("TODO".to_string()),
+                                node.span,
+                            )?;
+                        }
+                    } else {
+                        ec.record_error(CompileError::IntegerTypeRequired, expr_span)?;
+                    }
+                }
                 ExternalDeclaration::Declaration(n) => {
                     if r.add_declaration(n, ec).is_err() {
                         has_error = true;
@@ -855,4 +869,17 @@ mod test {
         assert_matches!(decl.initializer, Some(Value::Int(3)));
     }
 
+    #[test]
+    fn test_static_assert_1() {
+        let (tu_result, ec) = translate("_Static_assert(1, \"ok\");");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+    }
+
+    #[test]
+    fn test_static_assert_2() {
+        let (tu_result, ec) = translate("_Static_assert(0, \"fail\");");
+        assert!(tu_result.is_err());
+        assert_eq!(ec.get_error_count(), 1);
+    }
 }
