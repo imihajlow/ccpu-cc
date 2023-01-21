@@ -841,4 +841,18 @@ mod test {
         assert_eq!(ec.get_error_count(), 1);
     }
 
+    #[test]
+    fn test_global_var_init_comma_1() {
+        let (tu_result, ec) = translate("const unsigned int x = (1,2,(void)5,3);");
+        ec.print_issues();
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(3)));
+    }
+
 }

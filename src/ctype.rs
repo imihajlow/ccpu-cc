@@ -128,7 +128,7 @@ impl QualifiedType {
 
 impl CType {
     pub fn is_explicit_castable_to(&self, other: &Self) -> bool {
-        if let CType::Void = self {
+        if let CType::Void = other {
             return true;
         }
         if (self.is_arithmetic() || self.is_pointer())
@@ -235,7 +235,7 @@ impl CType {
         match (self, other) {
             (Struct(x), Struct(y)) if x == y => true,
             (Union(x), Union(y)) if x == y => true,
-            _ => false
+            _ => false,
         }
     }
 

@@ -90,6 +90,13 @@ pub fn compute_constant_expr(
             ec.record_error(CompileError::CallsForbidden, node.span)?;
             unreachable!()
         }
+        Expression::Comma(v) => {
+            let results: Result<Vec<_>, _> = v
+                .into_iter()
+                .map(|node| compute_constant_expr(node, allow_var, tu, ec))
+                .collect();
+            Ok(results?.pop().unwrap()) // existence is checked by lang_c
+        }
         Expression::Conditional(c) => process_condition_expression_node(*c, allow_var, tu, ec),
         Expression::StringLiteral(_) => todo!(),
         Expression::Member(_) => todo!(),
@@ -97,9 +104,8 @@ pub fn compute_constant_expr(
         Expression::SizeOfTy(_) => todo!(),
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(_) => todo!(),
-        Expression::Comma(_) => todo!(),
         Expression::OffsetOf(_) => todo!(),
-        Expression::VaArg(_) => todo!(),
+        Expression::VaArg(_) => unimplemented!(),
         Expression::Statement(_) => unimplemented!(), // GNU extension
         Expression::GenericSelection(_) => unimplemented!(),
     }
