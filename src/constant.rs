@@ -126,9 +126,13 @@ fn process_binary_operator_expression_node(
                 };
                 if lhs.t.t.is_arithmetic() {
                     let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
-                    let lhs_val = lhs.unwrap_integer();
-                    let rhs_val = rhs.unwrap_integer();
-                    Ok(TypedValue::new_integer(lhs_val + rhs_val, lhs.t.t))
+                    if lhs.t.t.is_integer() {
+                        let lhs_val = lhs.unwrap_integer();
+                        let rhs_val = rhs.unwrap_integer();
+                        Ok(TypedValue::new_integer(lhs_val + rhs_val, lhs.t.t))
+                    } else {
+                        todo!()
+                    }
                 } else if lhs.t.t.is_pointer() {
                     todo!()
                 } else {
@@ -140,11 +144,93 @@ fn process_binary_operator_expression_node(
                 unreachable!()
             }
         }
+        BinaryOperator::Minus => {
+            if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
+                let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                if lhs.t.t.is_integer() {
+                    let lhs_val = lhs.unwrap_integer();
+                    let rhs_val = rhs.unwrap_integer();
+                    Ok(TypedValue::new_integer(lhs_val - rhs_val, lhs.t.t))
+                } else {
+                    todo!()
+                }
+            } else if lhs.t.t.is_pointer() && rhs.t.t.is_pointer() {
+                todo!()
+            } else if lhs.t.t.is_pointer() && rhs.t.t.is_integer() {
+                todo!()
+            } else {
+                ec.record_error(
+                    CompileError::BadTypesForOperator("-".to_string()),
+                    node.span,
+                )?;
+                unreachable!()
+            }
+        }
+        BinaryOperator::Multiply => {
+            if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
+                let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                if lhs.t.t.is_integer() {
+                    let lhs_val = lhs.unwrap_integer();
+                    let rhs_val = rhs.unwrap_integer();
+                    Ok(TypedValue::new_integer(lhs_val * rhs_val, lhs.t.t))
+                } else {
+                    todo!()
+                }
+            } else {
+                let span = if !lhs.t.t.is_arithmetic() {
+                    lhs_span
+                } else {
+                    rhs_span
+                };
+                ec.record_error(CompileError::ArithmeticTypeRequired, span)?;
+                unreachable!()
+            }
+        }
+        BinaryOperator::Divide => {
+            if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
+                let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                if lhs.t.t.is_integer() {
+                    let lhs_val = lhs.unwrap_integer();
+                    let rhs_val = rhs.unwrap_integer();
+                    if rhs_val == 0 {
+                        ec.record_error(CompileError::DivisionByZero, rhs_span)?;
+                        unreachable!();
+                    }
+                    Ok(TypedValue::new_integer(lhs_val / rhs_val, lhs.t.t))
+                } else {
+                    todo!()
+                }
+            } else {
+                let span = if !lhs.t.t.is_arithmetic() {
+                    lhs_span
+                } else {
+                    rhs_span
+                };
+                ec.record_error(CompileError::ArithmeticTypeRequired, span)?;
+                unreachable!()
+            }
+        }
+        BinaryOperator::Modulo => {
+            if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
+                let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                let lhs_val = lhs.unwrap_integer();
+                let rhs_val = rhs.unwrap_integer();
+                if rhs_val == 0 {
+                    ec.record_error(CompileError::DivisionByZero, rhs_span)?;
+                    unreachable!();
+                }
+                Ok(TypedValue::new_integer(lhs_val % rhs_val, lhs.t.t))
+            } else {
+                let span = if !lhs.t.t.is_integer() {
+                    lhs_span
+                } else {
+                    rhs_span
+                };
+                ec.record_error(CompileError::IntegerTypeRequired, span)?;
+                unreachable!()
+            }
+        }
         BinaryOperator::Index => todo!(),
-        BinaryOperator::Multiply => todo!(),
-        BinaryOperator::Divide => todo!(),
-        BinaryOperator::Modulo => todo!(),
-        BinaryOperator::Minus => todo!(),
         BinaryOperator::ShiftLeft => todo!(),
         BinaryOperator::ShiftRight => todo!(),
         BinaryOperator::Less => todo!(),

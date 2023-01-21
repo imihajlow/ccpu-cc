@@ -24,10 +24,12 @@ pub enum CompileError {
     NonConstInConstExpr,
     BadCast(String, String),
     AssignmentToConst,
+    DivisionByZero,
     // General expression error
     ArithmeticTypeRequired,
     IntegerTypeRequired,
     ScalarTypeRequired,
+    BadTypesForOperator(String),
 }
 
 pub enum CompileWarning {
@@ -98,9 +100,13 @@ impl std::fmt::Display for CompileError {
             CompileError::BadCast(t1, t2) => write!(f, "bad cast from `{}' to `{}'", t1, t2),
             CompileError::TypedefInitialized => f.write_str("typedef is initialized"),
             CompileError::AssignmentToConst => f.write_str("assignment to a constant expression"),
-            CompileError::ArithmeticTypeRequired => f.write_str("an arithmetic type is required here"),
+            CompileError::ArithmeticTypeRequired => {
+                f.write_str("an arithmetic type is required here")
+            }
             CompileError::IntegerTypeRequired => f.write_str("an integer type is required here"),
             CompileError::ScalarTypeRequired => f.write_str("a scalar type is required here"),
+            CompileError::BadTypesForOperator(op) => write!(f, "bad types for operator `{}`", op),
+            CompileError::DivisionByZero => f.write_str("division by zero"),
         }
     }
 }
