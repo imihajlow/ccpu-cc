@@ -73,21 +73,21 @@ impl QualifiedType {
      * int x[25];
      * ```
      */
-    pub fn is_same_as(&self, other: &Self) -> bool {
+    pub fn is_compatible_to(&self, other: &Self) -> bool {
         if self.qualifiers != other.qualifiers {
             return false;
         }
         match &self.t {
             CType::Pointer(t1) => {
                 if let CType::Pointer(t2) = &other.t {
-                    t1.is_same_as(&t2)
+                    t1.is_compatible_to(&t2)
                 } else {
                     false
                 }
             }
             CType::Array(t1, n1) => {
                 if let CType::Array(t2, n2) = &other.t {
-                    if !t1.is_same_as(t2) {
+                    if !t1.is_compatible_to(t2) {
                         false
                     } else {
                         n1 == n2 || n1.is_none() || n2.is_none()
@@ -219,6 +219,23 @@ impl CType {
             true
         } else {
             false
+        }
+    }
+
+    pub fn is_void(&self) -> bool {
+        if let CType::Void = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_same_struct_union(&self, other: &Self) -> bool {
+        use CType::*;
+        match (self, other) {
+            (Struct(x), Struct(y)) if x == y => true,
+            (Union(x), Union(y)) if x == y => true,
+            _ => false
         }
     }
 

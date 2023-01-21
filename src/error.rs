@@ -16,6 +16,7 @@ pub enum CompileError {
     TypeTooLong,
     WrongModifiers(String),
     UnknownType(String),
+    IncompatibleTypes(QualifiedType, QualifiedType),
     // Global definition errors
     TypeRedefinition(String),
     ConflictingTypes(String),
@@ -23,6 +24,7 @@ pub enum CompileError {
     TypedefInitialized,
     // Constant expression errors
     VariablesForbidden,
+    CallsForbidden,
     NonConstInConstExpr,
     BadCast(String, String),
     AssignmentToConst,
@@ -70,6 +72,15 @@ impl ErrorCollector {
     pub fn get_error_count(&self) -> usize {
         self.errors.len()
     }
+
+    pub fn print_issues(&self) {
+        for (warn, span) in &self.warnings {
+            println!("{:?}: warning: {}", span, warn);
+        }
+        for (err, span) in &self.errors {
+            println!("{:?}: error: {}", span, err);
+        }
+    }
 }
 
 impl std::fmt::Display for CompileError {
@@ -98,6 +109,7 @@ impl std::fmt::Display for CompileError {
                 write!(f, "conflicting storage classes for {}", s)
             }
             CompileError::VariablesForbidden => f.write_str("variables are forbidden here"),
+            CompileError::CallsForbidden => f.write_str("function calls are forbidden here"),
             CompileError::NonConstInConstExpr => {
                 f.write_str("non-const value in a constant expression")
             }
@@ -111,7 +123,12 @@ impl std::fmt::Display for CompileError {
             CompileError::ScalarTypeRequired => f.write_str("a scalar type is required here"),
             CompileError::BadTypesForOperator(op) => write!(f, "bad types for operator `{}`", op),
             CompileError::DivisionByZero => f.write_str("division by zero"),
-            CompileError::CannotCompare(t1, t2) => write!(f, "cannot compare `{}` and `{}`", t1, t2),
+            CompileError::CannotCompare(t1, t2) => {
+                write!(f, "cannot compare `{}` and `{}`", t1, t2)
+            }
+            CompileError::IncompatibleTypes(t1, t2) => {
+                write!(f, "incompatible types `{}' and `{}'", t1, t2)
+            }
         }
     }
 }

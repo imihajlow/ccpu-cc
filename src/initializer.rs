@@ -165,7 +165,7 @@ impl TypedValue {
             let lhs = lhs.promote();
             let rhs = rhs.promote();
             // Then the following rules are applied to the promoted operands
-            if lhs.t.is_same_as(&rhs.t) {
+            if lhs.t.is_compatible_to(&rhs.t) {
                 // If both operands have the same type, then no further conversion is needed.
                 (lhs, rhs)
             } else {

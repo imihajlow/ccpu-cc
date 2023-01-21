@@ -180,7 +180,7 @@ impl TranslationUnit {
                         match self.global_declarations.get(&id) {
                             Some(old) => {
                                 // redefinition, check type match and storage class
-                                if !old.t.is_same_as(&t) {
+                                if !old.t.is_compatible_to(&t) {
                                     return ec.record_error(
                                         CompileError::ConflictingTypes(id),
                                         init_declarator_span,
@@ -807,4 +807,38 @@ mod test {
         assert_eq!(decl.storage_class, GlobalStorageClass::Default);
         assert_matches!(decl.initializer, Some(Value::Int(1)));
     }
+
+    #[test]
+    fn test_global_var_init_cond_1() {
+        let (tu_result, ec) = translate("const unsigned int x = 0 ? 1 : 2;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(2)));
+    }
+
+    #[test]
+    fn test_global_var_init_cond_2() {
+        let (tu_result, ec) = translate("const unsigned int x = 5 ? 1 : 2;");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::UINT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(1)));
+    }
+
+    #[test]
+    fn test_global_var_init_cond_3() {
+        let (tu_result, ec) = translate("const unsigned int x = 5 ? (int*)5 : (char*)6;");
+        assert!(tu_result.is_err());
+        assert_eq!(ec.get_error_count(), 1);
+    }
+
 }

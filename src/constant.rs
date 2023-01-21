@@ -1,4 +1,4 @@
-use lang_c::ast::{BinaryOperatorExpression, UnaryOperatorExpression};
+use lang_c::ast::{BinaryOperatorExpression, ConditionalExpression, UnaryOperatorExpression};
 use lang_c::span::Span;
 use lang_c::{
     ast::{CastExpression, Constant, Expression, Initializer},
@@ -86,19 +86,61 @@ pub fn compute_constant_expr(
         Expression::BinaryOperator(node) => {
             process_binary_operator_expression_node(*node, allow_var, tu, ec)
         }
+        Expression::Call(node) => {
+            ec.record_error(CompileError::CallsForbidden, node.span)?;
+            unreachable!()
+        }
+        Expression::Conditional(c) => process_condition_expression_node(*c, allow_var, tu, ec),
         Expression::StringLiteral(_) => todo!(),
         Expression::Member(_) => todo!(),
-        Expression::Call(_) => todo!(),
         Expression::CompoundLiteral(_) => todo!(),
         Expression::SizeOfTy(_) => todo!(),
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(_) => todo!(),
-        Expression::Conditional(_) => todo!(),
         Expression::Comma(_) => todo!(),
         Expression::OffsetOf(_) => todo!(),
         Expression::VaArg(_) => todo!(),
         Expression::Statement(_) => unimplemented!(), // GNU extension
         Expression::GenericSelection(_) => unimplemented!(),
+    }
+}
+
+fn process_condition_expression_node(
+    node: Node<ConditionalExpression>,
+    allow_var: bool,
+    tu: &TranslationUnit,
+    ec: &mut ErrorCollector,
+) -> Result<TypedValue, ()> {
+    let cond_span = node.node.condition.span;
+    let else_span = node.node.else_expression.span;
+    let cond_val = compute_constant_expr(*node.node.condition, allow_var, tu, ec)?;
+    let then_val = compute_constant_expr(*node.node.then_expression, allow_var, tu, ec)?;
+    let else_val = compute_constant_expr(*node.node.else_expression, allow_var, tu, ec)?;
+    if !cond_val.t.t.is_scalar() {
+        ec.record_error(CompileError::ScalarTypeRequired, cond_span)?;
+        unreachable!()
+    }
+    if then_val.t.t.is_arithmetic() && else_val.t.t.is_arithmetic() {
+        let (then_val, else_val) = TypedValue::usual_arithmetic_convert(then_val, else_val);
+        if cond_val.is_zero() {
+            Ok(else_val)
+        } else {
+            Ok(then_val)
+        }
+    } else if then_val.t.t.is_void() && else_val.t.t.is_void() {
+        Ok(then_val)
+    } else if then_val.t.is_compatible_to(&else_val.t) {
+        if cond_val.is_zero() {
+            Ok(else_val)
+        } else {
+            Ok(then_val)
+        }
+    } else {
+        ec.record_error(
+            CompileError::IncompatibleTypes(then_val.t, else_val.t),
+            else_span,
+        )?;
+        unreachable!()
     }
 }
 
