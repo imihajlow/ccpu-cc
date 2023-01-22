@@ -11,6 +11,7 @@ mod type_builder;
 mod type_registry;
 mod constant;
 mod initializer;
+mod string;
 
 #[macro_use]
 extern crate static_assertions;
