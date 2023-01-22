@@ -1,7 +1,7 @@
 use lang_c::span::Span;
 use std::fmt::Formatter;
 
-use crate::ctype::QualifiedType;
+use crate::{ctype::QualifiedType, string::StringParseError};
 
 pub enum CompileError {
     TooManyErrors,
@@ -30,6 +30,7 @@ pub enum CompileError {
     BadCast(String, String),
     AssignmentToConst,
     DivisionByZero,
+    CharParseError(StringParseError),
     // General expression error
     ArithmeticTypeRequired,
     IntegerTypeRequired,
@@ -90,7 +91,9 @@ impl std::fmt::Display for CompileError {
             CompileError::TooManyErrors => write!(f, "too many errors"),
             CompileError::Unimplemented(s) => write!(f, "unimplemented: {}", &s),
             CompileError::UnknownIdentifier(s) => write!(f, "unknown identifier: {}", &s),
-            CompileError::StaticAssertionFailed(s) => write!(f, "static assertion failed, message: {}", s),
+            CompileError::StaticAssertionFailed(s) => {
+                write!(f, "static assertion failed, message: {}", s)
+            }
             CompileError::WrongStorageClass => f.write_str("wrong storage class"),
             CompileError::MultipleStorageClasses => {
                 write!(f, "multiple storage classes in declaration specifiers")
@@ -130,6 +133,9 @@ impl std::fmt::Display for CompileError {
             }
             CompileError::IncompatibleTypes(t1, t2) => {
                 write!(f, "incompatible types `{}' and `{}'", t1, t2)
+            }
+            CompileError::CharParseError(e) => {
+                write!(f, "error while parsing character literal: {}", e)
             }
         }
     }

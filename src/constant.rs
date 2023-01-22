@@ -5,14 +5,14 @@ use lang_c::{
     span::Node,
 };
 
+use crate::string;
 use crate::{
     ctype::{self, CType, QualifiedType},
     error::{CompileError, CompileWarning, ErrorCollector},
     initializer::{TypedValue, Value},
     machine,
     translation_unit::TranslationUnit,
-    type_builder::{self, TypeBuilder},
-    type_registry::TypeRegistry,
+    type_builder::TypeBuilder,
 };
 
 pub fn compute_constant_initializer(
@@ -76,7 +76,13 @@ pub fn compute_constant_expr(
                     Ok(TypedValue::new_from_int_literal(num, i.suffix, radix == 10))
                 }
                 Constant::Float(_) => todo!(),
-                Constant::Character(_) => todo!(),
+                Constant::Character(s) => match string::parse_char_literal_typed(&s) {
+                    Ok(x) => Ok(x),
+                    Err(e) => {
+                        ec.record_error(CompileError::CharParseError(e), c.span)?;
+                        unreachable!()
+                    }
+                },
             }
         }
         Expression::Cast(c) => process_cast_expression_node(*c, allow_var, tu, ec),
@@ -672,8 +678,4 @@ fn cast_from_bool(value: Value) -> Value {
     } else {
         panic!("value doesn't match type")
     }
-}
-
-fn parse_char_literal(s: &str, ec: &mut ErrorCollector) -> Result<TypedValue, ()> {
-    todo!()
 }

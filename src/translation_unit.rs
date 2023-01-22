@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use crate::constant::{self, compute_constant_initializer};
 use crate::ctype::QualifiedType;
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
-use crate::initializer::{self, Value};
-use crate::type_builder::{TypeBuilder, TypeBuilderStage2};
+use crate::initializer::Value;
+use crate::type_builder::TypeBuilder;
 use crate::type_registry::TypeRegistry;
 use lang_c::ast::{
-    Declaration, DeclarationSpecifier, Declarator, DeclaratorKind, ExternalDeclaration,
-    FunctionDefinition, FunctionSpecifier, InitDeclarator, StorageClassSpecifier,
+    Declaration, DeclarationSpecifier, ExternalDeclaration, FunctionDefinition, FunctionSpecifier,
+    InitDeclarator, StorageClassSpecifier,
 };
 use lang_c::span::Node;
 
@@ -240,10 +240,6 @@ impl TranslationUnit {
             }
         }
         Ok(())
-    }
-
-    fn process_initializer_node(&self, ec: &mut ErrorCollector) -> Result<Option<Value>, ()> {
-        todo!()
     }
 
     fn add_function_definition(
@@ -881,5 +877,18 @@ mod test {
         let (tu_result, ec) = translate("_Static_assert(0, \"fail\");");
         assert!(tu_result.is_err());
         assert_eq!(ec.get_error_count(), 1);
+    }
+
+    #[test]
+    fn test_global_var_init_char_1() {
+        let (tu_result, ec) = translate("const int x = 'A';");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("x").unwrap();
+        assert_eq!(decl.t.t, ctype::INT_TYPE);
+        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        assert_matches!(decl.initializer, Some(Value::Int(65)));
     }
 }

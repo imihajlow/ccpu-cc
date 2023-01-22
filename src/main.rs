@@ -24,17 +24,10 @@ fn main() {
     let p = parse_preprocessed(
         &cfg,
         "
-        struct t c = { .a = 1, .b = 2 };
+        int x = \"hello\" \"world\";
     "
         .to_string(),
     )
     .unwrap();
     println!("{:#?}", p);
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn test() {}
 }

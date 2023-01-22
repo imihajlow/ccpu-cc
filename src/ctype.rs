@@ -63,6 +63,10 @@ pub const FLOAT_TYPE: CType = CType::Float(4);
 pub const DOUBLE_TYPE: CType = CType::Float(8);
 pub const LDOUBLE_TYPE: CType = CType::Float(16);
 
+pub const WCHAR_TYPE: CType = CHAR16_TYPE;
+pub const CHAR16_TYPE: CType = CType::Int(2, false);
+pub const CHAR32_TYPE: CType = CType::Int(4, false);
+
 impl QualifiedType {
     /**
      * Checks if two types are equal and can be used interchangebly in definition.
