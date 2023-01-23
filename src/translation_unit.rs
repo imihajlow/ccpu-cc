@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::constant::{self, compute_constant_initializer};
 use crate::ctype::QualifiedType;
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
+use crate::function::Function;
 use crate::initializer::Value;
 use crate::type_builder::TypeBuilder;
 use crate::type_registry::TypeRegistry;
@@ -16,6 +17,7 @@ pub struct TranslationUnit {
     pub type_registry: TypeRegistry,
     global_declarations: HashMap<String, GlobalDeclaration>,
     global_symbols: Vec<String>,
+    functions: Vec<Function>,
 }
 
 pub struct GlobalDeclaration {
@@ -40,6 +42,7 @@ impl TranslationUnit {
             type_registry: TypeRegistry::new(),
             global_declarations: HashMap::new(),
             global_symbols: Vec::new(),
+            functions: Vec::new(),
         };
         let mut has_error = false;
         for Node { node: ed, .. } in tu.0.into_iter() {
@@ -47,7 +50,7 @@ impl TranslationUnit {
                 ExternalDeclaration::StaticAssert(node) => {
                     let expr_span = node.node.expression.span;
                     let val =
-                        constant::compute_constant_expr(*node.node.expression, false, &r, ec)?;
+                        constant::compute_constant_expr(*node.node.expression, false, &mut r, ec)?;
                     if val.t.t.is_integer() {
                         if val.is_zero() {
                             ec.record_error(
@@ -165,7 +168,11 @@ impl TranslationUnit {
         let init_declarator_span = init_declarator.span;
         let init_declarator = init_declarator.node;
         let type_builder = type_builder.stage2(init_declarator_span, ec)?;
-        let (id, t) = type_builder.process_declarator_node(init_declarator.declarator, ec)?;
+        let (id, t) = type_builder.process_declarator_node(
+            init_declarator.declarator,
+            &mut self.type_registry,
+            ec,
+        )?;
         match id {
             None => ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator_span)?,
             Some(id) => {
@@ -247,7 +254,9 @@ impl TranslationUnit {
         n: Node<FunctionDefinition>,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        todo!()
+        let f = Function::new_from_node(n, self, ec)?;
+        self.functions.push(f);
+        Ok(())
     }
 }
 
@@ -890,5 +899,28 @@ mod test {
         assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.storage_class, GlobalStorageClass::Default);
         assert_matches!(decl.initializer, Some(Value::Int(65)));
+    }
+
+    #[test]
+    fn test_function_decl_1() {
+        let (tu_result, ec) = translate("void f(int x);");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("f").unwrap();
+        assert_eq!(
+            decl.t.t,
+            CType::Function {
+                result: Box::new(QualifiedType {
+                    t: CType::Void,
+                    qualifiers: Qualifiers::empty()
+                }),
+                args: vec![QualifiedType {
+                    t: ctype::INT_TYPE,
+                    qualifiers: Qualifiers::empty()
+                }],
+                vararg: false
+            }
+        );
     }
 }

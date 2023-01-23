@@ -115,6 +115,20 @@ impl QualifiedType {
         });
     }
 
+    /**
+     * Original types becomes the return type of the function.
+     */
+    pub fn wrap_function(&mut self, args: Vec<QualifiedType>, vararg: bool) {
+        replace_with_or_abort(self, |self_| QualifiedType {
+            t: CType::Function {
+                result: Box::new(self_),
+                args,
+                vararg,
+            },
+            qualifiers: Qualifiers::empty(),
+        });
+    }
+
     pub fn is_const(&self) -> bool {
         self.qualifiers.contains(Qualifiers::CONST)
     }

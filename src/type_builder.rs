@@ -9,6 +9,9 @@ use crate::error::CompileWarning;
 use crate::error::ErrorCollector;
 use crate::machine;
 use crate::type_registry::TypeRegistry;
+use lang_c::ast::DeclarationSpecifier;
+use lang_c::ast::Ellipsis;
+use lang_c::ast::StorageClassSpecifier;
 use lang_c::span::Node;
 use lang_c::span::Span;
 use std::fmt::Formatter;
@@ -327,6 +330,7 @@ impl TypeBuilderStage2 {
     pub fn process_declarator_node(
         mut self,
         declarator: Node<lang_c::ast::Declarator>,
+        reg: &TypeRegistry,
         ec: &mut ErrorCollector,
     ) -> Result<(Option<String>, QualifiedType), ()> {
         use lang_c::ast::DeclaratorKind;
@@ -336,7 +340,7 @@ impl TypeBuilderStage2 {
         } = declarator;
 
         for derived in declarator.derived {
-            self.add_derived_declarator_node(derived, ec)?;
+            self.add_derived_declarator_node(derived, reg, ec)?;
         }
 
         if !declarator.extensions.is_empty() {
@@ -353,7 +357,7 @@ impl TypeBuilderStage2 {
                     DeclaratorKind::Declarator(_) => unreachable!(),
                 }
             }
-            DeclaratorKind::Declarator(decl) => self.process_declarator_node(*decl, ec),
+            DeclaratorKind::Declarator(decl) => self.process_declarator_node(*decl, reg, ec),
         }
     }
 
@@ -364,6 +368,7 @@ impl TypeBuilderStage2 {
     fn add_derived_declarator_node(
         &mut self,
         dd: Node<lang_c::ast::DerivedDeclarator>,
+        reg: &TypeRegistry,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         use lang_c::ast::{DerivedDeclarator, PointerQualifier};
@@ -379,6 +384,43 @@ impl TypeBuilderStage2 {
                     }
                 }
                 self.base_type.wrap_pointer(qualifiers);
+            }
+            DerivedDeclarator::Function(fd) => {
+                // base_type is the function return type
+                let mut params = Vec::new();
+                for param_decl in fd.node.parameters {
+                    let mut builder = TypeBuilder::new();
+                    for declspec in param_decl.node.specifiers {
+                        match declspec.node {
+                            DeclarationSpecifier::StorageClass(sc) => match sc.node {
+                                StorageClassSpecifier::Register => (), // register is ok for function parameters
+                                _ => ec.record_error(CompileError::WrongStorageClass, sc.span)?,
+                            },
+                            DeclarationSpecifier::TypeSpecifier(ts) => {
+                                builder.add_type_specifier_node(ts, reg, ec)?
+                            }
+                            DeclarationSpecifier::TypeQualifier(tq) => {
+                                builder.add_type_qualifier_node(tq, ec)?
+                            }
+                            DeclarationSpecifier::Alignment(_) => todo!(),
+                            DeclarationSpecifier::Function(_) => (), // ignore _Noreturn and inline
+                            DeclarationSpecifier::Extension(_) => unimplemented!(),
+                        }
+                    }
+                    let mut builder = builder.stage2(param_decl.span, ec)?;
+                    let (_name, t) = if let Some(decl) = param_decl.node.declarator {
+                        builder.process_declarator_node(decl, reg, ec)?
+                    } else {
+                        (None, builder.finalize())
+                    };
+                    params.push(t);
+                }
+                let vararg = if let Ellipsis::Some = fd.node.ellipsis {
+                    true
+                } else {
+                    false
+                };
+                self.base_type.wrap_function(params, vararg);
             }
             _ => todo!(),
         }

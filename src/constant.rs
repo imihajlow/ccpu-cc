@@ -19,7 +19,7 @@ pub fn compute_constant_initializer(
     initializer: Node<Initializer>,
     target_type: &QualifiedType,
     allow_var: bool,
-    tu: &TranslationUnit,
+    tu: &mut TranslationUnit,
     ec: &mut ErrorCollector,
 ) -> Result<Value, ()> {
     match initializer.node {
@@ -34,7 +34,7 @@ pub fn compute_constant_initializer(
 pub fn compute_constant_expr(
     expr: Node<Expression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    tu: &mut TranslationUnit,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let span = expr.span;
@@ -120,7 +120,7 @@ pub fn compute_constant_expr(
 fn process_condition_expression_node(
     node: Node<ConditionalExpression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    tu: &mut TranslationUnit,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let cond_span = node.node.condition.span;
@@ -159,7 +159,7 @@ fn process_condition_expression_node(
 fn process_binary_operator_expression_node(
     node: Node<BinaryOperatorExpression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    tu: &mut TranslationUnit,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     use lang_c::ast::BinaryOperator;
@@ -508,7 +508,7 @@ where
 fn process_unary_operator_expression_node(
     node: Node<UnaryOperatorExpression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    tu: &mut TranslationUnit,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     use lang_c::ast::UnaryOperator;
@@ -560,7 +560,7 @@ fn process_unary_operator_expression_node(
 fn process_cast_expression_node(
     c: Node<CastExpression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    tu: &mut TranslationUnit,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let mut type_builder = TypeBuilder::new();
@@ -569,7 +569,7 @@ fn process_cast_expression_node(
     }
     let type_builder = type_builder.stage2(c.span, ec)?;
     let new_type = if let Some(decl) = c.node.type_name.node.declarator {
-        type_builder.process_declarator_node(decl, ec)?.1
+        type_builder.process_declarator_node(decl, &mut tu.type_registry, ec)?.1
     } else {
         type_builder.finalize()
     };
