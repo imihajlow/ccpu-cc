@@ -443,7 +443,9 @@ impl TypeBuilderStage2 {
                         .wrap_function(FunctionArgs::List(params), vararg);
                 }
             }
-            _ => todo!(),
+            DerivedDeclarator::Array(_) => todo!(),
+            DerivedDeclarator::KRFunction(_) => unimplemented!(),
+            DerivedDeclarator::Block(_) => unimplemented!(),
         }
         Ok(())
     }

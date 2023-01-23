@@ -170,7 +170,7 @@ impl TranslationUnit {
         let type_builder = type_builder.stage2(init_declarator_span, ec)?;
         let (id, t) = type_builder.process_declarator_node(
             init_declarator.declarator,
-            &mut self.type_registry,
+            &self.type_registry,
             ec,
         )?;
         match id {
