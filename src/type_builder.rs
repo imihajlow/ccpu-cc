@@ -1,4 +1,5 @@
 use crate::ctype::CType;
+use crate::ctype::FunctionArgs;
 use crate::ctype::QualifiedType;
 use crate::ctype::Qualifiers;
 use crate::ctype::DOUBLE_TYPE;
@@ -388,6 +389,7 @@ impl TypeBuilderStage2 {
             DerivedDeclarator::Function(fd) => {
                 // base_type is the function return type
                 let mut params = Vec::new();
+                let mut has_void = false;
                 for param_decl in fd.node.parameters {
                     let mut builder = TypeBuilder::new();
                     for declspec in param_decl.node.specifiers {
@@ -407,20 +409,39 @@ impl TypeBuilderStage2 {
                             DeclarationSpecifier::Extension(_) => unimplemented!(),
                         }
                     }
-                    let mut builder = builder.stage2(param_decl.span, ec)?;
-                    let (_name, t) = if let Some(decl) = param_decl.node.declarator {
+                    let builder = builder.stage2(param_decl.span, ec)?;
+                    let (name, t) = if let Some(decl) = param_decl.node.declarator {
                         builder.process_declarator_node(decl, reg, ec)?
                     } else {
                         (None, builder.finalize())
                     };
+                    if t.t.is_void() {
+                        if name.is_some() {
+                            ec.record_error(CompileError::NamedVoidParameter, param_decl.span)?;
+                        }
+                        if !t.qualifiers.is_empty() {
+                            ec.record_error(CompileError::QualifiedVoidParameter, param_decl.span)?;
+                        }
+                        has_void = true;
+                    }
                     params.push(t);
+                }
+                if has_void && params.len() > 1 {
+                    ec.record_error(CompileError::VoidParameter, fd.span)?;
                 }
                 let vararg = if let Ellipsis::Some = fd.node.ellipsis {
                     true
                 } else {
                     false
                 };
-                self.base_type.wrap_function(params, vararg);
+                if params.len() == 0 {
+                    self.base_type.wrap_function(FunctionArgs::Empty, vararg);
+                } else if has_void {
+                    self.base_type.wrap_function(FunctionArgs::Void, vararg);
+                } else {
+                    self.base_type
+                        .wrap_function(FunctionArgs::List(params), vararg);
+                }
             }
             _ => todo!(),
         }

@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 
 use crate::{ctype::QualifiedType, string::StringParseError};
 
+#[derive(Debug, PartialEq)]
 pub enum CompileError {
     TooManyErrors,
     Unimplemented(String),
@@ -18,6 +19,9 @@ pub enum CompileError {
     WrongModifiers(String),
     UnknownType(String),
     IncompatibleTypes(QualifiedType, QualifiedType),
+    NamedVoidParameter,
+    QualifiedVoidParameter,
+    VoidParameter,
     // Global definition errors
     TypeRedefinition(String),
     ConflictingTypes(String),
@@ -83,6 +87,11 @@ impl ErrorCollector {
             println!("{:?}: error: {}", span, err);
         }
     }
+
+    #[cfg(test)]
+    pub fn get_first_error(&self) -> Option<&(CompileError, Span)> {
+        self.errors.first()
+    }
 }
 
 impl std::fmt::Display for CompileError {
@@ -137,6 +146,9 @@ impl std::fmt::Display for CompileError {
             CompileError::CharParseError(e) => {
                 write!(f, "error while parsing character literal: {}", e)
             }
+            CompileError::NamedVoidParameter => f.write_str("argument may not have 'void' type"),
+            CompileError::QualifiedVoidParameter => f.write_str("'void' as parameter must not have type qualifiers"),
+            CompileError::VoidParameter => f.write_str("'void' must be the first and only parameter if specified"),
         }
     }
 }

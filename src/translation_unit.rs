@@ -278,7 +278,7 @@ fn match_storage_classes(old: &GlobalStorageClass, new: &GlobalStorageClass) -> 
 mod test {
     use std::assert_matches::assert_matches;
 
-    use crate::ctype::{self, CType, QualifiedType, Qualifiers};
+    use crate::ctype::{self, CType, FunctionArgs, QualifiedType, Qualifiers};
 
     use super::*;
 
@@ -915,12 +915,62 @@ mod test {
                     t: CType::Void,
                     qualifiers: Qualifiers::empty()
                 }),
-                args: vec![QualifiedType {
+                args: FunctionArgs::List(vec![QualifiedType {
                     t: ctype::INT_TYPE,
                     qualifiers: Qualifiers::empty()
-                }],
+                }]),
                 vararg: false
             }
+        );
+    }
+
+    #[test]
+    fn test_function_decl_2() {
+        let (tu_result, ec) = translate("int f(void);");
+        assert!(tu_result.is_ok());
+        assert_eq!(ec.get_error_count(), 0);
+        let tu = tu_result.unwrap();
+        let decl = tu.global_declarations.get("f").unwrap();
+        assert_eq!(
+            decl.t.t,
+            CType::Function {
+                result: Box::new(QualifiedType {
+                    t: ctype::INT_TYPE,
+                    qualifiers: Qualifiers::empty()
+                }),
+                args: FunctionArgs::Void,
+                vararg: false
+            }
+        );
+    }
+
+    #[test]
+    fn test_function_decl_3() {
+        let (tu_result, ec) = translate("int f(void, void);");
+        assert!(tu_result.is_err());
+        assert_eq!(ec.get_error_count(), 1);
+        assert_eq!(ec.get_first_error().unwrap().0, CompileError::VoidParameter);
+    }
+
+    #[test]
+    fn test_function_decl_4() {
+        let (tu_result, ec) = translate("int f(const void);");
+        assert!(tu_result.is_err());
+        assert_eq!(ec.get_error_count(), 1);
+        assert_eq!(
+            ec.get_first_error().unwrap().0,
+            CompileError::QualifiedVoidParameter
+        );
+    }
+
+    #[test]
+    fn test_function_decl_5() {
+        let (tu_result, ec) = translate("int f(void x);");
+        assert!(tu_result.is_err());
+        assert_eq!(ec.get_error_count(), 1);
+        assert_eq!(
+            ec.get_first_error().unwrap().0,
+            CompileError::NamedVoidParameter
         );
     }
 }

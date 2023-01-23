@@ -15,7 +15,14 @@ pub enum CType {
     Struct(TypeIdentifier),
     Union(TypeIdentifier),
     Enum(TypeIdentifier),
-    Function { result: Box<QualifiedType>, args: Vec<QualifiedType>, vararg: bool },
+    Function { result: Box<QualifiedType>, args: FunctionArgs, vararg: bool },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FunctionArgs {
+    Empty,
+    Void,
+    List(Vec<QualifiedType>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,7 +125,7 @@ impl QualifiedType {
     /**
      * Original types becomes the return type of the function.
      */
-    pub fn wrap_function(&mut self, args: Vec<QualifiedType>, vararg: bool) {
+    pub fn wrap_function(&mut self, args: FunctionArgs, vararg: bool) {
         replace_with_or_abort(self, |self_| QualifiedType {
             t: CType::Function {
                 result: Box::new(self_),
