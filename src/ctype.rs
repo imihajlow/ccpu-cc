@@ -22,7 +22,7 @@ pub enum CType {
 pub enum FunctionArgs {
     Empty,
     Void,
-    List(Vec<QualifiedType>),
+    List(Vec<(QualifiedType, Option<String>)>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,6 +107,22 @@ impl QualifiedType {
                     false
                 }
             }
+            CType::Function {
+                result: r1,
+                args: a1,
+                vararg: va1,
+            } => {
+                if let CType::Function {
+                    result: r2,
+                    args: a2,
+                    vararg: va2,
+                } = &other.t
+                {
+                    va1 == va2 && r1.is_compatible_to(r2) && a1.is_compatible_to(a2)
+                } else {
+                    false
+                }
+            }
             _ => self == other,
         }
     }
@@ -147,6 +163,27 @@ impl QualifiedType {
         Self {
             t: self.t.promote(),
             ..self
+        }
+    }
+}
+
+impl FunctionArgs {
+    pub fn is_compatible_to(&self, other: &Self) -> bool {
+        use FunctionArgs::*;
+        match (self, other) {
+            (Empty, _) => true,
+            (_, Empty) => true,
+            (Void, Void) => true,
+            (List(v1), List(v2)) => {
+                if v1.len() != v2.len() {
+                    false
+                } else {
+                    v1.iter()
+                        .zip(v2)
+                        .all(|((t1, _), (t2, _))| t1.is_compatible_to(t2))
+                }
+            }
+            _ => false,
         }
     }
 }

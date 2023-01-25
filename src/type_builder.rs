@@ -424,7 +424,7 @@ impl TypeBuilderStage2 {
                         }
                         has_void = true;
                     }
-                    params.push(t);
+                    params.push((t, name));
                 }
                 if has_void && params.len() > 1 {
                     ec.record_error(CompileError::VoidParameter, fd.span)?;

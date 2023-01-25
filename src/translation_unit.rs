@@ -915,10 +915,13 @@ mod test {
                     t: CType::Void,
                     qualifiers: Qualifiers::empty()
                 }),
-                args: FunctionArgs::List(vec![QualifiedType {
-                    t: ctype::INT_TYPE,
-                    qualifiers: Qualifiers::empty()
-                }]),
+                args: FunctionArgs::List(vec![(
+                    QualifiedType {
+                        t: ctype::INT_TYPE,
+                        qualifiers: Qualifiers::empty()
+                    },
+                    Some("x".to_string())
+                )]),
                 vararg: false
             }
         );
