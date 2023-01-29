@@ -41,6 +41,8 @@ pub enum CompileError {
     ScalarTypeRequired,
     BadTypesForOperator(String),
     CannotCompare(QualifiedType, QualifiedType),
+    // Local definition errors
+    VarRedefinition(String),
 }
 
 pub enum CompileWarning {
@@ -48,6 +50,7 @@ pub enum CompileWarning {
     ImplicitInt,
     EmptyDeclaration,
     ShiftByNegative,
+    LocalVarShadow(String),
 }
 
 pub struct CompileErrorWithSpan(pub CompileError, pub Span);
@@ -149,6 +152,7 @@ impl std::fmt::Display for CompileError {
             CompileError::NamedVoidParameter => f.write_str("argument may not have 'void' type"),
             CompileError::QualifiedVoidParameter => f.write_str("'void' as parameter must not have type qualifiers"),
             CompileError::VoidParameter => f.write_str("'void' must be the first and only parameter if specified"),
+            CompileError::VarRedefinition(s) => write!(f, "redefinition of `{}'", s),
         }
     }
 }
@@ -162,6 +166,7 @@ impl std::fmt::Display for CompileWarning {
                 f.write_str("empty declration doesn't declare anything")
             }
             CompileWarning::ShiftByNegative => f.write_str("shift by a negative value"),
+            CompileWarning::LocalVarShadow(s) => write!(f, "declaration of `{}' shadows a local variable", s),
         }
     }
 }

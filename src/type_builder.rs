@@ -12,6 +12,7 @@ use crate::machine;
 use crate::type_registry::TypeRegistry;
 use lang_c::ast::DeclarationSpecifier;
 use lang_c::ast::Ellipsis;
+use lang_c::ast::FunctionSpecifier;
 use lang_c::ast::StorageClassSpecifier;
 use lang_c::span::Node;
 use lang_c::span::Span;
@@ -32,6 +33,11 @@ pub struct TypeBuilder {
  */
 pub struct TypeBuilderStage2 {
     base_type: QualifiedType,
+}
+
+pub struct ExtraSpecifiers {
+    pub is_inline: bool,
+    pub is_noreturn: bool,
 }
 
 enum BaseType {
@@ -65,6 +71,41 @@ impl TypeBuilder {
             sign: SignModifier::Default,
             qualifiers: Qualifiers::empty(),
         }
+    }
+
+    pub fn new_from_specifiers(
+        specs: Vec<Node<DeclarationSpecifier>>,
+        reg: &TypeRegistry,
+        ec: &mut ErrorCollector,
+    ) -> Result<(Self, Option<Node<StorageClassSpecifier>>, ExtraSpecifiers), ()>
+    {
+        let mut extra = ExtraSpecifiers { is_inline: false, is_noreturn: false };
+        let mut type_builder = Self::new();
+        let mut storage_class = None;
+        for declspec in specs {
+            match declspec.node {
+                DeclarationSpecifier::StorageClass(stc) => {
+                    if storage_class.is_none() {
+                        storage_class = Some(stc);
+                    } else {
+                        ec.record_error(CompileError::MultipleStorageClasses, stc.span)?;
+                    }
+                }
+                DeclarationSpecifier::Function(f) => match f.node {
+                    FunctionSpecifier::Inline => extra.is_inline = true,
+                    FunctionSpecifier::Noreturn => extra.is_noreturn = true,
+                },
+                DeclarationSpecifier::TypeSpecifier(ts) => {
+                    type_builder.add_type_specifier_node(ts, reg, ec)?
+                }
+                DeclarationSpecifier::TypeQualifier(q) => {
+                    type_builder.add_type_qualifier_node(q, ec)?
+                }
+                DeclarationSpecifier::Alignment(_) => unimplemented!(),
+                DeclarationSpecifier::Extension(_) => unimplemented!(),
+            }
+        }
+        Ok((type_builder, storage_class, extra))
     }
 
     pub fn add_type_qualifier_node(

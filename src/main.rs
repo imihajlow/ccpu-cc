@@ -13,6 +13,9 @@ mod constant;
 mod initializer;
 mod string;
 mod function;
+mod compile;
+mod name_scope;
+mod block_emitter;
 
 #[macro_use]
 extern crate static_assertions;

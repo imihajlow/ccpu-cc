@@ -1,5 +1,5 @@
 use lang_c::{
-    ast::{DeclarationSpecifier, FunctionDefinition, FunctionSpecifier, StorageClassSpecifier},
+    ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
 };
 
@@ -29,33 +29,7 @@ impl Function {
         if !node.node.declarations.is_empty() {
             unimplemented!("K&R functions");
         }
-        let mut is_inline = false;
-        let mut is_noreturn = false;
-        let mut type_builder = TypeBuilder::new();
-        let mut storage_class = None;
-        for declspec in node.node.specifiers {
-            match declspec.node {
-                DeclarationSpecifier::StorageClass(stc) => {
-                    if storage_class.is_none() {
-                        storage_class = Some(stc);
-                    } else {
-                        ec.record_error(CompileError::MultipleStorageClasses, stc.span)?;
-                    }
-                }
-                DeclarationSpecifier::Function(f) => match f.node {
-                    FunctionSpecifier::Inline => is_inline = true,
-                    FunctionSpecifier::Noreturn => is_noreturn = true,
-                },
-                DeclarationSpecifier::TypeSpecifier(ts) => {
-                    type_builder.add_type_specifier_node(ts, &tu.type_registry, ec)?
-                }
-                DeclarationSpecifier::TypeQualifier(q) => {
-                    type_builder.add_type_qualifier_node(q, ec)?
-                }
-                DeclarationSpecifier::Alignment(_) => unimplemented!(),
-                DeclarationSpecifier::Extension(_) => unimplemented!(),
-            }
-        }
+        let (mut type_builder, storage_class, extra) = TypeBuilder::new_from_specifiers(node.node.specifiers, &tu.type_registry, ec)?;
         let storage_class = match storage_class {
             None => GlobalStorageClass::Default,
             Some(stc) => match stc.node {
@@ -85,8 +59,8 @@ impl Function {
             unreachable!()
         };
         Ok(Self {
-            is_inline,
-            is_noreturn,
+            is_inline: extra.is_inline,
+            is_noreturn: extra.is_noreturn,
             storage_class,
             is_vararg,
             return_type,

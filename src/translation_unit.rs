@@ -87,56 +87,8 @@ impl TranslationUnit {
 
     fn add_declaration(&mut self, n: Node<Declaration>, ec: &mut ErrorCollector) -> Result<(), ()> {
         let decl = n.node;
-        let mut storage_class = None;
-        let mut type_builder = TypeBuilder::new();
-        let mut is_inline = false;
-        for Node {
-            node: declspec,
-            span: declspec_span,
-        } in decl.specifiers
-        {
-            match declspec {
-                DeclarationSpecifier::StorageClass(Node {
-                    node: stclass,
-                    span: stclass_span,
-                }) => {
-                    if storage_class.is_none() {
-                        if let StorageClassSpecifier::Auto | StorageClassSpecifier::Register =
-                            stclass
-                        {
-                            return ec.record_error(CompileError::WrongStorageClass, stclass_span);
-                        }
-                        storage_class = Some(stclass);
-                    } else {
-                        return ec.record_error(CompileError::MultipleStorageClasses, stclass_span);
-                    }
-                }
-                DeclarationSpecifier::TypeSpecifier(typespec) => {
-                    type_builder.add_type_specifier_node(typespec, &self.type_registry, ec)?
-                }
-                DeclarationSpecifier::TypeQualifier(typequal) => {
-                    type_builder.add_type_qualifier_node(typequal, ec)?
-                }
-                DeclarationSpecifier::Function(Node {
-                    node: fnspec,
-                    span: fnspec_span,
-                }) => match fnspec {
-                    FunctionSpecifier::Inline => is_inline = true,
-                    FunctionSpecifier::Noreturn => ec.record_warning(
-                        CompileWarning::Unimplemented("_Noreturn".to_string()),
-                        fnspec_span,
-                    )?,
-                },
-                DeclarationSpecifier::Alignment(_) => ec.record_warning(
-                    CompileWarning::Unimplemented("alignment".to_string()),
-                    declspec_span,
-                )?,
-                DeclarationSpecifier::Extension(_) => ec.record_error(
-                    CompileError::Unimplemented("extension".to_string()),
-                    declspec_span,
-                )?,
-            }
-        }
+        let (mut type_builder, storage_class, _extra) = TypeBuilder::new_from_specifiers(decl.specifiers, &self.type_registry, ec)?;
+
         let mut has_error = false;
         for init_declarator in decl.declarators {
             if self
@@ -161,7 +113,7 @@ impl TranslationUnit {
     fn process_init_declarator_node(
         &mut self,
         init_declarator: Node<InitDeclarator>,
-        storage_class: &Option<StorageClassSpecifier>,
+        storage_class: &Option<Node<StorageClassSpecifier>>,
         type_builder: &mut TypeBuilder,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
@@ -173,6 +125,11 @@ impl TranslationUnit {
             &self.type_registry,
             ec,
         )?;
+        let (storage_class, stclass_span) = if let Some(c) = storage_class {
+            (Some(&c.node), Some(c.span))
+        } else {
+            (None, None)
+        };
         match id {
             None => ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator_span)?,
             Some(id) => {
@@ -239,7 +196,7 @@ impl TranslationUnit {
                         }
                     }
                     Some(StorageClassSpecifier::Auto) | Some(StorageClassSpecifier::Register) => {
-                        // handled in add_declaration
+                        ec.record_error(CompileError::WrongStorageClass, stclass_span.unwrap())?;
                         unreachable!()
                     }
                     Some(StorageClassSpecifier::ThreadLocal) => unimplemented!(),
