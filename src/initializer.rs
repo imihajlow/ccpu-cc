@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use lang_c::ast::IntegerSuffix;
+use lang_c::{ast::IntegerSuffix, span::Span};
 
 use crate::{
     ctype::{self, CType, QualifiedType, Qualifiers},
+    error::{ErrorCollector, CompileError},
     machine,
 };
 
@@ -36,6 +37,17 @@ impl TypedValue {
             val: Value::Int(value),
         }
         .clamp_to_type()
+    }
+
+    pub fn new_default(t: QualifiedType) -> Self {
+        if t.t.is_scalar() {
+            Self {
+                t,
+                val: Value::Int(0),
+            }
+        } else {
+            todo!()
+        }
     }
 
     /**
@@ -233,6 +245,8 @@ impl TypedValue {
 
     /**
      * Drop extra bits which don't fit into the target type (ensure the TypedValue invariant).
+     *
+     * TODO emit warning when data is lost
      */
     pub fn clamp_to_type(self) -> Self {
         match self.val {
@@ -263,6 +277,25 @@ impl TypedValue {
                 }
             }
             _ => self,
+        }
+    }
+
+    pub fn implicit_cast(
+        self,
+        t: &QualifiedType,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<Self, ()> {
+        // explicit and implicit casts are the same?
+        if self.t.is_explicit_castable_to(t) {
+            Ok(Self {
+                t: t.clone(),
+                val: self.val,
+            }
+            .clamp_to_type())
+        } else {
+            ec.record_error(CompileError::BadCast(format!("{}", self.t), format!("{}", t)), span)?;
+            unreachable!();
         }
     }
 

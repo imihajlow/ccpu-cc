@@ -27,6 +27,7 @@ pub enum CompileError {
     ConflictingTypes(String),
     ConflictingStorageClass(String),
     TypedefInitialized,
+    VarRedefinition(String),
     // Constant expression errors
     VariablesForbidden,
     CallsForbidden,
@@ -42,7 +43,6 @@ pub enum CompileError {
     BadTypesForOperator(String),
     CannotCompare(QualifiedType, QualifiedType),
     // Local definition errors
-    VarRedefinition(String),
 }
 
 pub enum CompileWarning {
@@ -51,6 +51,7 @@ pub enum CompileWarning {
     EmptyDeclaration,
     ShiftByNegative,
     LocalVarShadow(String),
+    ExternVarInitialized(String),
 }
 
 pub struct CompileErrorWithSpan(pub CompileError, pub Span);
@@ -167,6 +168,7 @@ impl std::fmt::Display for CompileWarning {
             }
             CompileWarning::ShiftByNegative => f.write_str("shift by a negative value"),
             CompileWarning::LocalVarShadow(s) => write!(f, "declaration of `{}' shadows a local variable", s),
+            CompileWarning::ExternVarInitialized(s) => write!(f, "extern variable `{}' has an initializer", s),
         }
     }
 }

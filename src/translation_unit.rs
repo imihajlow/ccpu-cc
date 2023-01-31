@@ -1,3 +1,4 @@
+use crate::name_scope::GlobalStorageClass;
 use std::collections::HashMap;
 
 use crate::constant::{self, compute_constant_initializer};
@@ -24,13 +25,6 @@ pub struct GlobalDeclaration {
     pub t: QualifiedType,
     pub storage_class: GlobalStorageClass,
     pub initializer: Option<Value>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum GlobalStorageClass {
-    Default,
-    Static,
-    Extern,
 }
 
 impl TranslationUnit {

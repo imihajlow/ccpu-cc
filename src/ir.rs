@@ -13,9 +13,12 @@ pub type BlockNumber = usize;
 
 #[derive(Debug, Clone)]
 pub enum VarLocation {
-    Static(String),
+    Global(GlobalVarId),
     Local(Reg),
 }
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct GlobalVarId(pub String, pub u32);
 
 pub enum Src {
     ConstInt(u64),

@@ -70,7 +70,7 @@ impl BlockEmitter {
         self.current_id = then_block_id;
         scope.push();
         compile_statement(*ifs.node.then_statement, scope, self, reg, ec)?;
-        scope.pop();
+        scope.pop_and_collect_initializers();
         let then_ops = mem::replace(&mut self.current_ops, Vec::new());
         self.blocks.insert(
             self.current_id,
@@ -85,7 +85,7 @@ impl BlockEmitter {
             self.current_id = else_block_id;
             scope.push();
             compile_statement(*elses, scope, self, reg, ec)?;
-            scope.pop();
+            scope.pop_and_collect_initializers();
             let else_ops = mem::replace(&mut self.current_ops, Vec::new());
             self.blocks.insert(
                 self.current_id,

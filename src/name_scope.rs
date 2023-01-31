@@ -1,7 +1,13 @@
-use crate::ir::{VarLocation, Reg};
-use std::collections::HashMap;
+use crate::{
+    initializer::{self, TypedValue},
+    ir::{GlobalVarId, Reg, VarLocation},
+};
+use std::collections::{HashMap, HashSet};
 
-use lang_c::span::Span;
+use lang_c::{
+    ast::StorageClassSpecifier,
+    span::{Node, Span},
+};
 
 use crate::{
     ctype::QualifiedType,
@@ -9,62 +15,259 @@ use crate::{
     translation_unit::GlobalDeclaration,
 };
 
-pub struct NameScope<'globals> {
+/**
+ * Keep track of symbols across the whole translation unit.
+ * Manages values of symbols and builds the export and import lists.
+ */
+pub struct NameScope {
     last_reg: Reg,
-    globals: &'globals HashMap<String, GlobalDeclaration>,
-    locals: Vec<HashMap<String, (QualifiedType, VarLocation)>>,
+    last_static_id: u32,
+    defs: Vec<HashMap<Namespace, (Value, Span)>>,
+    static_initializers: HashMap<GlobalVarId, TypedValue>,
 }
 
-impl<'globals> NameScope<'globals> {
-    pub fn new(globals: &'globals HashMap<String, GlobalDeclaration>) -> Self {
+pub enum Value {
+    Type(QualifiedType),
+    AutoVar(QualifiedType, Reg),
+    StaticVar(
+        QualifiedType,
+        GlobalVarId,
+        GlobalStorageClass,
+        Option<TypedValue>,
+    ),
+}
+
+#[derive(Eq, Hash, PartialEq)]
+enum Namespace {
+    Default(String),
+    Tag(String),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum GlobalStorageClass {
+    Default,
+    Static,
+    Extern,
+}
+
+impl NameScope {
+    /**
+     * All declarations added to a new NameScope are at global level.
+     */
+    pub fn new() -> Self {
         Self {
             last_reg: 0,
-            globals,
-            locals: vec![HashMap::new()],
+            last_static_id: 0,
+            defs: Vec::new(),
+            static_initializers: HashMap::new(),
         }
     }
 
+    /**
+     * Go down one level.
+     */
     pub fn push(&mut self) {
-        self.locals.push(HashMap::new());
+        self.defs.push(HashMap::new());
     }
 
-    pub fn pop(&mut self) {
-        self.locals
-            .pop()
-            .expect("name scope is popped beyond upper level");
+    /**
+     * Go up one level. Panics if poped above the global level.
+     * All initializers for the static variables at the popped level are collected.
+     */
+    pub fn pop_and_collect_initializers(&mut self) {
+        let mut m = self.defs.pop().unwrap();
+        if self.defs.len() == 0 {
+            panic!("NameScope is popped above the global level");
+        }
+        for (_key, (val, _span)) in m.drain() {
+            if let Value::StaticVar(t, id, _, initializer) = val {
+                let initializer = initializer.unwrap_or_else(|| TypedValue::new_default(t));
+                self.static_initializers.insert(id, initializer);
+            }
+        }
     }
 
+    /**
+     * Allocate a temporary variable.
+     */
     pub fn alloc_temp(&mut self) -> VarLocation {
         VarLocation::Local(self.alloc_reg())
     }
 
-    pub fn declare_local_var(
+    /**
+     * Declare a global var, a local var or a type alias.
+     *
+     * The initializer, if given, is cast to the target type.
+     */
+    pub fn declare(
         &mut self,
         name: &str,
         t: QualifiedType,
-        is_static: bool,
+        storage_class: Option<Node<StorageClassSpecifier>>,
+        initializer: Option<TypedValue>,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<VarLocation, ()> {
-        if self.find(name, false).is_some() {
-            ec.record_warning(CompileWarning::LocalVarShadow(name.to_string()), span)?;
-        }
-        let loc = if is_static {
-            VarLocation::Static(name.to_string()) // TODO mangle local static names
+    ) -> Result<(), ()> {
+        let (storage_class, storage_class_span) = if let Some(stc) = storage_class {
+            (Some(stc.node), Some(stc.span))
         } else {
-            VarLocation::Local(self.alloc_reg())
+            (None, None)
         };
-        if self
-            .locals
-            .last_mut()
-            .expect("empty name scope: too many pops")
-            .insert(name.to_string(), (t, loc.clone()))
-            .is_some()
-        {
-            ec.record_error(CompileError::VarRedefinition(name.to_string()), span)?;
+
+        let key = Namespace::Default(name.to_string());
+        if let Some(StorageClassSpecifier::Typedef) = storage_class {
+            if initializer.is_some() {
+                return ec.record_error(CompileError::TypedefInitialized, span);
+            }
+            if let Some((old_val, _)) = self.remove_at_same_level(&key) {
+                if !old_val.is_type() {
+                    return ec.record_error(
+                        CompileError::ConflictingStorageClass(name.to_string()),
+                        span,
+                    );
+                }
+                if &t != old_val.get_type() {
+                    return ec.record_error(CompileError::TypeRedefinition(name.to_string()), span);
+                }
+            }
+            self.insert(key, Value::Type(t), span);
+        } else if self.is_at_global_level() {
+            let storage_class = match GlobalStorageClass::from_ast_storage_class(storage_class) {
+                Ok(class) => class,
+                Err(_c) => return ec.record_error(CompileError::WrongStorageClass, span),
+            };
+            let initializer = if let Some(tv) = initializer {
+                Some(tv.implicit_cast(&t, span, ec)?)
+            } else {
+                None
+            };
+            if let Some((old_val, _)) = self.remove_at_same_level(&key) {
+                // check that both definitions are variables
+                if !old_val.is_var() {
+                    return ec.record_error(
+                        CompileError::ConflictingStorageClass(name.to_string()),
+                        span,
+                    );
+                }
+
+                // check storage classes compatibility
+                let old_storage_class = old_val.unwrap_storage_class();
+                let mut combined_storage_class =
+                    if let Some(class) = match_storage_classes(old_storage_class, storage_class) {
+                        class
+                    } else {
+                        return ec.record_error(
+                            CompileError::ConflictingStorageClass(name.to_string()),
+                            span,
+                        );
+                    };
+
+                // check types
+                if &t != old_val.get_type() {
+                    return ec.record_error(CompileError::ConflictingTypes(name.to_string()), span);
+                }
+
+                // check initializers
+                let (old_var_id, old_initializer) =
+                    if let Value::StaticVar(_, id, _, stclass) = old_val {
+                        (id, stclass)
+                    } else {
+                        unreachable!()
+                    };
+                if old_initializer.is_some() && initializer.is_some() {
+                    return ec.record_error(CompileError::VarRedefinition(name.to_string()), span);
+                }
+                if initializer.is_some() && combined_storage_class == GlobalStorageClass::Extern {
+                    ec.record_warning(
+                        CompileWarning::ExternVarInitialized(name.to_string()),
+                        span,
+                    )?;
+                    combined_storage_class = GlobalStorageClass::Default;
+                }
+                let combined_initializer = initializer.or(old_initializer);
+
+                self.insert(
+                    key,
+                    Value::StaticVar(t, old_var_id, combined_storage_class, combined_initializer),
+                    span,
+                );
+            } else {
+                let var_id = self.alloc_global_var_id(name);
+                self.insert(
+                    key,
+                    Value::StaticVar(t, var_id, storage_class, initializer),
+                    span,
+                );
+            }
+        } else {
+            // local variable
+            if self.exists_at_any_level(&key).is_some() {
+                ec.record_warning(CompileWarning::LocalVarShadow(name.to_string()), span)?;
+            }
+
+            if self.remove_at_same_level(&key).is_some() {
+                return ec.record_error(CompileError::VarRedefinition(name.to_string()), span);
+            }
+
+            match storage_class {
+                Some(StorageClassSpecifier::Static) => {
+                    let initializer = if let Some(tv) = initializer {
+                        Some(tv.implicit_cast(&t, span, ec)?)
+                    } else {
+                        None
+                    };
+                    let id = self.alloc_global_var_id(name);
+                    self.insert(
+                        key,
+                        Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
+                        span,
+                    );
+                }
+                None
+                | Some(StorageClassSpecifier::Auto)
+                | Some(StorageClassSpecifier::Register) => {
+                    assert!(initializer.is_none());
+                    let id = self.alloc_reg();
+                    self.insert(key, Value::AutoVar(t, id), span);
+                }
+                Some(StorageClassSpecifier::Extern) => {
+                    return ec
+                        .record_error(CompileError::WrongStorageClass, storage_class_span.unwrap())
+                }
+                Some(StorageClassSpecifier::ThreadLocal) => unimplemented!(),
+                Some(StorageClassSpecifier::Typedef) => unreachable!(), // handled above
+            }
         }
-        Ok(loc)
+        Ok(())
     }
+
+    // pub fn declare_local_var(
+    //     &mut self,
+    //     name: &str,
+    //     t: QualifiedType,
+    //     is_static: bool,
+    //     span: Span,
+    //     ec: &mut ErrorCollector,
+    // ) -> Result<VarLocation, ()> {
+    //     if self.find(name, false).is_some() {
+    //         ec.record_warning(CompileWarning::LocalVarShadow(name.to_string()), span)?;
+    //     }
+    //     let loc = if is_static {
+    //         VarLocation::Static(name.to_string()) // TODO mangle local static names
+    //     } else {
+    //         VarLocation::Local(self.alloc_reg())
+    //     };
+    //     if self
+    //         .locals
+    //         .last_mut()
+    //         .expect("empty name scope: too many pops")
+    //         .insert(name.to_string(), (t, loc.clone()))
+    //         .is_some()
+    //     {
+    //         ec.record_error(CompileError::VarRedefinition(name.to_string()), span)?;
+    //     }
+    //     Ok(loc)
+    // }
 
     pub fn get(
         &self,
@@ -72,40 +275,8 @@ impl<'globals> NameScope<'globals> {
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<(QualifiedType, VarLocation), ()> {
-        match self.find(name, true) {
-            Some(x) => Ok(x),
-            None => {
-                ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
-                unreachable!();
-            }
-        }
+        todo!()
     }
-
-    // pub fn get_and_update_register(
-    //     &mut self,
-    //     name: &str,
-    //     span: Span,
-    //     ec: &mut ErrorCollector,
-    // ) -> Result<(QualifiedType, VarLocation), ()> {
-    //     match self.find_mut(name) {
-    //         Some(v) => match v.1 {
-    //             VarLocation::Static(_) => Ok(v.clone()),
-    //             VarLocation::Local(_) => {
-    //                 let new_reg = self.alloc_reg();
-    //                 v.1 = VarLocation::Local(new_reg);
-    //                 Ok(v.clone())
-    //             }
-    //         },
-    //         None => {
-    //             if let Some(gd) = self.globals.get(name) {
-    //                 Ok((gd.t.clone(), VarLocation::Static(name.to_string())))
-    //             } else {
-    //                 ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
-    //                 unreachable!()
-    //             }
-    //         }
-    //     }
-    // }
 
     fn alloc_reg(&mut self) -> Reg {
         let r = self.last_reg;
@@ -113,29 +284,91 @@ impl<'globals> NameScope<'globals> {
         r
     }
 
-    fn find(&self, name: &str, globals: bool) -> Option<(QualifiedType, VarLocation)> {
-        for m in self.locals.iter().rev() {
-            if let Some(r) = m.get(name) {
-                return Some(r.clone());
-            }
-        }
-        if globals {
-            if let Some(gd) = self.globals.get(name) {
-                Some((gd.t.clone(), VarLocation::Static(name.to_owned())))
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+    fn alloc_global_var_id(&mut self, name: &str) -> GlobalVarId {
+        let id = self.last_static_id;
+        self.last_static_id += 1;
+        GlobalVarId(name.to_string(), id)
     }
 
-    fn find_mut(&mut self, name: &str) -> Option<&mut (QualifiedType, VarLocation)> {
-        for m in self.locals.iter_mut().rev() {
-            if let Some(r) = m.get_mut(name) {
-                return Some(r);
+    fn is_at_global_level(&self) -> bool {
+        self.defs.len() == 1
+    }
+
+    fn remove_at_same_level(&mut self, ns: &Namespace) -> Option<(Value, Span)> {
+        self.defs.last_mut().unwrap().remove(ns)
+    }
+
+    fn exists_at_any_level(&self, ns: &Namespace) -> Option<Span> {
+        for m in self.defs.iter().rev() {
+            if let Some((_val, span)) = m.get(ns) {
+                return Some(*span);
             }
         }
         None
+    }
+
+    fn insert(&mut self, key: Namespace, val: Value, span: Span) {
+        self.defs.last_mut().unwrap().insert(key, (val, span));
+    }
+}
+
+impl Value {
+    pub fn is_var(&self) -> bool {
+        match self {
+            Value::Type(_) => false,
+            _ => true,
+        }
+    }
+
+    pub fn is_type(&self) -> bool {
+        !self.is_var()
+    }
+
+    pub fn get_type(&self) -> &QualifiedType {
+        match self {
+            Value::Type(t) => t,
+            Value::AutoVar(t, _) => t,
+            Value::StaticVar(t, _, _, _) => t,
+        }
+    }
+
+    pub fn unwrap_storage_class(&self) -> GlobalStorageClass {
+        if let Value::StaticVar(_, _, class, _) = self {
+            *class
+        } else {
+            panic!("Can only unwrap storage class for a static variable");
+        }
+    }
+}
+
+impl GlobalStorageClass {
+    pub fn from_ast_storage_class(
+        class: Option<StorageClassSpecifier>,
+    ) -> Result<Self, StorageClassSpecifier> {
+        match class {
+            None => Ok(GlobalStorageClass::Default),
+            Some(StorageClassSpecifier::Extern) => Ok(GlobalStorageClass::Extern),
+            Some(StorageClassSpecifier::Static) => Ok(GlobalStorageClass::Static),
+            Some(c) => Err(c),
+        }
+    }
+}
+
+fn match_storage_classes(
+    old: GlobalStorageClass,
+    new: GlobalStorageClass,
+) -> Option<GlobalStorageClass> {
+    use GlobalStorageClass::*;
+    // same classes match
+    // static may not follow non-static
+    // extern may follow static
+    match (old, new) {
+        (Static, Static) => Some(Static),
+        (Extern, Extern) => Some(Extern),
+        (_, Static) => None,
+        (Static, Extern) => Some(Static),
+        (Static, Default) => None,
+        (Default, _) => Some(Default),
+        (_, Default) => Some(Default),
     }
 }

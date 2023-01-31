@@ -1,3 +1,4 @@
+use crate::name_scope::GlobalStorageClass;
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
@@ -6,7 +7,7 @@ use lang_c::{
 use crate::{
     ctype::{CType, FunctionArgs, QualifiedType},
     error::{CompileError, ErrorCollector},
-    translation_unit::{GlobalStorageClass, TranslationUnit},
+    translation_unit::TranslationUnit,
     type_builder::TypeBuilder,
 };
 
@@ -29,7 +30,8 @@ impl Function {
         if !node.node.declarations.is_empty() {
             unimplemented!("K&R functions");
         }
-        let (mut type_builder, storage_class, extra) = TypeBuilder::new_from_specifiers(node.node.specifiers, &tu.type_registry, ec)?;
+        let (mut type_builder, storage_class, extra) =
+            TypeBuilder::new_from_specifiers(node.node.specifiers, &tu.type_registry, ec)?;
         let storage_class = match storage_class {
             None => GlobalStorageClass::Default,
             Some(stc) => match stc.node {

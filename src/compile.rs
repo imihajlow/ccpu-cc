@@ -1,9 +1,9 @@
 use lang_c::{
-    ast::{BlockItem, Declaration, Expression, Statement, DeclarationSpecifier},
+    ast::{BlockItem, Declaration, Expression, Statement, DeclarationSpecifier, StorageClassSpecifier},
     span::Node,
 };
 
-use crate::{block_emitter::BlockEmitter, error::ErrorCollector, ir, name_scope::NameScope, type_builder::{self, TypeBuilder}, type_registry::TypeRegistry};
+use crate::{block_emitter::BlockEmitter, error::{ErrorCollector, CompileWarning}, ir, name_scope::NameScope, type_builder::{self, TypeBuilder}, type_registry::TypeRegistry};
 
 pub fn compile_statement(
     stat: Node<Statement>,
@@ -47,7 +47,7 @@ fn compile_block(
             _ => todo!(),
         }
     }
-    scope.pop();
+    scope.pop_and_collect_initializers();
     Ok(())
 }
 
@@ -59,5 +59,21 @@ fn compile_declaration(
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     let (mut type_builder, stclass, extra) = TypeBuilder::new_from_specifiers(decl.node.specifiers, reg, ec)?;
+    if let Some(stclass) = stclass {
+        match stclass.node {
+            // StorageClassSpecifier::
+            _ => todo!(),
+        }
+    }
+    for init_declarator in decl.node.declarators {
+        let mut tb = type_builder.stage2(init_declarator.span, ec)?;
+        let (name, t) = tb.process_declarator_node(init_declarator.node.declarator, reg, ec)?;
+        if name.is_none() {
+            ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator.span)?;
+            continue;
+        }
+        let name = name.unwrap();
+        // scope.declare_local_var(&name, t, is_static, init_declarator.span, ec)?;
+    }
     todo!()
 }
