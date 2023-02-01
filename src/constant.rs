@@ -5,13 +5,13 @@ use lang_c::{
     span::Node,
 };
 
+use crate::name_scope::NameScope;
 use crate::string;
 use crate::{
     ctype::{self, CType, QualifiedType},
     error::{CompileError, CompileWarning, ErrorCollector},
     initializer::{TypedValue, Value},
     machine,
-    translation_unit::TranslationUnit,
     type_builder::TypeBuilder,
 };
 
@@ -19,12 +19,12 @@ pub fn compute_constant_initializer(
     initializer: Node<Initializer>,
     target_type: &QualifiedType,
     allow_var: bool,
-    tu: &TranslationUnit,
+    scope: &NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let v = match initializer.node {
         Initializer::Expression(expr) => {
-            let v = compute_constant_expr(*expr, allow_var, tu, ec)?;
+            let v = compute_constant_expr(*expr, allow_var, scope, ec)?;
             cast(v, target_type, initializer.span, ec)?
         }
         Initializer::List(_) => todo!(),
@@ -35,7 +35,7 @@ pub fn compute_constant_initializer(
 pub fn compute_constant_expr(
     expr: Node<Expression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    scope: &NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let expr = expr.node;
@@ -45,7 +45,7 @@ pub fn compute_constant_expr(
                 ec.record_error(CompileError::VariablesForbidden, id.span)?;
                 unreachable!();
             }
-            tu.scope.get_static_const(&id.node.name, id.span, ec).cloned()
+            scope.get_static_const(&id.node.name, id.span, ec).cloned()
         }
         Expression::Constant(c) => {
             match c.node {
@@ -70,12 +70,12 @@ pub fn compute_constant_expr(
                 },
             }
         }
-        Expression::Cast(c) => process_cast_expression_node(*c, allow_var, tu, ec),
+        Expression::Cast(c) => process_cast_expression_node(*c, allow_var, scope, ec),
         Expression::UnaryOperator(node) => {
-            process_unary_operator_expression_node(*node, allow_var, tu, ec)
+            process_unary_operator_expression_node(*node, allow_var, scope, ec)
         }
         Expression::BinaryOperator(node) => {
-            process_binary_operator_expression_node(*node, allow_var, tu, ec)
+            process_binary_operator_expression_node(*node, allow_var, scope, ec)
         }
         Expression::Call(node) => {
             ec.record_error(CompileError::CallsForbidden, node.span)?;
@@ -84,11 +84,11 @@ pub fn compute_constant_expr(
         Expression::Comma(v) => {
             let results: Result<Vec<_>, _> = v
                 .into_iter()
-                .map(|node| compute_constant_expr(node, allow_var, tu, ec))
+                .map(|node| compute_constant_expr(node, allow_var, scope, ec))
                 .collect();
             Ok(results?.pop().unwrap()) // existence is checked by lang_c
         }
-        Expression::Conditional(c) => process_condition_expression_node(*c, allow_var, tu, ec),
+        Expression::Conditional(c) => process_condition_expression_node(*c, allow_var, scope, ec),
         Expression::StringLiteral(_) => todo!(),
         Expression::Member(_) => todo!(),
         Expression::CompoundLiteral(_) => todo!(),
@@ -105,14 +105,14 @@ pub fn compute_constant_expr(
 fn process_condition_expression_node(
     node: Node<ConditionalExpression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    scope: &NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let cond_span = node.node.condition.span;
     let else_span = node.node.else_expression.span;
-    let cond_val = compute_constant_expr(*node.node.condition, allow_var, tu, ec)?;
-    let then_val = compute_constant_expr(*node.node.then_expression, allow_var, tu, ec)?;
-    let else_val = compute_constant_expr(*node.node.else_expression, allow_var, tu, ec)?;
+    let cond_val = compute_constant_expr(*node.node.condition, allow_var, scope, ec)?;
+    let then_val = compute_constant_expr(*node.node.then_expression, allow_var, scope, ec)?;
+    let else_val = compute_constant_expr(*node.node.else_expression, allow_var, scope, ec)?;
     if !cond_val.t.t.is_scalar() {
         ec.record_error(CompileError::ScalarTypeRequired, cond_span)?;
         unreachable!()
@@ -144,14 +144,14 @@ fn process_condition_expression_node(
 fn process_binary_operator_expression_node(
     node: Node<BinaryOperatorExpression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    scope: &NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     use lang_c::ast::BinaryOperator;
     let lhs_span = node.node.lhs.span;
     let rhs_span = node.node.rhs.span;
-    let lhs = compute_constant_expr(*node.node.lhs, allow_var, tu, ec)?;
-    let rhs = compute_constant_expr(*node.node.rhs, allow_var, tu, ec)?;
+    let lhs = compute_constant_expr(*node.node.lhs, allow_var, scope, ec)?;
+    let rhs = compute_constant_expr(*node.node.rhs, allow_var, scope, ec)?;
     let op = node.node.operator.node;
     let op_span = node.node.operator.span;
     match op {
@@ -493,14 +493,14 @@ where
 fn process_unary_operator_expression_node(
     node: Node<UnaryOperatorExpression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    scope: &NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     use lang_c::ast::UnaryOperator;
     let op_node = node.node.operator;
     let op = op_node.node;
     let span = op_node.span;
-    let val = compute_constant_expr(*node.node.operand, allow_var, tu, ec)?;
+    let val = compute_constant_expr(*node.node.operand, allow_var, scope, ec)?;
     match op {
         UnaryOperator::PostIncrement
         | UnaryOperator::PostDecrement
@@ -545,20 +545,20 @@ fn process_unary_operator_expression_node(
 fn process_cast_expression_node(
     c: Node<CastExpression>,
     allow_var: bool,
-    tu: &TranslationUnit,
+    scope: &NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let mut type_builder = TypeBuilder::new();
     for sq in c.node.type_name.node.specifiers {
-        type_builder.add_specifier_qualifier_node(sq, &tu.scope, ec)?;
+        type_builder.add_specifier_qualifier_node(sq, scope, ec)?;
     }
     let type_builder = type_builder.stage2(c.span, ec)?;
     let new_type = if let Some(decl) = c.node.type_name.node.declarator {
-        type_builder.process_declarator_node(decl, &tu.scope, ec)?.1
+        type_builder.process_declarator_node(decl, scope, ec)?.1
     } else {
         type_builder.finalize()
     };
-    let value = compute_constant_expr(*c.node.expression, allow_var, tu, ec)?;
+    let value = compute_constant_expr(*c.node.expression, allow_var, scope, ec)?;
 
     Ok(TypedValue {
         val: cast(value, &new_type, c.span, ec)?,

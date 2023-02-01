@@ -30,7 +30,7 @@ impl TranslationUnit {
                 ExternalDeclaration::StaticAssert(node) => {
                     let expr_span = node.node.expression.span;
                     let val =
-                        constant::compute_constant_expr(*node.node.expression, false, &mut r, ec)?;
+                        constant::compute_constant_expr(*node.node.expression, false, &r.scope, ec)?;
                     if val.t.t.is_integer() {
                         if val.is_zero() {
                             ec.record_error(
@@ -105,7 +105,7 @@ impl TranslationUnit {
                 initializer,
                 &t,
                 false,
-                self,
+                &self.scope,
                 ec,
             )?)
         } else {
@@ -126,7 +126,7 @@ impl TranslationUnit {
         n: Node<FunctionDefinition>,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        let f = Function::new_from_node(n, self, ec)?;
+        let f = Function::new_from_node(n, &self.scope, ec)?;
         self.functions.push(f);
         Ok(())
     }

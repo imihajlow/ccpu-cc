@@ -1,4 +1,4 @@
-use crate::name_scope::GlobalStorageClass;
+use crate::name_scope::{GlobalStorageClass, NameScope};
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
@@ -7,7 +7,6 @@ use lang_c::{
 use crate::{
     ctype::{CType, FunctionArgs, QualifiedType},
     error::{CompileError, ErrorCollector},
-    translation_unit::TranslationUnit,
     type_builder::TypeBuilder,
 };
 
@@ -24,14 +23,14 @@ pub struct Function {
 impl Function {
     pub fn new_from_node(
         node: Node<FunctionDefinition>,
-        tu: &TranslationUnit,
+        scope: &NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<Self, ()> {
         if !node.node.declarations.is_empty() {
             unimplemented!("K&R functions");
         }
         let (mut type_builder, storage_class, extra) =
-            TypeBuilder::new_from_specifiers(node.node.specifiers, &tu.scope, ec)?;
+            TypeBuilder::new_from_specifiers(node.node.specifiers, scope, ec)?;
         let storage_class = match storage_class {
             None => GlobalStorageClass::Default,
             Some(stc) => match stc.node {
@@ -47,8 +46,7 @@ impl Function {
             },
         };
         let type_builder = type_builder.stage2(node.span, ec)?;
-        let (name, t) =
-            type_builder.process_declarator_node(node.node.declarator, &tu.scope, ec)?;
+        let (name, t) = type_builder.process_declarator_node(node.node.declarator, scope, ec)?;
         let _name = name.unwrap();
         let (return_type, args, is_vararg) = if let CType::Function {
             result,
