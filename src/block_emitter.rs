@@ -9,7 +9,7 @@ use crate::{
     compile::{compile_expression, compile_statement},
     error::ErrorCollector,
     ir,
-    name_scope::NameScope, type_registry::TypeRegistry,
+    name_scope::NameScope,
 };
 
 enum LabeledTail {
@@ -44,7 +44,6 @@ impl BlockEmitter {
         &mut self,
         ifs: Node<IfStatement>,
         scope: &mut NameScope,
-        reg: &TypeRegistry,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         let then_block_id = self.alloc_block_id();
@@ -69,7 +68,7 @@ impl BlockEmitter {
 
         self.current_id = then_block_id;
         scope.push();
-        compile_statement(*ifs.node.then_statement, scope, self, reg, ec)?;
+        compile_statement(*ifs.node.then_statement, scope, self, ec)?;
         scope.pop_and_collect_initializers();
         let then_ops = mem::replace(&mut self.current_ops, Vec::new());
         self.blocks.insert(
@@ -84,7 +83,7 @@ impl BlockEmitter {
         if let Some(elses) = ifs.node.else_statement {
             self.current_id = else_block_id;
             scope.push();
-            compile_statement(*elses, scope, self, reg, ec)?;
+            compile_statement(*elses, scope, self, ec)?;
             scope.pop_and_collect_initializers();
             let else_ops = mem::replace(&mut self.current_ops, Vec::new());
             self.blocks.insert(

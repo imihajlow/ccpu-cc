@@ -8,7 +8,6 @@ mod ir;
 mod machine;
 mod translation_unit;
 mod type_builder;
-mod type_registry;
 mod constant;
 mod initializer;
 mod string;

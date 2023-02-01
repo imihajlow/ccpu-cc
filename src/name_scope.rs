@@ -1,18 +1,16 @@
-use crate::{
-    initializer::{self, TypedValue},
-    ir::{GlobalVarId, Reg, VarLocation},
-};
-use std::collections::{HashMap, HashSet};
-
 use lang_c::{
     ast::StorageClassSpecifier,
     span::{Node, Span},
 };
+use std::collections::HashMap;
 
 use crate::{
     ctype::QualifiedType,
     error::{CompileError, CompileWarning, ErrorCollector},
-    translation_unit::GlobalDeclaration,
+};
+use crate::{
+    initializer::TypedValue,
+    ir::{GlobalVarId, Reg, VarLocation},
 };
 
 /**
@@ -58,7 +56,7 @@ impl NameScope {
         Self {
             last_reg: 0,
             last_static_id: 0,
-            defs: Vec::new(),
+            defs: vec![HashMap::new()],
             static_initializers: HashMap::new(),
         }
     }
@@ -103,13 +101,13 @@ impl NameScope {
         &mut self,
         name: &str,
         t: QualifiedType,
-        storage_class: Option<Node<StorageClassSpecifier>>,
+        storage_class: &Option<Node<StorageClassSpecifier>>,
         initializer: Option<TypedValue>,
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        let (storage_class, storage_class_span) = if let Some(stc) = storage_class {
-            (Some(stc.node), Some(stc.span))
+        let (storage_class, storage_class_span) = if let Some(stc) = storage_class.as_ref() {
+            (Some(&stc.node), Some(stc.span))
         } else {
             (None, None)
         };
@@ -134,7 +132,7 @@ impl NameScope {
         } else if self.is_at_global_level() {
             let storage_class = match GlobalStorageClass::from_ast_storage_class(storage_class) {
                 Ok(class) => class,
-                Err(_c) => return ec.record_error(CompileError::WrongStorageClass, span),
+                Err(_) => return ec.record_error(CompileError::WrongStorageClass, span),
             };
             let initializer = if let Some(tv) = initializer {
                 Some(tv.implicit_cast(&t, span, ec)?)
@@ -269,13 +267,59 @@ impl NameScope {
     //     Ok(loc)
     // }
 
-    pub fn get(
+    pub fn get_type_alias(
         &self,
         name: &str,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<(QualifiedType, VarLocation), ()> {
-        todo!()
+    ) -> Result<&QualifiedType, ()> {
+        if let Some(val) = self.get(name) {
+            if val.is_type() {
+                return Ok(val.get_type());
+            } else {
+                ec.record_error(CompileError::NotAType(name.to_string()), span)?;
+                unreachable!();
+            }
+        }
+        ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
+        unreachable!();
+    }
+
+    pub fn get_static_const(
+        &self,
+        name: &str,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<&TypedValue, ()> {
+        if let Some(val) = self.get(name) {
+            if val.is_var() {
+                if let Value::StaticVar(t, _, _, initializer) = val {
+                    if !t.is_const() || initializer.is_none() {
+                        ec.record_error(CompileError::NonConstInConstExpr, span)?;
+                        unreachable!();
+                    }
+                    return Ok(initializer.as_ref().unwrap());
+                } else {
+                    ec.record_error(CompileError::NonConstInConstExpr, span)?;
+                    unreachable!();
+                }
+            } else {
+                ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
+                unreachable!();
+            }
+        }
+        ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
+        unreachable!();
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Value> {
+        let key = Namespace::Default(name.to_string());
+        for m in self.defs.iter().rev() {
+            if let Some((val, _)) = m.get(&key) {
+                return Some(val);
+            }
+        }
+        return None;
     }
 
     fn alloc_reg(&mut self) -> Reg {
@@ -339,17 +383,31 @@ impl Value {
             panic!("Can only unwrap storage class for a static variable");
         }
     }
+
+    #[cfg(test)]
+    pub fn unwrap_static_var(
+        &self,
+    ) -> (
+        &QualifiedType,
+        &GlobalVarId,
+        &GlobalStorageClass,
+        &Option<TypedValue>,
+    ) {
+        if let Value::StaticVar(t, id, stcl, init) = self {
+            (t, id, stcl, init)
+        } else {
+            panic!("Not a static var")
+        }
+    }
 }
 
 impl GlobalStorageClass {
-    pub fn from_ast_storage_class(
-        class: Option<StorageClassSpecifier>,
-    ) -> Result<Self, StorageClassSpecifier> {
+    pub fn from_ast_storage_class(class: Option<&StorageClassSpecifier>) -> Result<Self, ()> {
         match class {
             None => Ok(GlobalStorageClass::Default),
             Some(StorageClassSpecifier::Extern) => Ok(GlobalStorageClass::Extern),
             Some(StorageClassSpecifier::Static) => Ok(GlobalStorageClass::Static),
-            Some(c) => Err(c),
+            Some(_) => Err(()),
         }
     }
 }

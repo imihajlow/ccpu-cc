@@ -1,20 +1,19 @@
 use lang_c::{
-    ast::{BlockItem, Declaration, Expression, Statement, DeclarationSpecifier, StorageClassSpecifier},
+    ast::{BlockItem, Declaration, Expression, Statement},
     span::Node,
 };
 
-use crate::{block_emitter::BlockEmitter, error::{ErrorCollector, CompileWarning}, ir, name_scope::NameScope, type_builder::{self, TypeBuilder}, type_registry::TypeRegistry};
+use crate::{block_emitter::BlockEmitter, error::{ErrorCollector, CompileWarning}, ir, name_scope::NameScope, type_builder::{TypeBuilder}};
 
 pub fn compile_statement(
     stat: Node<Statement>,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
-    reg: &TypeRegistry,
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     match stat.node {
-        Statement::Compound(items) => compile_block(items, scope, be, reg, ec)?,
-        Statement::If(ifs) => be.append_if(ifs, scope, reg, ec)?,
+        Statement::Compound(items) => compile_block(items, scope, be, ec)?,
+        Statement::If(ifs) => be.append_if(ifs, scope, ec)?,
         Statement::While(whiles) => be.append_while(whiles, scope, ec)?,
         Statement::For(fors) => be.append_for(fors, scope, ec)?,
         Statement::DoWhile(whiles) => be.append_do_while(whiles, scope, ec)?,
@@ -36,14 +35,13 @@ fn compile_block(
     block: Vec<Node<BlockItem>>,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
-    reg: &TypeRegistry,
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     scope.push();
     for item in block {
         match item.node {
-            BlockItem::Statement(stat) => compile_statement(stat, scope, be, reg, ec)?,
-            BlockItem::Declaration(decl) => compile_declaration(decl, scope, be, reg, ec)?,
+            BlockItem::Statement(stat) => compile_statement(stat, scope, be, ec)?,
+            BlockItem::Declaration(decl) => compile_declaration(decl, scope, be, ec)?,
             _ => todo!(),
         }
     }
@@ -55,10 +53,9 @@ fn compile_declaration(
     decl: Node<Declaration>,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
-    reg: &TypeRegistry,
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
-    let (mut type_builder, stclass, extra) = TypeBuilder::new_from_specifiers(decl.node.specifiers, reg, ec)?;
+    let (mut type_builder, stclass, extra) = TypeBuilder::new_from_specifiers(decl.node.specifiers, scope, ec)?;
     if let Some(stclass) = stclass {
         match stclass.node {
             // StorageClassSpecifier::
@@ -66,8 +63,8 @@ fn compile_declaration(
         }
     }
     for init_declarator in decl.node.declarators {
-        let mut tb = type_builder.stage2(init_declarator.span, ec)?;
-        let (name, t) = tb.process_declarator_node(init_declarator.node.declarator, reg, ec)?;
+        let tb = type_builder.stage2(init_declarator.span, ec)?;
+        let (name, t) = tb.process_declarator_node(init_declarator.node.declarator, scope, ec)?;
         if name.is_none() {
             ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator.span)?;
             continue;

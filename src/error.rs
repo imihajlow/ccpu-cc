@@ -22,6 +22,8 @@ pub enum CompileError {
     NamedVoidParameter,
     QualifiedVoidParameter,
     VoidParameter,
+    NotAType(String),
+    NotAVar(String),
     // Global definition errors
     TypeRedefinition(String),
     ConflictingTypes(String),
@@ -154,6 +156,8 @@ impl std::fmt::Display for CompileError {
             CompileError::QualifiedVoidParameter => f.write_str("'void' as parameter must not have type qualifiers"),
             CompileError::VoidParameter => f.write_str("'void' must be the first and only parameter if specified"),
             CompileError::VarRedefinition(s) => write!(f, "redefinition of `{}'", s),
+            CompileError::NotAType(s) => write!(f, "`{}' is not a type, but a variable", s),
+            CompileError::NotAVar(s) => write!(f, "`{}' is not a variable, but a type alias", s),
         }
     }
 }

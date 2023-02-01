@@ -1,30 +1,18 @@
-use crate::name_scope::GlobalStorageClass;
-use std::collections::HashMap;
-
 use crate::constant::{self, compute_constant_initializer};
-use crate::ctype::QualifiedType;
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
 use crate::function::Function;
 use crate::initializer::Value;
+use crate::name_scope::{GlobalStorageClass, NameScope};
 use crate::type_builder::TypeBuilder;
-use crate::type_registry::TypeRegistry;
+
 use lang_c::ast::{
-    Declaration, DeclarationSpecifier, ExternalDeclaration, FunctionDefinition, FunctionSpecifier,
-    InitDeclarator, StorageClassSpecifier,
+    Declaration, ExternalDeclaration, FunctionDefinition, InitDeclarator, StorageClassSpecifier,
 };
 use lang_c::span::Node;
 
 pub struct TranslationUnit {
-    pub type_registry: TypeRegistry,
-    global_declarations: HashMap<String, GlobalDeclaration>,
-    global_symbols: Vec<String>,
+    pub scope: NameScope,
     functions: Vec<Function>,
-}
-
-pub struct GlobalDeclaration {
-    pub t: QualifiedType,
-    pub storage_class: GlobalStorageClass,
-    pub initializer: Option<Value>,
 }
 
 impl TranslationUnit {
@@ -33,9 +21,7 @@ impl TranslationUnit {
         ec: &mut ErrorCollector,
     ) -> Result<Self, ()> {
         let mut r = Self {
-            type_registry: TypeRegistry::new(),
-            global_declarations: HashMap::new(),
-            global_symbols: Vec::new(),
+            scope: NameScope::new(),
             functions: Vec::new(),
         };
         let mut has_error = false;
@@ -75,13 +61,10 @@ impl TranslationUnit {
         }
     }
 
-    pub fn lookup_global_declaration(&self, id: &str) -> Option<&GlobalDeclaration> {
-        self.global_declarations.get(id)
-    }
-
     fn add_declaration(&mut self, n: Node<Declaration>, ec: &mut ErrorCollector) -> Result<(), ()> {
         let decl = n.node;
-        let (mut type_builder, storage_class, _extra) = TypeBuilder::new_from_specifiers(decl.specifiers, &self.type_registry, ec)?;
+        let (mut type_builder, storage_class, _extra) =
+            TypeBuilder::new_from_specifiers(decl.specifiers, &self.scope, ec)?;
 
         let mut has_error = false;
         for init_declarator in decl.declarators {
@@ -114,87 +97,25 @@ impl TranslationUnit {
         let init_declarator_span = init_declarator.span;
         let init_declarator = init_declarator.node;
         let type_builder = type_builder.stage2(init_declarator_span, ec)?;
-        let (id, t) = type_builder.process_declarator_node(
-            init_declarator.declarator,
-            &self.type_registry,
-            ec,
-        )?;
-        let (storage_class, stclass_span) = if let Some(c) = storage_class {
-            (Some(&c.node), Some(c.span))
+        let (id, t) =
+            type_builder.process_declarator_node(init_declarator.declarator, &self.scope, ec)?;
+
+        let initializer = if let Some(initializer) = init_declarator.initializer {
+            Some(compute_constant_initializer(
+                initializer,
+                &t,
+                false,
+                self,
+                ec,
+            )?)
         } else {
-            (None, None)
+            None
         };
         match id {
             None => ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator_span)?,
             Some(id) => {
-                match storage_class {
-                    Some(StorageClassSpecifier::Typedef) => {
-                        if let Some(initializer) = init_declarator.initializer {
-                            return ec
-                                .record_error(CompileError::TypedefInitialized, initializer.span);
-                        }
-                        if self.type_registry.add_alias(&id, t).is_err() {
-                            return ec.record_error(
-                                CompileError::TypeRedefinition(id),
-                                init_declarator_span,
-                            );
-                        }
-                    }
-                    None
-                    | Some(StorageClassSpecifier::Extern)
-                    | Some(StorageClassSpecifier::Static) => {
-                        let st_class = match storage_class {
-                            None => GlobalStorageClass::Default,
-                            Some(StorageClassSpecifier::Extern) => GlobalStorageClass::Extern,
-                            Some(StorageClassSpecifier::Static) => GlobalStorageClass::Static,
-                            _ => unreachable!(),
-                        };
-                        match self.global_declarations.get(&id) {
-                            Some(old) => {
-                                // redefinition, check type match and storage class
-                                if !old.t.is_compatible_to(&t) {
-                                    return ec.record_error(
-                                        CompileError::ConflictingTypes(id),
-                                        init_declarator_span,
-                                    );
-                                }
-                                if !match_storage_classes(&old.storage_class, &st_class) {
-                                    return ec.record_error(
-                                        CompileError::ConflictingStorageClass(id),
-                                        init_declarator_span,
-                                    );
-                                }
-                            }
-                            None => {
-                                let initializer =
-                                    if let Some(initializer) = init_declarator.initializer {
-                                        Some(compute_constant_initializer(
-                                            initializer,
-                                            &t,
-                                            false,
-                                            self,
-                                            ec,
-                                        )?)
-                                    } else {
-                                        None
-                                    };
-                                self.global_declarations.insert(
-                                    id,
-                                    GlobalDeclaration {
-                                        t,
-                                        storage_class: st_class,
-                                        initializer,
-                                    },
-                                );
-                            }
-                        }
-                    }
-                    Some(StorageClassSpecifier::Auto) | Some(StorageClassSpecifier::Register) => {
-                        ec.record_error(CompileError::WrongStorageClass, stclass_span.unwrap())?;
-                        unreachable!()
-                    }
-                    Some(StorageClassSpecifier::ThreadLocal) => unimplemented!(),
-                }
+                self.scope
+                    .declare(&id, t, storage_class, initializer, init_declarator_span, ec)?
             }
         }
         Ok(())
@@ -249,10 +170,10 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::INT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::empty());
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::INT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::empty());
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
     }
 
     #[test]
@@ -261,10 +182,10 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::ULLONG_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::empty());
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::ULLONG_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::empty());
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
     }
 
     #[test]
@@ -273,10 +194,10 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UCHAR_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Static);
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UCHAR_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Static);
     }
 
     #[test]
@@ -285,16 +206,16 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::INT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::empty());
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::INT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::empty());
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
 
-        let decl = tu.global_declarations.get("y").unwrap();
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST | Qualifiers::VOLATILE);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
+        let decl = tu.scope.get("y").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST | Qualifiers::VOLATILE);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
         assert_eq!(
-            decl.t.t,
+            decl.0.t,
             CType::Pointer(Box::new(QualifiedType {
                 t: ctype::INT_TYPE,
                 qualifiers: Qualifiers::empty()
@@ -308,10 +229,10 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UCHAR_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Static);
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UCHAR_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Static);
     }
 
     #[test]
@@ -335,11 +256,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::SLONG_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(42)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::SLONG_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(42));
     }
 
     #[test]
@@ -348,11 +269,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UCHAR_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::empty());
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0x04)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UCHAR_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::empty());
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x04));
     }
 
     #[test]
@@ -361,11 +282,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::SLONG_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0x88)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::SLONG_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x88));
     }
 
     #[test]
@@ -374,11 +295,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::SLONG_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0x02030405)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::SLONG_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x02030405));
     }
 
     #[test]
@@ -387,11 +308,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::SINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(22)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::SINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(22));
     }
 
     #[test]
@@ -400,11 +321,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::SINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(-2200)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::SINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(-2200));
     }
 
     #[test]
@@ -413,11 +334,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UCHAR_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0xaa)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UCHAR_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xaa));
     }
 
     #[test]
@@ -426,11 +347,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::SLONG_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::SLONG_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0));
     }
 
     #[test]
@@ -439,11 +360,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::ULONG_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0xffffffff)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::ULONG_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xffffffff));
     }
 
     #[test]
@@ -452,11 +373,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::ULONG_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0xffff)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::ULONG_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xffff));
     }
 
     #[test]
@@ -465,11 +386,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::INT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(-32768)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::INT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(-32768));
     }
 
     #[test]
@@ -478,11 +399,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::LONG_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(-32768)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::LONG_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(-32768));
     }
 
     #[test]
@@ -491,11 +412,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::INT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(13)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::INT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(13));
     }
 
     #[test]
@@ -504,11 +425,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UCHAR_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(1)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UCHAR_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
     }
 
     #[test]
@@ -517,11 +438,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::INT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(6)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::INT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(6));
     }
 
     #[test]
@@ -530,11 +451,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::INT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(3)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::INT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(3));
     }
 
     #[test]
@@ -543,11 +464,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::INT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(-100)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::INT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(-100));
     }
 
     #[test]
@@ -556,11 +477,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0xffff)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xffff));
     }
 
     #[test]
@@ -569,11 +490,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(20000)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(20000));
     }
 
     #[test]
@@ -582,11 +503,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(2)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(2));
     }
 
     #[test]
@@ -595,11 +516,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(2)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(2));
     }
 
     #[test]
@@ -615,11 +536,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0x1f)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x1f));
     }
 
     #[test]
@@ -628,11 +549,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0xf000)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xf000));
     }
 
     #[test]
@@ -641,11 +562,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0));
     }
 
     #[test]
@@ -654,11 +575,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(1)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
     }
 
     #[test]
@@ -667,11 +588,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(1)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
     }
 
     #[test]
@@ -680,11 +601,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0));
     }
 
     #[test]
@@ -693,11 +614,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(1)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
     }
 
     #[test]
@@ -706,11 +627,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(1)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
     }
 
     #[test]
@@ -719,11 +640,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0xff)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xff));
     }
 
     #[test]
@@ -732,11 +653,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0xe0)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xe0));
     }
 
     #[test]
@@ -745,11 +666,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(0x1ee)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x1ee));
     }
 
     #[test]
@@ -758,11 +679,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(1)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
     }
 
     #[test]
@@ -771,11 +692,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(1)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
     }
 
     #[test]
@@ -784,11 +705,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(2)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(2));
     }
 
     #[test]
@@ -797,11 +718,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(1)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
     }
 
     #[test]
@@ -818,11 +739,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::UINT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(3)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::UINT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(3));
     }
 
     #[test]
@@ -845,11 +766,11 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("x").unwrap();
-        assert_eq!(decl.t.t, ctype::INT_TYPE);
-        assert_eq!(decl.t.qualifiers, Qualifiers::CONST);
-        assert_eq!(decl.storage_class, GlobalStorageClass::Default);
-        assert_matches!(decl.initializer, Some(Value::Int(65)));
+        let decl = tu.scope.get("x").unwrap().unwrap_static_var();
+        assert_eq!(decl.0.t, ctype::INT_TYPE);
+        assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
+        assert_eq!(decl.2, &GlobalStorageClass::Default);
+        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(65));
     }
 
     #[test]
@@ -858,9 +779,9 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("f").unwrap();
+        let decl = tu.scope.get("f").unwrap().unwrap_static_var();
         assert_eq!(
-            decl.t.t,
+            decl.0.t,
             CType::Function {
                 result: Box::new(QualifiedType {
                     t: CType::Void,
@@ -884,9 +805,9 @@ mod test {
         assert!(tu_result.is_ok());
         assert_eq!(ec.get_error_count(), 0);
         let tu = tu_result.unwrap();
-        let decl = tu.global_declarations.get("f").unwrap();
+        let decl = tu.scope.get("f").unwrap().unwrap_static_var();
         assert_eq!(
-            decl.t.t,
+            decl.0.t,
             CType::Function {
                 result: Box::new(QualifiedType {
                     t: ctype::INT_TYPE,

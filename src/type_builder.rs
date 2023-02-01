@@ -9,7 +9,8 @@ use crate::error::CompileError;
 use crate::error::CompileWarning;
 use crate::error::ErrorCollector;
 use crate::machine;
-use crate::type_registry::TypeRegistry;
+use crate::name_scope::NameScope;
+
 use lang_c::ast::DeclarationSpecifier;
 use lang_c::ast::Ellipsis;
 use lang_c::ast::FunctionSpecifier;
@@ -75,11 +76,13 @@ impl TypeBuilder {
 
     pub fn new_from_specifiers(
         specs: Vec<Node<DeclarationSpecifier>>,
-        reg: &TypeRegistry,
+        scope: &NameScope,
         ec: &mut ErrorCollector,
-    ) -> Result<(Self, Option<Node<StorageClassSpecifier>>, ExtraSpecifiers), ()>
-    {
-        let mut extra = ExtraSpecifiers { is_inline: false, is_noreturn: false };
+    ) -> Result<(Self, Option<Node<StorageClassSpecifier>>, ExtraSpecifiers), ()> {
+        let mut extra = ExtraSpecifiers {
+            is_inline: false,
+            is_noreturn: false,
+        };
         let mut type_builder = Self::new();
         let mut storage_class = None;
         for declspec in specs {
@@ -96,7 +99,7 @@ impl TypeBuilder {
                     FunctionSpecifier::Noreturn => extra.is_noreturn = true,
                 },
                 DeclarationSpecifier::TypeSpecifier(ts) => {
-                    type_builder.add_type_specifier_node(ts, reg, ec)?
+                    type_builder.add_type_specifier_node(ts, scope, ec)?
                 }
                 DeclarationSpecifier::TypeQualifier(q) => {
                     type_builder.add_type_qualifier_node(q, ec)?
@@ -120,7 +123,7 @@ impl TypeBuilder {
     pub fn add_type_specifier_node(
         &mut self,
         spec: Node<lang_c::ast::TypeSpecifier>,
-        reg: &TypeRegistry,
+        scope: &NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         use lang_c::ast::TypeSpecifier;
@@ -137,7 +140,7 @@ impl TypeBuilder {
             TypeSpecifier::Unsigned => self.set_signed(false, span, ec)?,
             TypeSpecifier::Long => self.set_long(span, ec)?,
             TypeSpecifier::Short => self.set_short(span, ec)?,
-            TypeSpecifier::TypedefName(n) => self.set_alias(n.node.name, n.span, reg, ec)?,
+            TypeSpecifier::TypedefName(n) => self.set_alias(n.node.name, n.span, scope, ec)?,
             TypeSpecifier::Struct(_) => todo!(),
             TypeSpecifier::Enum(_) => todo!(),
             TypeSpecifier::TypeOf(_) => todo!(),
@@ -151,14 +154,16 @@ impl TypeBuilder {
     pub fn add_specifier_qualifier_node(
         &mut self,
         sq: Node<lang_c::ast::SpecifierQualifier>,
-        reg: &TypeRegistry,
+        scope: &NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         use lang_c::ast::SpecifierQualifier;
         let sq = sq.node;
         match sq {
             SpecifierQualifier::TypeQualifier(q) => self.add_type_qualifier_node(q, ec),
-            SpecifierQualifier::TypeSpecifier(spec) => self.add_type_specifier_node(spec, reg, ec),
+            SpecifierQualifier::TypeSpecifier(spec) => {
+                self.add_type_specifier_node(spec, scope, ec)
+            }
             SpecifierQualifier::Extension(_) => unimplemented!(),
         }
     }
@@ -273,17 +278,11 @@ impl TypeBuilder {
         &mut self,
         name: String,
         span: Span,
-        reg: &TypeRegistry,
+        scope: &NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        let bt = match reg.lookup_alias(&name) {
-            Some(t) => BaseType::Alias(name, t),
-            None => {
-                ec.record_error(CompileError::UnknownType(name), span)?;
-                return Err(());
-            }
-        };
-        self.set_base_type(bt, span, ec)
+        let t = scope.get_type_alias(&name, span, ec)?;
+        self.set_base_type(BaseType::Alias(name, t.clone()), span, ec)
     }
 
     fn check_consistency(&self, span: Span, ec: &mut ErrorCollector) -> Result<(), ()> {
@@ -372,7 +371,7 @@ impl TypeBuilderStage2 {
     pub fn process_declarator_node(
         mut self,
         declarator: Node<lang_c::ast::Declarator>,
-        reg: &TypeRegistry,
+        scope: &NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(Option<String>, QualifiedType), ()> {
         use lang_c::ast::DeclaratorKind;
@@ -382,7 +381,7 @@ impl TypeBuilderStage2 {
         } = declarator;
 
         for derived in declarator.derived {
-            self.add_derived_declarator_node(derived, reg, ec)?;
+            self.add_derived_declarator_node(derived, scope, ec)?;
         }
 
         if !declarator.extensions.is_empty() {
@@ -399,7 +398,7 @@ impl TypeBuilderStage2 {
                     DeclaratorKind::Declarator(_) => unreachable!(),
                 }
             }
-            DeclaratorKind::Declarator(decl) => self.process_declarator_node(*decl, reg, ec),
+            DeclaratorKind::Declarator(decl) => self.process_declarator_node(*decl, scope, ec),
         }
     }
 
@@ -410,7 +409,7 @@ impl TypeBuilderStage2 {
     fn add_derived_declarator_node(
         &mut self,
         dd: Node<lang_c::ast::DerivedDeclarator>,
-        reg: &TypeRegistry,
+        scope: &NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         use lang_c::ast::{DerivedDeclarator, PointerQualifier};
@@ -440,7 +439,7 @@ impl TypeBuilderStage2 {
                                 _ => ec.record_error(CompileError::WrongStorageClass, sc.span)?,
                             },
                             DeclarationSpecifier::TypeSpecifier(ts) => {
-                                builder.add_type_specifier_node(ts, reg, ec)?
+                                builder.add_type_specifier_node(ts, scope, ec)?
                             }
                             DeclarationSpecifier::TypeQualifier(tq) => {
                                 builder.add_type_qualifier_node(tq, ec)?
@@ -452,7 +451,7 @@ impl TypeBuilderStage2 {
                     }
                     let builder = builder.stage2(param_decl.span, ec)?;
                     let (name, t) = if let Some(decl) = param_decl.node.declarator {
-                        builder.process_declarator_node(decl, reg, ec)?
+                        builder.process_declarator_node(decl, scope, ec)?
                     } else {
                         (None, builder.finalize())
                     };

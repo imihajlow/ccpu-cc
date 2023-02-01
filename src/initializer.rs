@@ -4,7 +4,7 @@ use lang_c::{ast::IntegerSuffix, span::Span};
 
 use crate::{
     ctype::{self, CType, QualifiedType, Qualifiers},
-    error::{ErrorCollector, CompileError},
+    error::{CompileError, ErrorCollector},
     machine,
 };
 
@@ -28,6 +28,10 @@ pub struct TypedValue {
 }
 
 impl TypedValue {
+    pub fn new(val: Value, t: QualifiedType) -> Self {
+        Self { t, val }.clamp_to_type()
+    }
+
     pub fn new_integer(value: i128, t: CType) -> Self {
         Self {
             t: QualifiedType {
@@ -294,7 +298,10 @@ impl TypedValue {
             }
             .clamp_to_type())
         } else {
-            ec.record_error(CompileError::BadCast(format!("{}", self.t), format!("{}", t)), span)?;
+            ec.record_error(
+                CompileError::BadCast(format!("{}", self.t), format!("{}", t)),
+                span,
+            )?;
             unreachable!();
         }
     }

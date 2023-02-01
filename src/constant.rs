@@ -21,14 +21,15 @@ pub fn compute_constant_initializer(
     allow_var: bool,
     tu: &TranslationUnit,
     ec: &mut ErrorCollector,
-) -> Result<Value, ()> {
-    match initializer.node {
+) -> Result<TypedValue, ()> {
+    let v = match initializer.node {
         Initializer::Expression(expr) => {
             let v = compute_constant_expr(*expr, allow_var, tu, ec)?;
-            cast(v, target_type, initializer.span, ec)
+            cast(v, target_type, initializer.span, ec)?
         }
         Initializer::List(_) => todo!(),
-    }
+    };
+    Ok(TypedValue::new(v, target_type.clone()))
 }
 
 pub fn compute_constant_expr(
@@ -37,7 +38,6 @@ pub fn compute_constant_expr(
     tu: &TranslationUnit,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
-    let span = expr.span;
     let expr = expr.node;
     match expr {
         Expression::Identifier(id) => {
@@ -45,22 +45,7 @@ pub fn compute_constant_expr(
                 ec.record_error(CompileError::VariablesForbidden, id.span)?;
                 unreachable!();
             }
-            match tu.lookup_global_declaration(&id.node.name) {
-                None => {
-                    ec.record_error(CompileError::UnknownIdentifier(id.node.name), id.span)?;
-                    unreachable!();
-                }
-                Some(decl) => {
-                    if !decl.t.is_const() || decl.initializer.is_none() {
-                        ec.record_error(CompileError::NonConstInConstExpr, id.span)?;
-                        unreachable!();
-                    }
-                    Ok(TypedValue {
-                        t: decl.t.clone(),
-                        val: decl.initializer.as_ref().unwrap().clone(),
-                    })
-                }
-            }
+            tu.scope.get_static_const(&id.node.name, id.span, ec).cloned()
         }
         Expression::Constant(c) => {
             match c.node {
@@ -565,11 +550,11 @@ fn process_cast_expression_node(
 ) -> Result<TypedValue, ()> {
     let mut type_builder = TypeBuilder::new();
     for sq in c.node.type_name.node.specifiers {
-        type_builder.add_specifier_qualifier_node(sq, &tu.type_registry, ec)?;
+        type_builder.add_specifier_qualifier_node(sq, &tu.scope, ec)?;
     }
     let type_builder = type_builder.stage2(c.span, ec)?;
     let new_type = if let Some(decl) = c.node.type_name.node.declarator {
-        type_builder.process_declarator_node(decl, &tu.type_registry, ec)?.1
+        type_builder.process_declarator_node(decl, &tu.scope, ec)?.1
     } else {
         type_builder.finalize()
     };
