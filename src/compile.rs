@@ -1,9 +1,16 @@
 use lang_c::{
-    ast::{BlockItem, Declaration, Expression, Statement},
+    ast::{BlockItem, Declaration, Expression, Statement, StorageClassSpecifier, Initializer},
     span::Node,
 };
 
-use crate::{block_emitter::BlockEmitter, error::{ErrorCollector, CompileWarning}, ir, name_scope::NameScope, type_builder::{TypeBuilder}};
+use crate::{
+    block_emitter::BlockEmitter,
+    constant,
+    error::{CompileWarning, ErrorCollector},
+    ir,
+    name_scope::NameScope,
+    type_builder::TypeBuilder, initializer,
+};
 
 pub fn compile_statement(
     stat: Node<Statement>,
@@ -31,6 +38,20 @@ pub fn compile_expression(
     todo!()
 }
 
+pub fn compile_initializer(
+    initializer: Node<Initializer>,
+    target: &str,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector) -> Result<(), ()> {
+    match initializer.node {
+        Initializer::Expression(e) => {
+            todo!()
+        }
+        Initializer::List(_) => todo!()
+    }
+}
+
 fn compile_block(
     block: Vec<Node<BlockItem>>,
     scope: &mut NameScope,
@@ -42,7 +63,7 @@ fn compile_block(
         match item.node {
             BlockItem::Statement(stat) => compile_statement(stat, scope, be, ec)?,
             BlockItem::Declaration(decl) => compile_declaration(decl, scope, be, ec)?,
-            _ => todo!(),
+            BlockItem::StaticAssert(sa) => constant::check_static_assert(sa, scope, ec)?,
         }
     }
     scope.pop_and_collect_initializers();
@@ -55,13 +76,8 @@ fn compile_declaration(
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
-    let (mut type_builder, stclass, extra) = TypeBuilder::new_from_specifiers(decl.node.specifiers, scope, ec)?;
-    if let Some(stclass) = stclass {
-        match stclass.node {
-            // StorageClassSpecifier::
-            _ => todo!(),
-        }
-    }
+    let (mut type_builder, stclass, _extra) =
+        TypeBuilder::new_from_specifiers(decl.node.specifiers, scope, ec)?;
     for init_declarator in decl.node.declarators {
         let tb = type_builder.stage2(init_declarator.span, ec)?;
         let (name, t) = tb.process_declarator_node(init_declarator.node.declarator, scope, ec)?;
@@ -70,7 +86,32 @@ fn compile_declaration(
             continue;
         }
         let name = name.unwrap();
-        // scope.declare_local_var(&name, t, is_static, init_declarator.span, ec)?;
+        let is_static = matches!(
+            stclass,
+            Some(Node {
+                node: StorageClassSpecifier::Static,
+                ..
+            })
+        );
+        if is_static {
+            let initializer = if let Some(initializer) = init_declarator.node.initializer {
+                Some(constant::compute_constant_initializer(
+                    initializer,
+                    &t,
+                    true,
+                    scope,
+                    ec,
+                )?)
+            } else {
+                None
+            };
+            scope.declare(&name, t, &stclass, initializer, init_declarator.span, ec)?;
+        } else {
+            scope.declare(&name, t, &stclass, None, init_declarator.span, ec)?;
+            if let Some(initializer) = init_declarator.node.initializer {
+                compile_initializer(initializer, &name, scope, be, ec)?;
+            }
+        };
     }
-    todo!()
+    Ok(())
 }

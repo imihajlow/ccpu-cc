@@ -239,34 +239,6 @@ impl NameScope {
         Ok(())
     }
 
-    // pub fn declare_local_var(
-    //     &mut self,
-    //     name: &str,
-    //     t: QualifiedType,
-    //     is_static: bool,
-    //     span: Span,
-    //     ec: &mut ErrorCollector,
-    // ) -> Result<VarLocation, ()> {
-    //     if self.find(name, false).is_some() {
-    //         ec.record_warning(CompileWarning::LocalVarShadow(name.to_string()), span)?;
-    //     }
-    //     let loc = if is_static {
-    //         VarLocation::Static(name.to_string()) // TODO mangle local static names
-    //     } else {
-    //         VarLocation::Local(self.alloc_reg())
-    //     };
-    //     if self
-    //         .locals
-    //         .last_mut()
-    //         .expect("empty name scope: too many pops")
-    //         .insert(name.to_string(), (t, loc.clone()))
-    //         .is_some()
-    //     {
-    //         ec.record_error(CompileError::VarRedefinition(name.to_string()), span)?;
-    //     }
-    //     Ok(loc)
-    // }
-
     pub fn get_type_alias(
         &self,
         name: &str,
@@ -310,6 +282,26 @@ impl NameScope {
         }
         ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
         unreachable!();
+    }
+
+    pub fn get_var(&self, name: &str, span: Span, ec: &mut ErrorCollector) -> Result<(&QualifiedType, VarLocation), ()> {
+        if let Some(val) = self.get(name) {
+            match val {
+                Value::AutoVar(t, r) => {
+                    Ok((t, VarLocation::Local(*r)))
+                }
+                Value::StaticVar(t, id, _, _) => {
+                    Ok((t, VarLocation::Global(id.clone())))
+                }
+                Value::Type(_) => {
+                    ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
+                    unreachable!();
+                }
+            }
+        } else {
+            ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
+            unreachable!();
+        }
     }
 
     pub fn get(&self, name: &str) -> Option<&Value> {

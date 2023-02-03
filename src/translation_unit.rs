@@ -28,19 +28,7 @@ impl TranslationUnit {
         for Node { node: ed, .. } in tu.0.into_iter() {
             match ed {
                 ExternalDeclaration::StaticAssert(node) => {
-                    let expr_span = node.node.expression.span;
-                    let val =
-                        constant::compute_constant_expr(*node.node.expression, false, &r.scope, ec)?;
-                    if val.t.t.is_integer() {
-                        if val.is_zero() {
-                            ec.record_error(
-                                CompileError::StaticAssertionFailed("TODO".to_string()),
-                                node.span,
-                            )?;
-                        }
-                    } else {
-                        ec.record_error(CompileError::IntegerTypeRequired, expr_span)?;
-                    }
+                    constant::check_static_assert(node, &r.scope, ec)?;
                 }
                 ExternalDeclaration::Declaration(n) => {
                     if r.add_declaration(n, ec).is_err() {
