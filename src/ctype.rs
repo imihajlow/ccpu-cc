@@ -1,5 +1,10 @@
-use crate::machine::{self, *};
+use crate::{
+    error::{CompileWarning, ErrorCollector},
+    ir,
+    machine::{self, *},
+};
 use bitflags::bitflags;
+use lang_c::span::Span;
 use replace_with::replace_with_or_abort;
 use std::fmt::Formatter;
 
@@ -11,7 +16,7 @@ pub enum CType {
     Int(u8, bool),
     Float(u8),
     Pointer(Box<QualifiedType>),
-    Array(Box<QualifiedType>, Option<usize>),
+    Array(Box<QualifiedType>, Option<u32>),
     Struct(TypeIdentifier),
     Union(TypeIdentifier),
     Enum(TypeIdentifier),
@@ -165,6 +170,14 @@ impl QualifiedType {
             ..self
         }
     }
+
+    pub fn dereference(self) -> Result<Self, Self> {
+        match self.t {
+            CType::Pointer(t) => Ok(*t),
+            CType::Array(t, _) => Ok(*t),
+            _ => Err(self),
+        }
+    }
 }
 
 impl FunctionArgs {
@@ -309,6 +322,36 @@ impl CType {
             CType::Int(size, _) if size < machine::INT_SIZE => CType::Int(machine::INT_SIZE, true),
             CType::Bool => CType::Int(machine::INT_SIZE, true),
             x => x,
+        }
+    }
+
+    pub fn sizeof(&self, span: Span, ec: &mut ErrorCollector) -> Result<u32, ()> {
+        match self {
+            CType::Void | CType::Function { .. } => {
+                ec.record_warning(CompileWarning::InvalidSizeof, span)?;
+                Ok(1)
+            }
+            CType::Bool => Ok(machine::BOOL_SIZE as u32),
+            CType::Int(s, _) => Ok(*s as u32),
+            CType::Float(s) => Ok(*s as u32),
+            CType::Pointer(_) => Ok(machine::PTR_SIZE as u32),
+            CType::Array(t, Some(n)) => Ok(t.t.sizeof(span, ec)? * *n),
+            CType::Array(_, None) => Ok(machine::PTR_SIZE as u32),
+            CType::Struct(_) => todo!(),
+            CType::Union(_) => todo!(),
+            CType::Enum(_) => todo!(),
+        }
+    }
+
+    pub fn get_width_sign(&self) -> Option<(ir::Width, bool)> {
+        match self {
+            CType::Int(size, sign) => Some((ir::Width::new(*size), *sign)),
+            CType::Bool => Some((ir::Width::new(machine::BOOL_SIZE), false)),
+            CType::Array(_, _) | CType::Pointer(_) => {
+                Some((ir::Width::new(machine::PTR_SIZE), false))
+            }
+            CType::Union(_) => todo!(),
+            _ => None,
         }
     }
 }

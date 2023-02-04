@@ -62,7 +62,7 @@ impl BlockEmitter {
             LabeledBlock {
                 ops: current_ops,
                 phi: Vec::new(),
-                tail: LabeledTail::Tail(ir::Tail::Cond(cond, then_block_id, else_block_id)),
+                tail: LabeledTail::Tail(ir::Tail::Cond(cond.src, then_block_id, else_block_id)),
             },
         );
 

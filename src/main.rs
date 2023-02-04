@@ -15,6 +15,7 @@ mod function;
 mod compile;
 mod name_scope;
 mod block_emitter;
+mod lvalue;
 
 #[macro_use]
 extern crate static_assertions;

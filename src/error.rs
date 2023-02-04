@@ -44,6 +44,11 @@ pub enum CompileError {
     ScalarTypeRequired,
     BadTypesForOperator(String),
     CannotCompare(QualifiedType, QualifiedType),
+    BadIndirection(QualifiedType),
+    BadSubscripted,
+    BadSubsript,
+    NotAssignable,
+    AssignmentToConstQualified(QualifiedType),
     // Local definition errors
 }
 
@@ -54,6 +59,8 @@ pub enum CompileWarning {
     ShiftByNegative,
     LocalVarShadow(String),
     ExternVarInitialized(String),
+    InvalidSizeof,
+    IndexTooWide(QualifiedType),
 }
 
 pub struct CompileErrorWithSpan(pub CompileError, pub Span);
@@ -153,11 +160,28 @@ impl std::fmt::Display for CompileError {
                 write!(f, "error while parsing character literal: {}", e)
             }
             CompileError::NamedVoidParameter => f.write_str("argument may not have 'void' type"),
-            CompileError::QualifiedVoidParameter => f.write_str("'void' as parameter must not have type qualifiers"),
-            CompileError::VoidParameter => f.write_str("'void' must be the first and only parameter if specified"),
+            CompileError::QualifiedVoidParameter => {
+                f.write_str("'void' as parameter must not have type qualifiers")
+            }
+            CompileError::VoidParameter => {
+                f.write_str("'void' must be the first and only parameter if specified")
+            }
             CompileError::VarRedefinition(s) => write!(f, "redefinition of `{}'", s),
             CompileError::NotAType(s) => write!(f, "`{}' is not a type, but a variable", s),
             CompileError::NotAVar(s) => write!(f, "`{}' is not a variable, but a type alias", s),
+            CompileError::BadIndirection(t) => {
+                write!(f, "indirection requires pointer operand (`{}' invalid)", t)
+            }
+            CompileError::NotAssignable => write!(f, "expression is not assignable"),
+            CompileError::BadSubscripted => {
+                write!(f, "subscripted value is not an array or pointer")
+            }
+            CompileError::BadSubsript => write!(f, "array subscript is not an integer"),
+            CompileError::AssignmentToConstQualified(t) => write!(
+                f,
+                "cannot assign to a location with const-qualified type `{}'",
+                t
+            ),
         }
     }
 }
@@ -171,8 +195,16 @@ impl std::fmt::Display for CompileWarning {
                 f.write_str("empty declration doesn't declare anything")
             }
             CompileWarning::ShiftByNegative => f.write_str("shift by a negative value"),
-            CompileWarning::LocalVarShadow(s) => write!(f, "declaration of `{}' shadows a local variable", s),
-            CompileWarning::ExternVarInitialized(s) => write!(f, "extern variable `{}' has an initializer", s),
+            CompileWarning::LocalVarShadow(s) => {
+                write!(f, "declaration of `{}' shadows a local variable", s)
+            }
+            CompileWarning::ExternVarInitialized(s) => {
+                write!(f, "extern variable `{}' has an initializer", s)
+            }
+            CompileWarning::InvalidSizeof => f.write_str("invalid application of sizeof"),
+            CompileWarning::IndexTooWide(t) => {
+                write!(f, "pointer arithmetics with `{}': data may be lost", t)
+            }
         }
     }
 }

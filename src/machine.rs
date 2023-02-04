@@ -4,6 +4,7 @@ pub const INT_SIZE: u8 = 2;
 pub const LONG_SIZE: u8 = 4;
 pub const LLONG_SIZE: u8 = 8;
 pub const PTR_SIZE: u8 = 2;
+pub const BOOL_SIZE: u8 = 1;
 
 const_assert!(SHORT_SIZE >= 2);
 const_assert!(INT_SIZE >= 2);

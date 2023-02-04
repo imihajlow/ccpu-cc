@@ -1,4 +1,5 @@
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Width {
     Byte,
     Word,
@@ -9,7 +10,6 @@ pub enum Width {
 pub type Reg = u32;
 pub type Sign = bool;
 pub type BlockNumber = usize;
-
 
 #[derive(Debug, Clone)]
 pub enum VarLocation {
@@ -27,23 +27,73 @@ pub enum Src {
     StackPointer,
 }
 
-#[rustfmt::skip]
 pub enum Op {
-    Add { width: Width, sign: Sign, dst: VarLocation, src1: Src, src2: Src },
-    Sub { width: Width, sign: Sign, dst: VarLocation, src1: Src, src2: Src },
-    Mul { width: Width, sign: Sign, dst: VarLocation, src1: Src, src2: Src },
-    Div { width: Width, sign: Sign, dst: VarLocation, src1: Src, src2: Src },
-    Mod { width: Width, sign: Sign, dst: VarLocation, src1: Src, src2: Src },
-    BAnd { width: Width, dst: VarLocation, src1: Src, src2: Src },
-    BOr { width: Width, dst: VarLocation, src1: Src, src2: Src },
-    BXor { width: Width, dst: VarLocation, src1: Src, src2: Src },
-    BNot { width: Width, dst: VarLocation, src: Src },
-    LShift { width: Width, sign: Sign, dst: VarLocation, src1: Src, src2: Src },
-    RShift { width: Width, sign: Sign, dst: VarLocation, src1: Src, src2: Src },
-    Conv { dst_width: Width, dst_sign: Sign, dst: VarLocation, src_width: Width, src_sign: Sign, src: Src },
-    Store { dst_addr: Src, width: Width, src: Src },
-    Load { width: Width, dst: VarLocation, src_addr: Src },
-    Call { dst: VarLocation, dst_width: Width, name: String, args: Vec<(Src, Width)> },
+    Add(BinaryOp),
+    Sub(BinaryOp),
+    Mul(BinaryOp),
+    Div(BinaryOp),
+    Mod(BinaryOp),
+    BAnd(BinaryUnsignedOp),
+    BOr(BinaryUnsignedOp),
+    BXor(BinaryUnsignedOp),
+    BNot(BinaryUnsignedOp),
+    LShift(ShiftOp),
+    RShift(ShiftOp),
+    Conv(ConvOp),
+    Store(StoreOp),
+    Load(LoadOp),
+    Call(CallOp),
+}
+
+pub struct BinaryOp {
+    pub width: Width,
+    pub sign: Sign,
+    pub dst: VarLocation,
+    pub lhs: Src,
+    pub rhs: Src,
+}
+
+pub struct BinaryUnsignedOp {
+    pub width: Width,
+    pub dst: VarLocation,
+    pub lhs: Src,
+    pub rhs: Src,
+}
+
+pub struct ShiftOp {
+    pub lhs_width: Width,
+    pub lhs_sign: Sign,
+    pub dst: VarLocation,
+    pub lhs: Src,
+    pub rhs: Src,
+}
+
+pub struct ConvOp {
+    pub dst_width: Width,
+    pub dst_sign: Sign,
+    pub dst: VarLocation,
+    pub src_width: Width,
+    pub src_sign: Sign,
+    pub src: Src,
+}
+
+pub struct StoreOp {
+    pub dst_addr: Src,
+    pub width: Width,
+    pub src: Src,
+}
+
+pub struct LoadOp {
+    pub width: Width,
+    pub dst: VarLocation,
+    pub src_addr: Src,
+}
+
+pub struct CallOp {
+    pub dst: VarLocation,
+    pub dst_width: Width,
+    pub name: String,
+    pub args: Vec<(Src, Width)>,
 }
 
 pub enum Tail {
@@ -68,6 +118,18 @@ pub type Block = GenericBlock<Tail>;
 pub struct Function {
     pub stack_size: u16,
     pub blocks: Vec<Block>,
+}
+
+impl Width {
+    pub fn new(w: u8) -> Self {
+        match w {
+            1 => Self::Byte,
+            2 => Self::Word,
+            4 => Self::Dword,
+            8 => Self::Qword,
+            _ => panic!("invalid width")
+        }
+    }
 }
 
 impl From<Width> for u8 {

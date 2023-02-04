@@ -1,16 +1,43 @@
+use lang_c::span::Span;
 use lang_c::{
-    ast::{BlockItem, Declaration, Expression, Statement, StorageClassSpecifier, Initializer},
+    ast::{
+        BinaryOperator, BinaryOperatorExpression, BlockItem, Declaration, Expression, Initializer,
+        Statement, StorageClassSpecifier,
+    },
     span::Node,
 };
 
+use crate::error::CompileError;
+use crate::lvalue::{self, TypedLValue};
 use crate::{
     block_emitter::BlockEmitter,
     constant,
+    ctype::QualifiedType,
     error::{CompileWarning, ErrorCollector},
+    initializer::TypedValue,
     ir,
     name_scope::NameScope,
-    type_builder::TypeBuilder, initializer,
+    type_builder::TypeBuilder,
 };
+
+pub struct TypedSrc {
+    pub src: ir::Src,
+    pub t: QualifiedType,
+}
+
+impl TypedSrc {
+    pub fn new_from_typed_value(tv: TypedValue) -> Self {
+        use crate::initializer::Value;
+        match tv.val {
+            Value::Int(x) => Self {
+                src: ir::Src::ConstInt(x as u64),
+                t: tv.t,
+            },
+            Value::Void => panic!("void constant"),
+            _ => todo!(),
+        }
+    }
+}
 
 pub fn compile_statement(
     stat: Node<Statement>,
@@ -19,6 +46,11 @@ pub fn compile_statement(
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     match stat.node {
+        Statement::Expression(None) => {}
+        Statement::Expression(Some(e)) => {
+            compile_expression(*e, scope, be, ec)?;
+            ()
+        }
         Statement::Compound(items) => compile_block(items, scope, be, ec)?,
         Statement::If(ifs) => be.append_if(ifs, scope, ec)?,
         Statement::While(whiles) => be.append_while(whiles, scope, ec)?,
@@ -34,8 +66,23 @@ pub fn compile_expression(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<ir::Src, ()> {
-    todo!()
+) -> Result<TypedSrc, ()> {
+    match expr.node {
+        Expression::Constant(_) => {
+            let v = constant::compute_constant_expr(expr, false, scope, ec)?;
+            Ok(TypedSrc::new_from_typed_value(v))
+        }
+        Expression::Identifier(id) => {
+            let (t, v) = scope.get_var(&id.node.name, id.span, ec)?;
+            Ok(TypedSrc {
+                src: ir::Src::Var(v),
+                t: t.clone(),
+            })
+        }
+        Expression::BinaryOperator(o) => todo!(),
+        Expression::GenericSelection(_) => unimplemented!(),
+        _ => todo!(),
+    }
 }
 
 pub fn compile_initializer(
@@ -43,12 +90,45 @@ pub fn compile_initializer(
     target: &str,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
-    ec: &mut ErrorCollector) -> Result<(), ()> {
+    ec: &mut ErrorCollector,
+) -> Result<(), ()> {
     match initializer.node {
         Initializer::Expression(e) => {
             todo!()
         }
-        Initializer::List(_) => todo!()
+        Initializer::List(_) => todo!(),
+    }
+}
+
+/**
+ * Do the integer promotion.
+ *
+ * Panics if src is not an integer.
+ */
+pub fn int_promote(src: TypedSrc, scope: &mut NameScope, be: &mut BlockEmitter) -> TypedSrc {
+    if !src.t.t.is_integer() {
+        panic!("not an integer");
+    }
+    let promoted_t = src.t.clone().promote();
+    if src.t == promoted_t {
+        src
+    } else {
+        let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
+        let (dst_width, dst_sign) = promoted_t.t.get_width_sign().unwrap();
+        let dst = scope.alloc_temp();
+        be.append_operation(ir::Op::Conv(ir::ConvOp {
+            src_width,
+            src_sign,
+            dst_width,
+            dst_sign,
+            dst: dst.clone(),
+            src: src.src,
+        }));
+
+        TypedSrc {
+            src: ir::Src::Var(dst),
+            t: promoted_t,
+        }
     }
 }
 
@@ -114,4 +194,50 @@ fn compile_declaration(
         };
     }
     Ok(())
+}
+
+fn compile_binary_operator(
+    op: Node<BinaryOperatorExpression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    use lang_c::ast::BinaryOperator;
+    match op.node.operator.node {
+        BinaryOperator::Assign => compile_assign(*op.node.lhs, *op.node.rhs, scope, be, ec),
+        _ => todo!(),
+    }
+}
+
+// 6.5.16.1
+fn compile_assign(
+    lhs: Node<Expression>,
+    rhs: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let lhs_span = lhs.span;
+    let rhs_span = rhs.span;
+    let lhs_lval = TypedLValue::new_compile(lhs, scope, be, ec)?;
+    if lhs_lval.t.is_const() {
+        ec.record_error(
+            CompileError::AssignmentToConstQualified(lhs_lval.t),
+            lhs_span,
+        )?;
+        unreachable!();
+    }
+    let rhs_val = compile_expression(rhs, scope, be, ec)?;
+
+    if lhs_lval.t.t.is_arithmetic() && rhs_val.t.t.is_arithmetic() {
+        // the left operand has atomic, qualified, or unqualified arithmetic type, and the right has arithmetic type;
+        todo!()
+    } else {
+        // the left operand has an atomic, qualified, or unqualified version of a structure or union type compatible with the type of the right;
+        // the left operand has atomic, qualified, or unqualified pointer type, and (considering the type the left operand would have after lvalue conversion) both operands are pointers to qualified or unqualified versions of compatible types, and the type pointed to by the left has all the qualifiers of the type pointed to by the right;
+        // the left operand has atomic, qualified, or unqualified pointer type, and (considering the type the left operand would have after lvalue conversion) one operand is a pointer to an object type, and the other is a pointer to a qualified or unqualified version of void, and the type pointed to by the left has all the qualifiers of the type pointed to by the right;
+        // the left operand is an atomic, qualified, or unqualified pointer, and the right is a null pointer constant; or
+        // the left operand has type atomic, qualified, or unqualified _Bool, and the right is a pointer.
+        todo!()
+    }
 }
