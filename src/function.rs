@@ -1,4 +1,6 @@
-use crate::name_scope::{GlobalStorageClass, NameScope};
+use std::fmt::Formatter;
+
+use crate::{name_scope::{GlobalStorageClass, NameScope}, compile, block_emitter::{BlockEmitter, LabeledBlock}};
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
@@ -14,16 +16,17 @@ pub struct Function {
     is_inline: bool,
     is_noreturn: bool,
     is_vararg: bool,
+    name: String,
     storage_class: GlobalStorageClass,
     return_type: QualifiedType,
     args: FunctionArgs,
-    body: Option<()>,
+    body: Vec<LabeledBlock>,
 }
 
 impl Function {
     pub fn new_from_node(
         node: Node<FunctionDefinition>,
-        scope: &NameScope,
+        scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<Self, ()> {
         if !node.node.declarations.is_empty() {
@@ -47,7 +50,7 @@ impl Function {
         };
         let type_builder = type_builder.stage2(node.span, ec)?;
         let (name, t) = type_builder.process_declarator_node(node.node.declarator, scope, ec)?;
-        let _name = name.unwrap();
+        let name = name.unwrap();
         let (return_type, args, is_vararg) = if let CType::Function {
             result,
             args,
@@ -58,6 +61,8 @@ impl Function {
         } else {
             unreachable!()
         };
+        let mut be = BlockEmitter::new();
+        compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
         Ok(Self {
             is_inline: extra.is_inline,
             is_noreturn: extra.is_noreturn,
@@ -65,7 +70,19 @@ impl Function {
             is_vararg,
             return_type,
             args,
-            body: None,
+            name,
+            body: be.finalize(),
         })
+    }
+}
+
+
+impl std::fmt::Display for Function {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        writeln!(f, "function {}", self.name)?;
+        for (i, b) in self.body.iter().enumerate() {
+            writeln!(f, "{}:\n{}\n", i, b)?;
+        }
+        Ok(())
     }
 }

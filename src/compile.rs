@@ -7,6 +7,7 @@ use lang_c::{
     span::Node,
 };
 
+use crate::ctype::{CType, Qualifiers};
 use crate::error::CompileError;
 use crate::lvalue::{self, TypedLValue};
 use crate::{
@@ -58,7 +59,7 @@ pub fn compile_statement(
         Statement::DoWhile(whiles) => be.append_do_while(whiles, scope, ec)?,
         _ => todo!(),
     }
-    todo!()
+    Ok(())
 }
 
 pub fn compile_expression(
@@ -79,7 +80,7 @@ pub fn compile_expression(
                 t: t.clone(),
             })
         }
-        Expression::BinaryOperator(o) => todo!(),
+        Expression::BinaryOperator(o) => compile_binary_operator(*o, scope, be, ec),
         Expression::GenericSelection(_) => unimplemented!(),
         _ => todo!(),
     }
@@ -217,6 +218,7 @@ fn compile_assign(
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<TypedSrc, ()> {
+    use crate::lvalue::LValue;
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs_lval = TypedLValue::new_compile(lhs, scope, be, ec)?;
@@ -231,7 +233,25 @@ fn compile_assign(
 
     if lhs_lval.t.t.is_arithmetic() && rhs_val.t.t.is_arithmetic() {
         // the left operand has atomic, qualified, or unqualified arithmetic type, and the right has arithmetic type;
-        todo!()
+        let rhs_casted = cast_if_needed(rhs_val, &lhs_lval.t.t, rhs_span, scope, be, ec)?;
+        let width = rhs_casted.t.t.get_width_sign().unwrap().0;
+        match lhs_lval.lv {
+            LValue::Var(v) => {
+                be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: v,
+                    src: rhs_casted.src.clone(),
+                    width,
+                }));
+            }
+            LValue::Indirection(addr) => {
+                be.append_operation(ir::Op::Store(ir::StoreOp {
+                    dst_addr: addr,
+                    src: rhs_casted.src.clone(),
+                    width,
+                }));
+            }
+        }
+        Ok(rhs_casted)
     } else {
         // the left operand has an atomic, qualified, or unqualified version of a structure or union type compatible with the type of the right;
         // the left operand has atomic, qualified, or unqualified pointer type, and (considering the type the left operand would have after lvalue conversion) both operands are pointers to qualified or unqualified versions of compatible types, and the type pointed to by the left has all the qualifiers of the type pointed to by the right;
@@ -239,5 +259,37 @@ fn compile_assign(
         // the left operand is an atomic, qualified, or unqualified pointer, and the right is a null pointer constant; or
         // the left operand has type atomic, qualified, or unqualified _Bool, and the right is a pointer.
         todo!()
+    }
+}
+
+fn cast_if_needed(
+    src: TypedSrc,
+    target_type: &CType,
+    span: Span,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    if src.t.t == *target_type {
+        Ok(src)
+    } else {
+        let dst = scope.alloc_temp();
+        let (dst_width, dst_sign) = target_type.get_width_sign().unwrap();
+        let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
+        be.append_operation(ir::Op::Conv(ir::ConvOp {
+            dst_width,
+            dst_sign,
+            src_width,
+            src_sign,
+            dst: dst.clone(),
+            src: src.src,
+        }));
+        Ok(TypedSrc {
+            src: ir::Src::Var(dst),
+            t: QualifiedType {
+                t: target_type.clone(),
+                qualifiers: Qualifiers::empty(),
+            },
+        })
     }
 }

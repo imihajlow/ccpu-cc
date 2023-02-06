@@ -1,3 +1,5 @@
+use std::fmt::Formatter;
+
 use crate::constant::{self, compute_constant_initializer};
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
 use crate::function::Function;
@@ -114,7 +116,7 @@ impl TranslationUnit {
         n: Node<FunctionDefinition>,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        let f = Function::new_from_node(n, &self.scope, ec)?;
+        let f = Function::new_from_node(n, &mut self.scope, ec)?;
         self.functions.push(f);
         Ok(())
     }
@@ -131,6 +133,16 @@ fn match_storage_classes(old: &GlobalStorageClass, new: &GlobalStorageClass) -> 
         (Static, Extern) => true,
         (Static, Default) => false,
         (_, _) => true,
+    }
+}
+
+
+impl std::fmt::Display for TranslationUnit {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        for fun in &self.functions {
+            writeln!(f, "{}\n", fun)?;
+        }
+        Ok(())
     }
 }
 

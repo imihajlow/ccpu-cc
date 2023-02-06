@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem};
+use std::{collections::HashMap, mem, fmt::Formatter};
 
 use lang_c::{
     ast::{DoWhileStatement, ForStatement, IfStatement, WhileStatement},
@@ -12,12 +12,12 @@ use crate::{
     name_scope::NameScope,
 };
 
-enum LabeledTail {
+pub enum LabeledTail { // TODO remove pub
     Tail(ir::Tail),
     GotoLabel(String),
 }
 
-type LabeledBlock = ir::GenericBlock<LabeledTail>;
+pub type LabeledBlock = ir::GenericBlock<LabeledTail>; // TODO remove pub
 
 pub struct BlockEmitter {
     next_id: usize,
@@ -34,6 +34,20 @@ impl BlockEmitter {
             blocks: HashMap::new(),
             current_ops: Vec::new(),
         }
+    }
+
+    pub fn finalize(self) -> Vec<LabeledBlock> {
+        let mut blocks = self.blocks;
+        blocks.insert(self.current_id, LabeledBlock {
+            phi: Vec::new(),
+            ops: self.current_ops,
+            tail: LabeledTail::Tail(ir::Tail::Ret)
+        });
+        let mut result = Vec::new();
+        for i in 0..=self.current_id {
+            result.push(blocks.remove(&i).unwrap());
+        }
+        result
     }
 
     pub fn append_operation(&mut self, op: ir::Op) {
@@ -131,5 +145,14 @@ impl BlockEmitter {
         let r = self.next_id;
         self.next_id += 1;
         r
+    }
+}
+
+impl std::fmt::Display for LabeledTail {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            LabeledTail::Tail(t) => write!(f, "{}", t),
+            LabeledTail::GotoLabel(l) => write!(f, "jmp {}", l)
+        }
     }
 }
