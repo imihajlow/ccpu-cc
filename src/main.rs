@@ -34,7 +34,7 @@ fn main() {
 
         void foo(void) {
             x = 5;
-            char y;
+            char y = 2;
             y = x;
         }
     "

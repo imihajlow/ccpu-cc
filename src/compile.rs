@@ -1,8 +1,8 @@
 use lang_c::span::Span;
 use lang_c::{
     ast::{
-        BinaryOperator, BinaryOperatorExpression, BlockItem, Declaration, Expression, Initializer,
-        Statement, StorageClassSpecifier,
+        BinaryOperatorExpression, BlockItem, Declaration, Expression, Initializer, Statement,
+        StorageClassSpecifier,
     },
     span::Node,
 };
@@ -89,13 +89,16 @@ pub fn compile_expression(
 pub fn compile_initializer(
     initializer: Node<Initializer>,
     target: &str,
+    target_span: Span,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     match initializer.node {
         Initializer::Expression(e) => {
-            todo!()
+            let lvalue = TypedLValue::new_from_name(target, target_span, scope, ec)?;
+            compile_assign_to_lval(lvalue, *e, scope, be, ec)?;
+            Ok(())
         }
         Initializer::List(_) => todo!(),
     }
@@ -190,7 +193,7 @@ fn compile_declaration(
         } else {
             scope.declare(&name, t, &stclass, None, init_declarator.span, ec)?;
             if let Some(initializer) = init_declarator.node.initializer {
-                compile_initializer(initializer, &name, scope, be, ec)?;
+                compile_initializer(initializer, &name, init_declarator.span, scope, be, ec)?;
             }
         };
     }
@@ -210,7 +213,9 @@ fn compile_binary_operator(
     }
 }
 
-// 6.5.16.1
+/**
+ * Assignment according to 6.5.16.1
+ */
 fn compile_assign(
     lhs: Node<Expression>,
     rhs: Node<Expression>,
@@ -218,9 +223,7 @@ fn compile_assign(
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<TypedSrc, ()> {
-    use crate::lvalue::LValue;
     let lhs_span = lhs.span;
-    let rhs_span = rhs.span;
     let lhs_lval = TypedLValue::new_compile(lhs, scope, be, ec)?;
     if lhs_lval.t.is_const() {
         ec.record_error(
@@ -229,6 +232,21 @@ fn compile_assign(
         )?;
         unreachable!();
     }
+    compile_assign_to_lval(lhs_lval, rhs, scope, be, ec)
+}
+
+/**
+ * Common function for assignments and initializers. Allows assignments to const.
+ */
+fn compile_assign_to_lval(
+    lhs_lval: TypedLValue,
+    rhs: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    use crate::lvalue::LValue;
+    let rhs_span = rhs.span;
     let rhs_val = compile_expression(rhs, scope, be, ec)?;
 
     if lhs_lval.t.t.is_arithmetic() && rhs_val.t.t.is_arithmetic() {

@@ -1,5 +1,5 @@
 use lang_c::ast::Expression;
-use lang_c::span::Node;
+use lang_c::span::{Node, Span};
 
 use crate::block_emitter::BlockEmitter;
 use crate::compile::{self, compile_expression, TypedSrc};
@@ -22,6 +22,19 @@ pub struct TypedLValue {
 }
 
 impl TypedLValue {
+    pub fn new_from_name(
+        name: &str,
+        span: Span,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<Self, ()> {
+        let (t, v) = scope.get_var(name, span, ec)?;
+        Ok(TypedLValue {
+            t: t.clone(),
+            lv: LValue::Var(v),
+        })
+    }
+
     pub fn new_compile(
         expr: Node<Expression>,
         scope: &mut NameScope,
@@ -134,7 +147,7 @@ impl TypedLValue {
         match self.lv {
             LValue::Var(v) => Ok(TypedSrc {
                 t: self.t,
-                src: ir::Src::Var(v)
+                src: ir::Src::Var(v),
             }),
             LValue::Indirection(src_addr) => {
                 if let Some((width, _)) = self.t.t.get_width_sign() {
@@ -142,9 +155,12 @@ impl TypedLValue {
                     be.append_operation(ir::Op::Load(ir::LoadOp {
                         dst: dst.clone(),
                         src_addr,
-                        width
+                        width,
                     }));
-                    Ok(TypedSrc { src: ir::Src::Var(dst), t: self.t })
+                    Ok(TypedSrc {
+                        src: ir::Src::Var(dst),
+                        t: self.t,
+                    })
                 } else {
                     unreachable!("this function is not supposed to be used for large types")
                 }
