@@ -12,7 +12,7 @@ pub type Reg = u32;
 pub type Sign = bool;
 pub type BlockNumber = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VarLocation {
     Global(GlobalVarId),
     Local(Reg),
@@ -21,7 +21,7 @@ pub enum VarLocation {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct GlobalVarId(pub String, pub u32);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Src {
     ConstInt(u64),
     SymbolOffset(String, u16),
@@ -29,6 +29,7 @@ pub enum Src {
     StackPointer,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
     Copy(UnaryUnsignedOp),
     Add(BinaryOp),
@@ -48,12 +49,14 @@ pub enum Op {
     Call(CallOp),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnaryUnsignedOp {
     pub width: Width,
     pub dst: VarLocation,
     pub src: Src,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BinaryOp {
     pub width: Width,
     pub sign: Sign,
@@ -62,6 +65,7 @@ pub struct BinaryOp {
     pub rhs: Src,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BinaryUnsignedOp {
     pub width: Width,
     pub dst: VarLocation,
@@ -69,6 +73,7 @@ pub struct BinaryUnsignedOp {
     pub rhs: Src,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShiftOp {
     pub lhs_width: Width,
     pub lhs_sign: Sign,
@@ -77,6 +82,7 @@ pub struct ShiftOp {
     pub rhs: Src,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConvOp {
     pub dst_width: Width,
     pub dst_sign: Sign,
@@ -86,18 +92,21 @@ pub struct ConvOp {
     pub src: Src,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreOp {
     pub dst_addr: Src,
     pub width: Width,
     pub src: Src,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadOp {
     pub width: Width,
     pub dst: VarLocation,
     pub src_addr: Src,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallOp {
     pub dst: VarLocation,
     pub dst_width: Width,
@@ -105,17 +114,20 @@ pub struct CallOp {
     pub args: Vec<(Src, Width)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tail {
     Jump(BlockNumber),
     Cond(Src, BlockNumber, BlockNumber),
     Ret,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
     dst: Reg,
     srcs: Vec<(BlockNumber, Reg)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenericBlock<GTail> {
     pub phi: Vec<Phi>,
     pub ops: Vec<Op>,
@@ -124,6 +136,7 @@ pub struct GenericBlock<GTail> {
 
 pub type Block = GenericBlock<Tail>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     pub stack_size: u16,
     pub blocks: Vec<Block>,
@@ -159,9 +172,6 @@ where
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         for phi in &self.phi {
             writeln!(f, "{}", phi)?;
-        }
-        if !self.phi.is_empty() {
-            f.write_str("\n")?;
         }
         for op in &self.ops {
             writeln!(f, "{}", op)?;

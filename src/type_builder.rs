@@ -1,3 +1,4 @@
+use crate::constant;
 use crate::ctype::CType;
 use crate::ctype::FunctionArgs;
 use crate::ctype::QualifiedType;
@@ -483,7 +484,32 @@ impl TypeBuilderStage2 {
                         .wrap_function(FunctionArgs::List(params), vararg);
                 }
             }
-            DerivedDeclarator::Array(_) => todo!(),
+            DerivedDeclarator::Array(ad) => {
+                use lang_c::ast::ArraySize;
+                if !ad.node.qualifiers.is_empty() {
+                    unimplemented!()
+                }
+                match ad.node.size {
+                    ArraySize::Unknown => {
+                        self.base_type.wrap_array(None)
+                    }
+                    ArraySize::VariableExpression(e) => {
+                        let size = constant::compute_constant_expr(*e, true, scope, ec)?;
+                        if !size.t.t.is_integer() {
+                            ec.record_error(CompileError::ArraySizeNotInteger(size.t), ad.span)?;
+                            unreachable!();
+                        }
+                        let size = size.unwrap_integer();
+                        if size < 0 {
+                            ec.record_error(CompileError::ArraySizeNegative, ad.span)?;
+                            unreachable!();
+                        }
+                        self.base_type.wrap_array(Some(size as u32))
+                    }
+                    ArraySize::VariableUnknown => unimplemented!(),
+                    ArraySize::StaticExpression(_) => unimplemented!(),
+                }
+            }
             DerivedDeclarator::KRFunction(_) => unimplemented!(),
             DerivedDeclarator::Block(_) => unimplemented!(),
         }

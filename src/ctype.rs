@@ -157,6 +157,13 @@ impl QualifiedType {
         });
     }
 
+    pub fn wrap_array(&mut self, size: Option<u32>) {
+        replace_with_or_abort(self, |self_| QualifiedType {
+            t: CType::Array(Box::new(self_), size),
+            qualifiers: Qualifiers::empty(),
+        });
+    }
+
     pub fn is_const(&self) -> bool {
         self.qualifiers.contains(Qualifiers::CONST)
     }

@@ -30,12 +30,8 @@ fn main() {
     let p = parse_preprocessed(
         &cfg,
         "
-        int x = 2;
-
         void foo(void) {
-            x = 5;
-            char y = 2;
-            y = x;
+            char x = 5;
         }
     "
         .to_string(),
@@ -46,6 +42,6 @@ fn main() {
     let tu = TranslationUnit::translate(p.unit, &mut ec);
     ec.print_issues();
     if let Ok(tu) = tu {
-        println!("{}", tu);
+        println!("<{}>", tu);
     }
 }

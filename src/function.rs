@@ -74,6 +74,11 @@ impl Function {
             body: be.finalize(),
         })
     }
+
+    #[cfg(test)]
+    pub fn get_body(&self) -> &Vec<LabeledBlock> {
+        &self.body
+    }
 }
 
 
@@ -81,7 +86,7 @@ impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         writeln!(f, "function {}", self.name)?;
         for (i, b) in self.body.iter().enumerate() {
-            writeln!(f, "{}:\n{}\n", i, b)?;
+            writeln!(f, "{}:\n{}", i, b)?;
         }
         Ok(())
     }

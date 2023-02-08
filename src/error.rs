@@ -1,7 +1,10 @@
 use lang_c::span::Span;
 use std::fmt::Formatter;
 
-use crate::{ctype::QualifiedType, string::StringParseError};
+use crate::{
+    ctype::{QualifiedType},
+    string::StringParseError,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum CompileError {
@@ -24,6 +27,8 @@ pub enum CompileError {
     VoidParameter,
     NotAType(String),
     NotAVar(String),
+    ArraySizeNotInteger(QualifiedType),
+    ArraySizeNegative,
     // Global definition errors
     TypeRedefinition(String),
     ConflictingTypes(String),
@@ -61,6 +66,7 @@ pub enum CompileWarning {
     ExternVarInitialized(String),
     InvalidSizeof,
     IndexTooWide(QualifiedType),
+    IncompatibleTypes(QualifiedType, QualifiedType),
 }
 
 pub struct CompileErrorWithSpan(pub CompileError, pub Span);
@@ -92,6 +98,10 @@ impl ErrorCollector {
         self.errors.len()
     }
 
+    pub fn get_warning_count(&self) -> usize {
+        self.warnings.len()
+    }
+
     pub fn print_issues(&self) {
         for (warn, span) in &self.warnings {
             println!("{:?}: warning: {}", span, warn);
@@ -104,6 +114,11 @@ impl ErrorCollector {
     #[cfg(test)]
     pub fn get_first_error(&self) -> Option<&(CompileError, Span)> {
         self.errors.first()
+    }
+
+    #[cfg(test)]
+    pub fn get_first_warning(&self) -> Option<&(CompileWarning, Span)> {
+        self.warnings.first()
     }
 }
 
@@ -182,6 +197,10 @@ impl std::fmt::Display for CompileError {
                 "cannot assign to a location with const-qualified type `{}'",
                 t
             ),
+            CompileError::ArraySizeNotInteger(t) => {
+                write!(f, "size of array has non-integer type `{}'", t)
+            }
+            CompileError::ArraySizeNegative => write!(f, "negative array size"),
         }
     }
 }
@@ -204,6 +223,9 @@ impl std::fmt::Display for CompileWarning {
             CompileWarning::InvalidSizeof => f.write_str("invalid application of sizeof"),
             CompileWarning::IndexTooWide(t) => {
                 write!(f, "pointer arithmetics with `{}': data may be lost", t)
+            }
+            CompileWarning::IncompatibleTypes(t1, t2) => {
+                write!(f, "incompatible types `{}' and `{}'", t1, t2)
             }
         }
     }
