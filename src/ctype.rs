@@ -92,21 +92,21 @@ impl QualifiedType {
      * int x[25];
      * ```
      */
-    pub fn is_compatible_to(&self, other: &Self) -> bool {
+    pub fn is_same_as(&self, other: &Self) -> bool {
         if self.qualifiers != other.qualifiers {
             return false;
         }
         match &self.t {
             CType::Pointer(t1) => {
                 if let CType::Pointer(t2) = &other.t {
-                    t1.is_compatible_to(&t2)
+                    t1.is_same_as(&t2)
                 } else {
                     false
                 }
             }
             CType::Array(t1, n1) => {
                 if let CType::Array(t2, n2) = &other.t {
-                    if !t1.is_compatible_to(t2) {
+                    if !t1.is_same_as(t2) {
                         false
                     } else {
                         n1 == n2 || n1.is_none() || n2.is_none()
@@ -126,7 +126,7 @@ impl QualifiedType {
                     vararg: va2,
                 } = &other.t
                 {
-                    va1 == va2 && r1.is_compatible_to(r2) && a1.is_compatible_to(a2)
+                    va1 == va2 && r1.is_same_as(r2) && a1.is_same_as(a2)
                 } else {
                     false
                 }
@@ -191,7 +191,7 @@ impl QualifiedType {
 }
 
 impl FunctionArgs {
-    pub fn is_compatible_to(&self, other: &Self) -> bool {
+    pub fn is_same_as(&self, other: &Self) -> bool {
         use FunctionArgs::*;
         match (self, other) {
             (Empty, _) => true,
@@ -203,7 +203,7 @@ impl FunctionArgs {
                 } else {
                     v1.iter()
                         .zip(v2)
-                        .all(|((t1, _), (t2, _))| t1.is_compatible_to(t2))
+                        .all(|((t1, _), (t2, _))| t1.is_same_as(t2))
                 }
             }
             _ => false,

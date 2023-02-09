@@ -22,19 +22,23 @@ pub fn compile_add(
 
     if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
         let (lhs, rhs) = usual_arithmetic_convert((lhs, lhs_span), (rhs, rhs_span), scope, be, ec)?;
-        let (width, sign) = lhs.t.t.get_width_sign().unwrap();
-        let target = scope.alloc_temp();
-        be.append_operation(ir::Op::Add(ir::BinaryOp {
-            dst: target.clone(),
-            width,
-            sign,
-            lhs: lhs.src,
-            rhs: rhs.src,
-        }));
-        Ok(TypedSrc {
-            src: ir::Src::Var(target),
-            t: lhs.t,
-        })
+        if lhs.t.t.is_integer() {
+            let (width, sign) = lhs.t.t.get_width_sign().unwrap();
+            let target = scope.alloc_temp();
+            be.append_operation(ir::Op::Add(ir::BinaryOp {
+                dst: target.clone(),
+                width,
+                sign,
+                lhs: lhs.src,
+                rhs: rhs.src,
+            }));
+            Ok(TypedSrc {
+                src: ir::Src::Var(target),
+                t: lhs.t,
+            })
+        } else {
+            todo!()
+        }
     } else if (lhs.t.t.is_pointer() && rhs.t.t.is_integer())
         || (lhs.t.t.is_integer() && rhs.t.t.is_pointer())
     {
