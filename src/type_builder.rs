@@ -169,7 +169,7 @@ impl TypeBuilder {
         }
     }
 
-    pub fn stage2(&mut self, span: Span, ec: &mut ErrorCollector) -> Result<TypeBuilderStage2, ()> {
+    pub fn stage2(&self, span: Span, ec: &mut ErrorCollector) -> Result<TypeBuilderStage2, ()> {
         if self.base_type.is_none() {
             ec.record_warning(CompileWarning::ImplicitInt, span)?;
         }
@@ -191,7 +191,7 @@ impl TypeBuilder {
             Some(BaseType::Alias(_, t)) => t.qualifiers,
             _ => Qualifiers::empty(),
         };
-        let t = match self.base_type.take() {
+        let t = match &self.base_type {
             None | Some(BaseType::Int) => {
                 let size = match self.modifier {
                     TypeModifier::None => machine::INT_SIZE,
@@ -210,7 +210,7 @@ impl TypeBuilder {
                 _ => unreachable!(),
             },
             Some(BaseType::Bool) => CType::Bool,
-            Some(BaseType::Alias(_, t)) => t.t,
+            Some(BaseType::Alias(_, t)) => t.t.clone(),
         };
 
         Ok(TypeBuilderStage2 {
@@ -490,9 +490,7 @@ impl TypeBuilderStage2 {
                     unimplemented!()
                 }
                 match ad.node.size {
-                    ArraySize::Unknown => {
-                        self.base_type.wrap_array(None)
-                    }
+                    ArraySize::Unknown => self.base_type.wrap_array(None),
                     ArraySize::VariableExpression(e) => {
                         let size = constant::compute_constant_expr(*e, true, scope, ec)?;
                         if !size.t.t.is_integer() {
