@@ -23,6 +23,7 @@ use crate::{
 
 mod add;
 mod assign;
+mod sub;
 
 pub struct TypedSrc {
     pub src: ir::Src,
@@ -213,6 +214,7 @@ fn compile_binary_operator(
     match op.node.operator.node {
         BinaryOperator::Assign => assign::compile_assign(*op.node.lhs, *op.node.rhs, scope, be, ec),
         BinaryOperator::Plus => add::compile_add(*op.node.lhs, *op.node.rhs, scope, be, ec),
+        BinaryOperator::Minus => sub::compile_sub(*op.node.lhs, *op.node.rhs, scope, be, ec),
         _ => todo!(),
     }
 }

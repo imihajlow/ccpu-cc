@@ -52,6 +52,7 @@ pub enum CompileError {
     NotAssignable,
     AssignmentToConstQualified(QualifiedType),
     SizeOfIncomplete(QualifiedType),
+    PointersToIncompatible(QualifiedType, QualifiedType),
     // Local definition errors
 }
 
@@ -202,6 +203,7 @@ impl std::fmt::Display for CompileError {
             CompileError::SizeOfIncomplete(t) => {
                 write!(f, "size of an incompete type `{}' is unknown", t)
             }
+            CompileError::PointersToIncompatible(t1, t2) => write!(f, "`{}' and `{}' are not pointers to compatible types", t1, t2)
         }
     }
 }

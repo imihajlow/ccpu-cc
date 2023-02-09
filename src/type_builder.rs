@@ -52,6 +52,7 @@ enum BaseType {
     Alias(String, QualifiedType),
 }
 
+#[derive(PartialEq, Eq)]
 enum TypeModifier {
     None,
     Short,
@@ -170,7 +171,7 @@ impl TypeBuilder {
     }
 
     pub fn stage2(&self, span: Span, ec: &mut ErrorCollector) -> Result<TypeBuilderStage2, ()> {
-        if self.base_type.is_none() {
+        if self.base_type.is_none() && self.modifier == TypeModifier::None {
             ec.record_warning(CompileWarning::ImplicitInt, span)?;
         }
 

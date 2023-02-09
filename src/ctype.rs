@@ -182,10 +182,9 @@ impl QualifiedType {
     }
 
     pub fn dereference(self) -> Result<Self, Self> {
-        match self.t {
-            CType::Pointer(t) => Ok(*t),
-            CType::Array(t, _) => Ok(*t),
-            _ => Err(self),
+        match self.t.dereference() {
+            Ok(t) => Ok(t),
+            Err(t) => Err(Self { t, ..self })
         }
     }
 }
@@ -307,6 +306,10 @@ impl CType {
         }
     }
 
+    pub fn is_dereferencable(&self) -> bool {
+        self.is_pointer() || self.is_array()
+    }
+
     pub fn is_void(&self) -> bool {
         if let CType::Void = self {
             true
@@ -374,7 +377,7 @@ impl CType {
         }
     }
 
-    pub fn is_pointer_to_complete(&self) -> bool {
+    pub fn dereferences_to_complete(&self) -> bool {
         match self {
             CType::Pointer(t) | CType::Array(t, _) => t.t.is_complete(),
             _ => false,
@@ -424,6 +427,14 @@ impl CType {
                 // -- this will never happen
                 CType::Int(signed_size, false)
             }
+        }
+    }
+
+    pub fn dereference(self) -> Result<QualifiedType, Self> {
+        match self {
+            CType::Pointer(t) => Ok(*t),
+            CType::Array(t, _) => Ok(*t),
+            _ => Err(self),
         }
     }
 }
