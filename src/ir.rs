@@ -1,6 +1,6 @@
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
 pub enum Width {
     Byte,
     Word,
@@ -29,7 +29,7 @@ pub enum Src {
     StackPointer,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Op {
     Copy(UnaryUnsignedOp),
     Add(BinaryOp),
@@ -162,6 +162,14 @@ impl From<Width> for u8 {
             Width::Dword => 4,
             Width::Qword => 8,
         }
+    }
+}
+
+impl PartialOrd for Width {
+    fn partial_cmp(&self, other: &Width) -> Option<std::cmp::Ordering> {
+        let self_u8: u8 = (*self).into();
+        let other_u8: u8 = (*other).into();
+        self_u8.partial_cmp(&other_u8)
     }
 }
 
@@ -333,7 +341,6 @@ impl std::fmt::Display for GlobalVarId {
     }
 }
 
-
 impl std::fmt::Display for Tail {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
@@ -341,5 +348,11 @@ impl std::fmt::Display for Tail {
             Tail::Cond(c, t, e) => write!(f, "if {} then goto {} else goto {}", c, *t, *e),
             Tail::Ret => write!(f, "ret"),
         }
+    }
+}
+
+impl std::fmt::Debug for Op {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        std::fmt::Display::fmt(&self, f)
     }
 }

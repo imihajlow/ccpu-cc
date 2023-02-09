@@ -21,6 +21,7 @@ use crate::{
     type_builder::TypeBuilder,
 };
 
+mod add;
 mod assign;
 
 pub struct TypedSrc {
@@ -211,6 +212,7 @@ fn compile_binary_operator(
     use lang_c::ast::BinaryOperator;
     match op.node.operator.node {
         BinaryOperator::Assign => assign::compile_assign(*op.node.lhs, *op.node.rhs, scope, be, ec),
+        BinaryOperator::Plus => add::compile_add(*op.node.lhs, *op.node.rhs, scope, be, ec),
         _ => todo!(),
     }
 }
@@ -223,10 +225,10 @@ fn cast_if_needed(
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<TypedSrc, ()> {
-    let dst = scope.alloc_temp();
     let (dst_width, dst_sign) = target_type.get_width_sign().unwrap();
     let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
     if (dst_width, dst_sign) != (src_width, src_sign) {
+        let dst = scope.alloc_temp();
         be.append_operation(ir::Op::Conv(ir::ConvOp {
             dst_width,
             dst_sign,
@@ -244,5 +246,49 @@ fn cast_if_needed(
         })
     } else {
         Ok(src)
+    }
+}
+
+fn integer_promote(
+    src: (TypedSrc, Span),
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let promoted_type = src.0.t.clone().promote();
+
+    cast_if_needed(src.0, &promoted_type.t, src.1, scope, be, ec)
+}
+
+/**
+ * Perform usual arithmetic conversions according to 6.3.1.8
+ */
+fn usual_arithmetic_convert(
+    lhs: (TypedSrc, Span),
+    rhs: (TypedSrc, Span),
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<(TypedSrc, TypedSrc), ()> {
+    let (lhs, lhs_span) = lhs;
+    let (rhs, rhs_span) = rhs;
+    if lhs.t.t.is_long_double() || rhs.t.t.is_long_double() {
+        todo!()
+    } else if lhs.t.t.is_double() || rhs.t.t.is_double() {
+        todo!()
+    } else if lhs.t.t.is_float() || rhs.t.t.is_float() {
+        todo!()
+    } else if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
+        // Otherwise, the integer promotions are performed on both operands.
+        let lhs = integer_promote((lhs, lhs_span), scope, be, ec)?;
+        let rhs = integer_promote((rhs, rhs_span), scope, be, ec)?;
+        // Then the following rules are applied to the promoted operands
+        let common_type = lhs.t.t.least_common_int_type(&rhs.t.t);
+        Ok((
+            cast_if_needed(lhs, &common_type, lhs_span, scope, be, ec)?,
+            cast_if_needed(rhs, &common_type, rhs_span, scope, be, ec)?,
+        ))
+    } else {
+        unreachable!()
     }
 }

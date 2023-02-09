@@ -185,44 +185,7 @@ impl TypedValue {
                 // If both operands have the same type, then no further conversion is needed.
                 (lhs, rhs)
             } else {
-                let (lhs_size, lhs_sign) = match lhs.t.t {
-                    CType::Int(size, sign) => (size, sign),
-                    _ => unreachable!(),
-                };
-                let (rhs_size, rhs_sign) = match rhs.t.t {
-                    CType::Int(size, sign) => (size, sign),
-                    _ => unreachable!(),
-                };
-                let common_type = if lhs_sign == rhs_sign {
-                    // Otherwise, if both operands have signed integer types or both have unsigned integer types,
-                    // the operand with the type of lesser integer conversion rank is converted to the type
-                    // of the operand with greater rank.
-                    let max_size = std::cmp::max(lhs_size, rhs_size);
-                    CType::Int(max_size, lhs_sign)
-                } else {
-                    let (signed_size, unsigned_size) = if lhs_sign {
-                        (lhs_size, rhs_size)
-                    } else {
-                        (rhs_size, lhs_size)
-                    };
-                    if unsigned_size >= signed_size {
-                        // Otherwise, if the operand that has unsigned integer type has rank greater or equal
-                        // to the rank of the type of the other operand, then the operand with signed integer type
-                        // is converted to the type of the operand with unsigned integer type.
-                        CType::Int(unsigned_size, false)
-                    } else if signed_size > unsigned_size {
-                        // Otherwise, if the type of the operand with signed integer type can represent
-                        // all of the values of the type of the operand with unsigned integer type,
-                        // then the operand with unsigned integer type is converted to the type
-                        // of the operand with signed integer type.
-                        CType::Int(signed_size, true)
-                    } else {
-                        // Otherwise, both operands are converted to the unsigned integer type
-                        // corresponding to the type of the operand with signed integer type.
-                        // -- this will never happen
-                        CType::Int(signed_size, false)
-                    }
-                };
+                let common_type = lhs.t.t.least_common_int_type(&rhs.t.t);
                 (
                     Self {
                         t: QualifiedType {

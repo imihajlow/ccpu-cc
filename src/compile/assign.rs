@@ -140,7 +140,6 @@ pub fn compile_assign_to_lval(
 
 #[cfg(test)]
 mod test {
-
     use crate::ir::{self, VarLocation};
     use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
 

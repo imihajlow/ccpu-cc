@@ -79,6 +79,9 @@ pub const WCHAR_TYPE: CType = CHAR16_TYPE;
 pub const CHAR16_TYPE: CType = CType::Int(2, false);
 pub const CHAR32_TYPE: CType = CType::Int(4, false);
 
+pub const SIZE_TYPE: CType = CType::Int(PTR_SIZE, false);
+pub const SSIZE_TYPE: CType = CType::Int(PTR_SIZE, true);
+
 impl QualifiedType {
     /**
      * Checks if two types are equal and can be used interchangebly in definition.
@@ -359,6 +362,68 @@ impl CType {
             }
             CType::Union(_) => todo!(),
             _ => None,
+        }
+    }
+
+    pub fn is_complete(&self) -> bool {
+        match self {
+            CType::Void => false,
+            CType::Struct(_) => todo!(),
+            CType::Union(_) => todo!(),
+            _ => true
+        }
+    }
+
+    pub fn is_pointer_to_complete(&self) -> bool {
+        match self {
+            CType::Pointer(t) | CType::Array(t, _) => t.t.is_complete(),
+            _ => false,
+        }
+    }
+
+    /**
+     * Find a common type for two integer types. Use to perform usual arithmetic conversion.
+     */
+    pub fn least_common_int_type(&self, other: &Self) -> Self {
+        let lhs = self;
+        let rhs = other;
+        let (lhs_size, lhs_sign) = match lhs {
+            CType::Int(size, sign) => (*size, *sign),
+            _ => panic!("this function must be used on integer types"),
+        };
+        let (rhs_size, rhs_sign) = match rhs {
+            CType::Int(size, sign) => (*size, *sign),
+            _ => panic!("this function must be used on integer types"),
+        };
+        if lhs_sign == rhs_sign {
+            // Otherwise, if both operands have signed integer types or both have unsigned integer types,
+            // the operand with the type of lesser integer conversion rank is converted to the type
+            // of the operand with greater rank.
+            let max_size = std::cmp::max(lhs_size, rhs_size);
+            CType::Int(max_size, lhs_sign)
+        } else {
+            let (signed_size, unsigned_size) = if lhs_sign {
+                (lhs_size, rhs_size)
+            } else {
+                (rhs_size, lhs_size)
+            };
+            if unsigned_size >= signed_size {
+                // Otherwise, if the operand that has unsigned integer type has rank greater or equal
+                // to the rank of the type of the other operand, then the operand with signed integer type
+                // is converted to the type of the operand with unsigned integer type.
+                CType::Int(unsigned_size, false)
+            } else if signed_size > unsigned_size {
+                // Otherwise, if the type of the operand with signed integer type can represent
+                // all of the values of the type of the operand with unsigned integer type,
+                // then the operand with unsigned integer type is converted to the type
+                // of the operand with signed integer type.
+                CType::Int(signed_size, true)
+            } else {
+                // Otherwise, both operands are converted to the unsigned integer type
+                // corresponding to the type of the operand with signed integer type.
+                // -- this will never happen
+                CType::Int(signed_size, false)
+            }
         }
     }
 }

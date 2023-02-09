@@ -1,10 +1,7 @@
 use lang_c::span::Span;
 use std::fmt::Formatter;
 
-use crate::{
-    ctype::{QualifiedType},
-    string::StringParseError,
-};
+use crate::{ctype::QualifiedType, string::StringParseError};
 
 #[derive(Debug, PartialEq)]
 pub enum CompileError {
@@ -54,6 +51,7 @@ pub enum CompileError {
     BadSubsript,
     NotAssignable,
     AssignmentToConstQualified(QualifiedType),
+    SizeOfIncomplete(QualifiedType),
     // Local definition errors
 }
 
@@ -201,6 +199,9 @@ impl std::fmt::Display for CompileError {
                 write!(f, "size of array has non-integer type `{}'", t)
             }
             CompileError::ArraySizeNegative => write!(f, "negative array size"),
+            CompileError::SizeOfIncomplete(t) => {
+                write!(f, "size of an incompete type `{}' is unknown", t)
+            }
         }
     }
 }
