@@ -143,7 +143,7 @@ fn process_condition_expression_node(
         }
     } else if then_val.t.t.is_void() && else_val.t.t.is_void() {
         Ok(then_val)
-    } else if then_val.t.is_same_as(&else_val.t) {
+    } else if then_val.t.is_compatible_to(&else_val.t) {
         if cond_val.is_zero() {
             Ok(else_val)
         } else {
