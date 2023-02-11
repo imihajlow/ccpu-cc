@@ -54,6 +54,8 @@ pub enum Op {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompareKind {
+    Equal,
+    NotEqual,
     LessThan,
     LessOrEqual,
     GreaterThan,
@@ -276,6 +278,8 @@ impl std::fmt::Display for BinaryOp {
 impl std::fmt::Display for CompareKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
+            CompareKind::Equal => f.write_str("eq"),
+            CompareKind::NotEqual => f.write_str("ne"),
             CompareKind::LessThan => f.write_str("lt"),
             CompareKind::LessOrEqual => f.write_str("le"),
             CompareKind::GreaterThan => f.write_str("gt"),

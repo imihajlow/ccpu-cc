@@ -3,11 +3,55 @@ use lang_c::{ast::Expression, span::Node};
 
 use crate::block_emitter::BlockEmitter;
 use crate::ctype::{QualifiedType, Qualifiers};
-use crate::error::{CompileError, CompileWarning, ErrorCollector};
+use crate::error::{CompileWarning, ErrorCollector};
 use crate::name_scope::NameScope;
 use crate::{ctype, ir};
 
 use super::{compile_expression, usual_arithmetic_convert, TypedSrc};
+
+pub fn compile_equal_to(
+    lhs: Node<Expression>,
+    rhs: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let lhs_span = lhs.span;
+    let rhs_span = rhs.span;
+    let lhs = compile_expression(lhs, scope, be, ec)?;
+    let rhs = compile_expression(rhs, scope, be, ec)?;
+
+    compile_cmp_inner(
+        (lhs, lhs_span),
+        (rhs, rhs_span),
+        ir::CompareKind::Equal,
+        scope,
+        be,
+        ec,
+    )
+}
+
+pub fn compile_not_equal_to(
+    lhs: Node<Expression>,
+    rhs: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let lhs_span = lhs.span;
+    let rhs_span = rhs.span;
+    let lhs = compile_expression(lhs, scope, be, ec)?;
+    let rhs = compile_expression(rhs, scope, be, ec)?;
+
+    compile_cmp_inner(
+        (lhs, lhs_span),
+        (rhs, rhs_span),
+        ir::CompareKind::NotEqual,
+        scope,
+        be,
+        ec,
+    )
+}
 
 pub fn compile_less_than(
     lhs: Node<Expression>,
@@ -139,10 +183,14 @@ pub fn compile_cmp_inner(
         let lhs_inner = lhs.t.clone().dereference().unwrap();
         let rhs_inner = rhs.t.clone().dereference().unwrap();
         if !lhs_inner.is_compatible_to(&rhs_inner) {
-            ec.record_warning(
-                CompileWarning::IncompatibleTypes(lhs_inner, rhs_inner),
-                rhs_span,
-            )?;
+            if (kind != ir::CompareKind::Equal && kind != ir::CompareKind::NotEqual)
+                || (!lhs_inner.t.is_void() && !rhs_inner.t.is_void())
+            {
+                ec.record_warning(
+                    CompileWarning::IncompatibleTypes(lhs_inner, rhs_inner),
+                    rhs_span,
+                )?;
+            }
         }
         let dst = scope.alloc_temp();
         let (width, sign) = lhs.t.t.get_width_sign().unwrap();
@@ -293,6 +341,62 @@ mod test {
             vec![
                 ir::Op::Compare(ir::CompareOp {
                     kind: ir::CompareKind::GreaterThan,
+                    dst_width: ir::Width::Word,
+                    dst: VarLocation::Local(3),
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Src::Var(VarLocation::Local(1)),
+                    rhs: ir::Src::Var(VarLocation::Local(2))
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(3)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_rel_5() {
+        let (tu, ec) = compile("void foo(void) { int x, *y; void * const z; x = y == z; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Compare(ir::CompareOp {
+                    kind: ir::CompareKind::Equal,
+                    dst_width: ir::Width::Word,
+                    dst: VarLocation::Local(3),
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Src::Var(VarLocation::Local(1)),
+                    rhs: ir::Src::Var(VarLocation::Local(2))
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(3)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_rel_6() {
+        let (tu, ec) = compile("void foo(void) { int x, *y; char * z; x = y != z; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 1);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Compare(ir::CompareOp {
+                    kind: ir::CompareKind::NotEqual,
                     dst_width: ir::Width::Word,
                     dst: VarLocation::Local(3),
                     width: ir::Width::Word,

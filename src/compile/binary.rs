@@ -118,6 +118,12 @@ pub fn compile_binary_operator(
         BinaryOperator::GreaterOrEqual => {
             relational::compile_greater_or_equal(*op.node.lhs, *op.node.rhs, scope, be, ec)
         }
+        BinaryOperator::Equals => {
+            relational::compile_equal_to(*op.node.lhs, *op.node.rhs, scope, be, ec)
+        }
+        BinaryOperator::NotEquals => {
+            relational::compile_not_equal_to(*op.node.lhs, *op.node.rhs, scope, be, ec)
+        }
         _ => todo!(),
     }
 }
