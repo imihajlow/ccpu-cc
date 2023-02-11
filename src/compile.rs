@@ -22,6 +22,7 @@ mod assign;
 mod binary;
 mod shift;
 mod sub;
+mod relational;
 
 pub struct TypedSrc {
     pub src: ir::Src,

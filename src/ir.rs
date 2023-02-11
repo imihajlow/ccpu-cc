@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
 
+use crate::machine;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
 pub enum Width {
     Byte,
@@ -43,10 +45,30 @@ pub enum Op {
     BNot(BinaryUnsignedOp),
     LShift(ShiftOp),
     RShift(ShiftOp),
+    Compare(CompareOp),
     Conv(ConvOp),
     Store(StoreOp),
     Load(LoadOp),
     Call(CallOp),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompareKind {
+    LessThan,
+    LessOrEqual,
+    GreaterThan,
+    GreaterOrEqual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompareOp {
+    pub kind: CompareKind,
+    pub dst_width: Width,
+    pub dst: VarLocation,
+    pub width: Width,
+    pub sign: Sign,
+    pub lhs: Src,
+    pub rhs: Src,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,7 +101,7 @@ pub struct ShiftOp {
     pub lhs_sign: Sign,
     pub dst: VarLocation,
     pub lhs: Src,
-    pub rhs: Src,
+    pub rhs: Src, // only one byte is used
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -143,7 +165,7 @@ pub struct Function {
 }
 
 impl Width {
-    pub fn new(w: u8) -> Self {
+    pub const fn new(w: u8) -> Self {
         match w {
             1 => Self::Byte,
             2 => Self::Word,
@@ -152,6 +174,8 @@ impl Width {
             _ => panic!("invalid width"),
         }
     }
+
+    pub const INT_WIDTH: Self = Self::new(machine::INT_SIZE);
 }
 
 impl From<Width> for u8 {
@@ -218,6 +242,7 @@ impl std::fmt::Display for Op {
             Self::BNot(op) => write!(f, "not{}", op),
             Self::LShift(op) => write!(f, "lsh{}", op),
             Self::RShift(op) => write!(f, "rsh{}", op),
+            Self::Compare(op) => write!(f, "cmp{}", op),
             Self::Conv(op) => write!(f, "conv{}", op),
             Self::Store(op) => write!(f, "st{}", op),
             Self::Load(op) => write!(f, "ld{}", op),
@@ -239,6 +264,32 @@ impl std::fmt::Display for BinaryOp {
         write!(
             f,
             "{}{} {}, {}, {}",
+            get_sign_char(self.sign),
+            self.width,
+            self.dst,
+            self.lhs,
+            self.rhs
+        )
+    }
+}
+
+impl std::fmt::Display for CompareKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            CompareKind::LessThan => f.write_str("lt"),
+            CompareKind::LessOrEqual => f.write_str("le"),
+            CompareKind::GreaterThan => f.write_str("gt"),
+            CompareKind::GreaterOrEqual => f.write_str("ge"),
+        }
+    }
+}
+impl std::fmt::Display for CompareOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "{}{}{}{} {}, {}, {}",
+            self.kind,
+            self.dst_width,
             get_sign_char(self.sign),
             self.width,
             self.dst,

@@ -3,6 +3,7 @@ use lang_c::span::Span;
 use lang_c::{ast::Expression, span::Node};
 
 use crate::block_emitter::BlockEmitter;
+use crate::compile::relational;
 use crate::compile::shift::{
     compile_lshift, compile_lshift_inner, compile_rshift, compile_rshift_inner,
 };
@@ -105,6 +106,18 @@ pub fn compile_binary_operator(
             be,
             ec,
         ),
+        BinaryOperator::Less => {
+            relational::compile_less_than(*op.node.lhs, *op.node.rhs, scope, be, ec)
+        }
+        BinaryOperator::LessOrEqual => {
+            relational::compile_less_or_equal(*op.node.lhs, *op.node.rhs, scope, be, ec)
+        }
+        BinaryOperator::Greater => {
+            relational::compile_greater_than(*op.node.lhs, *op.node.rhs, scope, be, ec)
+        }
+        BinaryOperator::GreaterOrEqual => {
+            relational::compile_greater_or_equal(*op.node.lhs, *op.node.rhs, scope, be, ec)
+        }
         _ => todo!(),
     }
 }
