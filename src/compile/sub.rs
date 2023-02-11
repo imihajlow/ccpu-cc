@@ -1,3 +1,4 @@
+use lang_c::span::Span;
 use lang_c::{ast::Expression, span::Node};
 
 use crate::block_emitter::BlockEmitter;
@@ -19,6 +20,19 @@ pub fn compile_sub(
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
     let rhs = compile_expression(rhs, scope, be, ec)?;
+
+    compile_sub_inner((lhs, lhs_span), (rhs, rhs_span), scope, be, ec)
+}
+
+pub fn compile_sub_inner(
+    lhs: (TypedSrc, Span),
+    rhs: (TypedSrc, Span),
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let (lhs, lhs_span) = lhs;
+    let (rhs, rhs_span) = rhs;
 
     if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
         let (lhs, rhs) = usual_arithmetic_convert((lhs, lhs_span), (rhs, rhs_span), scope, be, ec)?;
@@ -229,6 +243,63 @@ mod test {
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(2),
                     src: ir::Src::Var(VarLocation::Local(4)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_assign_sub_1() {
+        let (tu, ec) = compile("void foo(void) { int x, y; x -= y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Sub(ir::BinaryOp {
+                    dst: VarLocation::Local(2),
+                    width: ir::Width::Word,
+                    sign: true,
+                    lhs: ir::Src::Var(VarLocation::Local(0)),
+                    rhs: ir::Src::Var(VarLocation::Local(1))
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_assign_sub_2() {
+        let (tu, ec) = compile("void foo(void) { int *x, y; *x -= y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Load(ir::LoadOp {
+                    dst: VarLocation::Local(2),
+                    src_addr: ir::Src::Var(VarLocation::Local(0)),
+                    width: ir::Width::Word,
+                }),
+                ir::Op::Sub(ir::BinaryOp {
+                    dst: VarLocation::Local(3),
+                    width: ir::Width::Word,
+                    sign: true,
+                    lhs: ir::Src::Var(VarLocation::Local(2)),
+                    rhs: ir::Src::Var(VarLocation::Local(1))
+                }),
+                ir::Op::Store(ir::StoreOp {
+                    dst_addr: ir::Src::Var(VarLocation::Local(0)),
+                    src: ir::Src::Var(VarLocation::Local(3)),
                     width: ir::Width::Word
                 })
             ]

@@ -22,26 +22,10 @@ pub fn compile_add(
     let lhs = compile_expression(lhs, scope, be, ec)?;
     let rhs = compile_expression(rhs, scope, be, ec)?;
 
-    add((lhs, lhs_span), (rhs, rhs_span), scope, be, ec)
+    compile_add_inner((lhs, lhs_span), (rhs, rhs_span), scope, be, ec)
 }
 
-pub fn compile_assign_add(
-    lhs: Node<Expression>,
-    rhs: Node<Expression>,
-    scope: &mut NameScope,
-    be: &mut BlockEmitter,
-    ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
-    let lhs_span = lhs.span;
-    let rhs_span = rhs.span;
-    let lhs_lval = TypedLValue::new_compile(lhs, scope, be, ec)?;
-    let rhs_val = compile_expression(rhs, scope, be, ec)?;
-    let lhs_val = lhs_lval.clone().compile_into_rvalue(scope, be)?;
-    let addition_result = add((lhs_val, lhs_span), (rhs_val, rhs_span), scope, be, ec)?;
-    super::assign::compile_assign_to_lval(lhs_lval, (addition_result, rhs_span), scope, be, ec)
-}
-
-fn add(
+pub fn compile_add_inner(
     lhs: (TypedSrc, Span),
     rhs: (TypedSrc, Span),
     scope: &mut NameScope,
