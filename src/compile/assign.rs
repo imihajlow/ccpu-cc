@@ -1,3 +1,4 @@
+use lang_c::span::Span;
 use lang_c::{ast::Expression, span::Node};
 
 use crate::ctype::CType;
@@ -31,7 +32,9 @@ pub fn compile_assign(
         )?;
         unreachable!();
     }
-    compile_assign_to_lval(lhs_lval, rhs, scope, be, ec)
+    let rhs_span = rhs.span;
+    let rhs_val = compile_expression(rhs, scope, be, ec)?;
+    compile_assign_to_lval(lhs_lval, (rhs_val, rhs_span), scope, be, ec)
 }
 
 /**
@@ -39,14 +42,13 @@ pub fn compile_assign(
  */
 pub fn compile_assign_to_lval(
     lhs_lval: TypedLValue,
-    rhs: Node<Expression>,
+    rhs: (TypedSrc, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<TypedSrc, ()> {
     use crate::lvalue::LValue;
-    let rhs_span = rhs.span;
-    let rhs_val = compile_expression(rhs, scope, be, ec)?;
+    let (rhs_val, rhs_span) = rhs;
 
     if lhs_lval.t.t.is_arithmetic() && rhs_val.t.t.is_arithmetic() {
         // the left operand has atomic, qualified, or unqualified arithmetic type, and the right has arithmetic type;

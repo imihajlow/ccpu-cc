@@ -24,6 +24,7 @@ use crate::{
 mod add;
 mod assign;
 mod sub;
+mod binary;
 
 pub struct TypedSrc {
     pub src: ir::Src,
@@ -84,7 +85,7 @@ pub fn compile_expression(
                 t: t.clone(),
             })
         }
-        Expression::BinaryOperator(o) => compile_binary_operator(*o, scope, be, ec),
+        Expression::BinaryOperator(o) => binary::compile_binary_operator(*o, scope, be, ec),
         Expression::GenericSelection(_) => unimplemented!(),
         _ => todo!(),
     }
@@ -101,7 +102,9 @@ pub fn compile_initializer(
     match initializer.node {
         Initializer::Expression(e) => {
             let lvalue = TypedLValue::new_from_name(target, target_span, scope, ec)?;
-            assign::compile_assign_to_lval(lvalue, *e, scope, be, ec)?;
+            let rhs_span = e.span;
+            let rhs = compile_expression(*e, scope, be, ec)?;
+            assign::compile_assign_to_lval(lvalue, (rhs, rhs_span), scope, be, ec)?;
             Ok(())
         }
         Initializer::List(_) => todo!(),
@@ -202,21 +205,6 @@ fn compile_declaration(
         };
     }
     Ok(())
-}
-
-fn compile_binary_operator(
-    op: Node<BinaryOperatorExpression>,
-    scope: &mut NameScope,
-    be: &mut BlockEmitter,
-    ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
-    use lang_c::ast::BinaryOperator;
-    match op.node.operator.node {
-        BinaryOperator::Assign => assign::compile_assign(*op.node.lhs, *op.node.rhs, scope, be, ec),
-        BinaryOperator::Plus => add::compile_add(*op.node.lhs, *op.node.rhs, scope, be, ec),
-        BinaryOperator::Minus => sub::compile_sub(*op.node.lhs, *op.node.rhs, scope, be, ec),
-        _ => todo!(),
-    }
 }
 
 fn cast_if_needed(

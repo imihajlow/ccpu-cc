@@ -10,12 +10,14 @@ use crate::ir::{self, Src};
 use crate::machine;
 use crate::name_scope::NameScope;
 
+#[derive(Debug, Clone)]
 pub enum LValue {
     Var(VarLocation),
     Indirection(Src),
     // member access TODO
 }
 
+#[derive(Debug, Clone)]
 pub struct TypedLValue {
     pub t: QualifiedType,
     pub lv: LValue,
