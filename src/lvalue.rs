@@ -2,7 +2,7 @@ use lang_c::ast::Expression;
 use lang_c::span::{Node, Span};
 
 use crate::block_emitter::BlockEmitter;
-use crate::compile::{self, compile_expression, TypedSrc};
+use crate::compile::{self, compile_expression, TypedSrc, compile_pointer_offset, int_promote};
 use crate::ctype::QualifiedType;
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
 use crate::ir::VarLocation;
@@ -77,53 +77,16 @@ impl TypedLValue {
                 use lang_c::ast::BinaryOperator;
                 match op.node.operator.node {
                     BinaryOperator::Index => {
-                        let lhs_span = op.node.lhs.span;
-                        let rhs_span = op.node.rhs.span;
+                        let array_span = op.node.lhs.span;
+                        let index_span = op.node.rhs.span;
                         let array = compile_expression(*op.node.lhs, scope, be, ec)?;
-                        let element_type = if let Ok(t) = array.t.clone().dereference() {
-                            t
-                        } else {
-                            ec.record_error(CompileError::BadSubscripted, lhs_span)?;
-                            unreachable!();
-                        };
-                        let element_size = element_type.t.sizeof(rhs_span, ec)?;
                         let index = compile_expression(*op.node.rhs, scope, be, ec)?;
-                        if !index.t.t.is_integer() {
-                            ec.record_error(CompileError::BadSubsript, rhs_span)?;
-                            unreachable!();
-                        }
-                        let index = compile::int_promote(index, scope, be);
-                        let (width, sign) = {
-                            let (width, sign) = index.t.t.get_width_sign().unwrap();
-                            if width as u8 > machine::PTR_SIZE {
-                                ec.record_warning(
-                                    CompileWarning::IndexTooWide(index.t.clone()),
-                                    rhs_span,
-                                )?;
-                                (ir::Width::new(machine::PTR_SIZE), sign)
-                            } else {
-                                (width, sign)
-                            }
-                        };
-                        let mul_dst = scope.alloc_temp();
-                        be.append_operation(ir::Op::Mul(ir::BinaryOp {
-                            dst: mul_dst.clone(),
-                            lhs: index.src,
-                            rhs: ir::Src::ConstInt(element_size.into()),
-                            width,
-                            sign,
-                        }));
-                        let sum_dst = scope.alloc_temp();
-                        be.append_operation(ir::Op::Add(ir::BinaryOp {
-                            dst: sum_dst.clone(),
-                            lhs: array.src,
-                            rhs: ir::Src::Var(mul_dst),
-                            width: ir::Width::new(machine::PTR_SIZE),
-                            sign: false,
-                        }));
+
+                        let offset = compile_pointer_offset((array, array_span), (index, index_span), false, scope, be, ec)?;
+
                         Ok(TypedLValue {
-                            t: element_type,
-                            lv: LValue::Indirection(ir::Src::Var(sum_dst)),
+                            t: offset.t.dereference().unwrap(),
+                            lv: LValue::Indirection(offset.src),
                         })
                     }
                     _ => {
@@ -168,5 +131,121 @@ impl TypedLValue {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ir::{self, VarLocation};
+    use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
+
+    use super::*;
+
+    fn compile(code: &str) -> (TranslationUnit, ErrorCollector) {
+        use lang_c::driver::{parse_preprocessed, Config, Flavor};
+        let mut cfg = Config::default();
+        cfg.flavor = Flavor::StdC11;
+        let p = parse_preprocessed(&cfg, code.to_string()).unwrap();
+        let mut ec = ErrorCollector::new();
+        let tu = TranslationUnit::translate(p.unit, &mut ec).unwrap();
+        assert_eq!(ec.get_error_count(), 0);
+        (tu, ec)
+    }
+
+    fn get_first_body(tu: &TranslationUnit) -> &Vec<LabeledBlock> {
+        tu.functions.first().unwrap().get_body()
+    }
+
+    #[test]
+    fn test_lvalue_1() {
+        let (tu, ec) = compile("void foo(void) { int *x, y; *x = y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Store(ir::StoreOp {
+                    dst_addr: ir::Src::Var(VarLocation::Local(0)),
+                    src: ir::Src::Var(VarLocation::Local(1)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lvalue_2() {
+        let (tu, ec) = compile("void foo(void) { int *x, y, z; x[y] = z; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Mul(ir::BinaryOp {
+                    dst: VarLocation::Local(3),
+                    lhs: ir::Src::Var(VarLocation::Local(1)),
+                    rhs: ir::Src::ConstInt(2),
+                    width: ir::Width::Word,
+                    sign: true,
+                }),
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(4),
+                    lhs: ir::Src::Var(VarLocation::Local(0)),
+                    rhs: ir::Src::Var(VarLocation::Local(3)),
+                    width: ir::Width::Word,
+                    sign: false,
+                }),
+                ir::Op::Store(ir::StoreOp {
+                    dst_addr: ir::Src::Var(VarLocation::Local(4)),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lvalue_3() {
+        let (tu, ec) = compile("void foo(void) { int *x; char y; int z; x[y] = z; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Conv(ir::ConvOp {
+                    dst: VarLocation::Local(3),
+                    dst_width: ir::Width::Word,
+                    dst_sign: true,
+                    src: ir::Src::Var(VarLocation::Local(1)),
+                    src_width: ir::Width::Byte,
+                    src_sign: false,
+                }),
+                ir::Op::Mul(ir::BinaryOp {
+                    dst: VarLocation::Local(4),
+                    lhs: ir::Src::Var(VarLocation::Local(3)),
+                    rhs: ir::Src::ConstInt(2),
+                    width: ir::Width::Word,
+                    sign: true,
+                }),
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(5),
+                    lhs: ir::Src::Var(VarLocation::Local(0)),
+                    rhs: ir::Src::Var(VarLocation::Local(4)),
+                    width: ir::Width::Word,
+                    sign: false,
+                }),
+                ir::Op::Store(ir::StoreOp {
+                    dst_addr: ir::Src::Var(VarLocation::Local(5)),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
     }
 }

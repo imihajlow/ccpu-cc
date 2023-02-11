@@ -8,7 +8,10 @@ use crate::lvalue::TypedLValue;
 use crate::name_scope::NameScope;
 use crate::{ctype, ir};
 
-use super::{cast, compile_expression, usual_arithmetic_convert, TypedSrc};
+use super::{
+    cast, compile_expression, compile_pointer_offset, int_promote, usual_arithmetic_convert,
+    TypedSrc,
+};
 
 pub fn compile_add(
     lhs: Node<Expression>,
@@ -56,55 +59,43 @@ pub fn compile_add_inner(
     } else if (lhs.t.t.is_dereferencable() && rhs.t.t.is_integer())
         || (lhs.t.t.is_integer() && rhs.t.t.is_dereferencable())
     {
-        let (lhs, rhs, lhs_span, rhs_span) = if lhs.t.t.is_dereferencable() {
+        let (ptr, offset, ptr_span, offset_span) = if lhs.t.t.is_dereferencable() {
             (lhs, rhs, lhs_span, rhs_span)
         } else {
             (rhs, lhs, rhs_span, lhs_span)
         };
-        if !lhs.t.t.dereferences_to_complete() {
-            ec.record_error(CompileError::SizeOfIncomplete(lhs.t), lhs_span)?;
-            unreachable!();
-        }
-        let rhs_ssize = cast(rhs, &ctype::SSIZE_TYPE, false, rhs_span, scope, be, ec)?;
-        let element_size = lhs
-            .t
-            .clone()
-            .dereference()
-            .unwrap()
-            .t
-            .sizeof(lhs_span, ec)?;
-        let element_size_src = TypedSrc {
-            t: ctype::QualifiedType {
-                t: ctype::SSIZE_TYPE,
-                qualifiers: Qualifiers::empty(),
-            },
-            src: ir::Src::ConstInt(element_size.into()),
-        };
-        let offset_var = scope.alloc_temp();
-        let target_var = scope.alloc_temp();
-        let (width, sign) = ctype::SSIZE_TYPE.get_width_sign().unwrap();
-        be.append_operation(ir::Op::Mul(ir::BinaryOp {
-            dst: offset_var.clone(),
-            lhs: rhs_ssize.src,
-            rhs: element_size_src.src,
-            width,
-            sign,
-        }));
-        be.append_operation(ir::Op::Add(ir::BinaryOp {
-            dst: target_var.clone(),
-            lhs: lhs.src,
-            rhs: ir::Src::Var(offset_var),
-            width,
-            sign,
-        }));
-        Ok(TypedSrc {
-            src: ir::Src::Var(target_var),
-            t: lhs.t,
-        })
+        compile_pointer_offset((ptr, ptr_span), (offset, offset_span), false, scope, be, ec)
     } else {
         ec.record_error(CompileError::IncompatibleTypes(lhs.t, rhs.t), rhs_span)?;
         unreachable!();
     }
+}
+
+pub fn compile_index(
+    lhs: Node<Expression>,
+    rhs: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let ptr_span = lhs.span;
+    let index_span = rhs.span;
+    let ptr = compile_expression(lhs, scope, be, ec)?;
+    let index = compile_expression(rhs, scope, be, ec)?;
+    let offset =
+        compile_pointer_offset((ptr, ptr_span), (index, index_span), false, scope, be, ec)?;
+    let pointee = offset.t.clone().dereference().unwrap();
+    let width = pointee.t.get_scalar_width().unwrap();
+    let dst = scope.alloc_temp();
+    be.append_operation(ir::Op::Load(ir::LoadOp {
+        dst: dst.clone(),
+        src_addr: offset.src,
+        width,
+    }));
+    Ok(TypedSrc {
+        src: ir::Src::Var(dst),
+        t: pointee,
+    })
 }
 
 #[cfg(test)]
@@ -209,7 +200,7 @@ mod test {
                 ir::Op::Add(ir::BinaryOp {
                     dst: VarLocation::Local(4),
                     width: ir::Width::Word,
-                    sign: true,
+                    sign: false,
                     lhs: ir::Src::Var(VarLocation::Local(1)),
                     rhs: ir::Src::Var(VarLocation::Local(3))
                 }),
@@ -275,6 +266,39 @@ mod test {
                     src: ir::Src::Var(VarLocation::Local(3)),
                     width: ir::Width::Word
                 })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_index_1() {
+        let (tu, ec) = compile("void foo(void) { long *x; int y; x[y]; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Mul(ir::BinaryOp {
+                    dst: VarLocation::Local(2),
+                    width: ir::Width::Word,
+                    sign: true,
+                    lhs: ir::Src::Var(VarLocation::Local(1)),
+                    rhs: ir::Src::ConstInt(4)
+                }),
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(3),
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Src::Var(VarLocation::Local(0)),
+                    rhs: ir::Src::Var(VarLocation::Local(2))
+                }),
+                ir::Op::Load(ir::LoadOp {
+                    dst: VarLocation::Local(4),
+                    src_addr: ir::Src::Var(VarLocation::Local(3)),
+                    width: ir::Width::Dword,
+                }),
             ]
         );
     }

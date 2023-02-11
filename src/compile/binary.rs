@@ -3,6 +3,7 @@ use lang_c::span::Span;
 use lang_c::{ast::Expression, span::Node};
 
 use crate::block_emitter::BlockEmitter;
+use crate::compile::add::compile_index;
 use crate::compile::relational;
 use crate::compile::shift::{
     compile_lshift, compile_lshift_inner, compile_rshift, compile_rshift_inner,
@@ -126,7 +127,7 @@ pub fn compile_binary_operator(
         }
         BinaryOperator::LogicalAnd => be.append_logical_and(*op.node.lhs, *op.node.rhs, scope, ec),
         BinaryOperator::LogicalOr => be.append_logical_or(*op.node.lhs, *op.node.rhs, scope, ec),
-        _ => todo!(),
+        BinaryOperator::Index => compile_index(*op.node.lhs, *op.node.rhs, scope, be, ec),
     }
 }
 

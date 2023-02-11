@@ -44,6 +44,7 @@ pub enum CompileError {
     ArithmeticTypeRequired,
     IntegerTypeRequired,
     ScalarTypeRequired,
+    PointerTypeRequired,
     BadTypesForOperator(String),
     CannotCompare(QualifiedType, QualifiedType),
     BadIndirection(QualifiedType),
@@ -162,6 +163,7 @@ impl std::fmt::Display for CompileError {
             }
             CompileError::IntegerTypeRequired => f.write_str("an integer type is required here"),
             CompileError::ScalarTypeRequired => f.write_str("a scalar type is required here"),
+            CompileError::PointerTypeRequired => f.write_str("a pointer is required here"),
             CompileError::BadTypesForOperator(op) => write!(f, "bad types for operator `{}`", op),
             CompileError::DivisionByZero => f.write_str("division by zero"),
             CompileError::CannotCompare(t1, t2) => {

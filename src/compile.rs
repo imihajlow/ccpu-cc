@@ -4,9 +4,10 @@ use lang_c::{
     span::Node,
 };
 
-use crate::ctype::{CType, Qualifiers};
+use crate::ctype::{self, CType, Qualifiers};
 use crate::error::CompileError;
 use crate::lvalue::TypedLValue;
+use crate::machine;
 use crate::{
     block_emitter::BlockEmitter,
     constant,
@@ -203,7 +204,7 @@ pub fn cast(
             be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: dst.clone(),
                 src: src.src,
-                width: dst_width
+                width: dst_width,
             }));
             Ok(TypedSrc {
                 src: ir::Src::Var(dst),
@@ -216,6 +217,80 @@ pub fn cast(
             Ok(src)
         }
     }
+}
+
+/**
+ * Given a pointer and an index, make an absolute address.
+ *
+ * Integer promotions are performed on index.
+ */
+pub fn compile_pointer_offset(
+    ptr: (TypedSrc, Span),
+    index: (TypedSrc, Span),
+    subtract: bool,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let (ptr, ptr_span) = ptr;
+    let (index, index_span) = index;
+
+    if !ptr.t.t.is_dereferencable() {
+        ec.record_error(CompileError::PointerTypeRequired, ptr_span)?;
+        unreachable!();
+    }
+    if !index.t.t.is_integer() {
+        ec.record_error(CompileError::IntegerTypeRequired, ptr_span)?;
+        unreachable!();
+    }
+    if !ptr.t.t.dereferences_to_complete() {
+        ec.record_error(CompileError::SizeOfIncomplete(ptr.t), ptr_span)?;
+        unreachable!();
+    }
+
+    let index = int_promote(index, scope, be);
+
+    if index.t.t.sizeof(index_span, ec)? > machine::PTR_SIZE.into() {
+        ec.record_warning(CompileWarning::IndexTooWide(index.t.clone()), index_span)?;
+    }
+
+    let index_ssize = cast(index, &ctype::SSIZE_TYPE, false, index_span, scope, be, ec)?;
+    let element_size = ptr
+        .t
+        .clone()
+        .dereference()
+        .unwrap()
+        .t
+        .sizeof(ptr_span, ec)?;
+    let element_size_src = TypedSrc {
+        t: ctype::QualifiedType {
+            t: ctype::SSIZE_TYPE,
+            qualifiers: Qualifiers::empty(),
+        },
+        src: ir::Src::ConstInt(element_size.into()),
+    };
+    let offset_var = scope.alloc_temp();
+    let target_var = scope.alloc_temp();
+    let (width, sign) = ctype::SSIZE_TYPE.get_width_sign().unwrap();
+    be.append_operation(ir::Op::Mul(ir::BinaryOp {
+        dst: offset_var.clone(),
+        lhs: index_ssize.src,
+        rhs: element_size_src.src,
+        width,
+        sign,
+    }));
+    let op = if !subtract { ir::Op::Add } else { ir::Op::Sub };
+    be.append_operation(op(ir::BinaryOp {
+        dst: target_var.clone(),
+        lhs: ptr.src,
+        rhs: ir::Src::Var(offset_var),
+        width,
+        sign: false,
+    }));
+    Ok(TypedSrc {
+        src: ir::Src::Var(target_var),
+        t: ptr.t,
+    })
 }
 
 fn compile_block(
