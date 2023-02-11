@@ -184,7 +184,7 @@ impl QualifiedType {
     pub fn dereference(self) -> Result<Self, Self> {
         match self.t.dereference() {
             Ok(t) => Ok(t),
-            Err(t) => Err(Self { t, ..self })
+            Err(t) => Err(Self { t, ..self }),
         }
     }
 }
@@ -276,6 +276,7 @@ impl CType {
             Float(_) => true,
             Enum(_) => true,
             Pointer(_) => true,
+            Array(_, _) => true,
             _ => false,
         }
     }
@@ -368,12 +369,22 @@ impl CType {
         }
     }
 
+    pub fn get_scalar_width(&self) -> Option<ir::Width> {
+        match self {
+            CType::Int(size, _) | CType::Float(size) => Some(ir::Width::new(*size)),
+            CType::Bool => Some(ir::Width::new(machine::BOOL_SIZE)),
+            CType::Array(_, _) | CType::Pointer(_) => Some(ir::Width::new(machine::PTR_SIZE)),
+            CType::Union(_) => todo!(),
+            _ => None,
+        }
+    }
+
     pub fn is_complete(&self) -> bool {
         match self {
             CType::Void => false,
             CType::Struct(_) => todo!(),
             CType::Union(_) => todo!(),
-            _ => true
+            _ => true,
         }
     }
 

@@ -124,6 +124,8 @@ pub fn compile_binary_operator(
         BinaryOperator::NotEquals => {
             relational::compile_not_equal_to(*op.node.lhs, *op.node.rhs, scope, be, ec)
         }
+        BinaryOperator::LogicalAnd => be.append_logical_and(*op.node.lhs, *op.node.rhs, scope, ec),
+        BinaryOperator::LogicalOr => be.append_logical_or(*op.node.lhs, *op.node.rhs, scope, ec),
         _ => todo!(),
     }
 }

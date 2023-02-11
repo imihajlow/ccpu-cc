@@ -5,6 +5,7 @@ use lang_c::{
 };
 
 use crate::ctype::{CType, Qualifiers};
+use crate::error::CompileError;
 use crate::lvalue::TypedLValue;
 use crate::{
     block_emitter::BlockEmitter,
@@ -20,9 +21,9 @@ use crate::{
 mod add;
 mod assign;
 mod binary;
+mod relational;
 mod shift;
 mod sub;
-mod relational;
 
 pub struct TypedSrc {
     pub src: ir::Src,
@@ -141,6 +142,82 @@ pub fn int_promote(src: TypedSrc, scope: &mut NameScope, be: &mut BlockEmitter) 
     }
 }
 
+pub fn convert_to_bool(
+    src: TypedSrc,
+    span: Span,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    if !src.t.t.is_scalar() {
+        ec.record_error(CompileError::ScalarTypeRequired, span)?;
+        unreachable!();
+    }
+    let dst = scope.alloc_temp();
+    let width = src.t.t.get_scalar_width().unwrap();
+    be.append_operation(ir::Op::Bool(ir::UnaryUnsignedOp {
+        dst: dst.clone(),
+        src: src.src,
+        width,
+    }));
+    Ok(TypedSrc {
+        src: ir::Src::Var(dst),
+        t: QualifiedType {
+            t: CType::Int(1, false),
+            qualifiers: Qualifiers::empty(),
+        },
+    })
+}
+
+pub fn cast(
+    src: TypedSrc,
+    target_type: &CType,
+    copy_if_same_type: bool,
+    span: Span,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let (dst_width, dst_sign) = target_type.get_width_sign().unwrap();
+    let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
+    if (dst_width, dst_sign) != (src_width, src_sign) {
+        let dst = scope.alloc_temp();
+        be.append_operation(ir::Op::Conv(ir::ConvOp {
+            dst_width,
+            dst_sign,
+            src_width,
+            src_sign,
+            dst: dst.clone(),
+            src: src.src,
+        }));
+        Ok(TypedSrc {
+            src: ir::Src::Var(dst),
+            t: QualifiedType {
+                t: target_type.clone(),
+                qualifiers: Qualifiers::empty(),
+            },
+        })
+    } else {
+        if copy_if_same_type {
+            let dst = scope.alloc_temp();
+            be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: dst.clone(),
+                src: src.src,
+                width: dst_width
+            }));
+            Ok(TypedSrc {
+                src: ir::Src::Var(dst),
+                t: QualifiedType {
+                    t: target_type.clone(),
+                    qualifiers: Qualifiers::empty(),
+                },
+            })
+        } else {
+            Ok(src)
+        }
+    }
+}
+
 fn compile_block(
     block: Vec<Node<BlockItem>>,
     scope: &mut NameScope,
@@ -205,38 +282,6 @@ fn compile_declaration(
     Ok(())
 }
 
-fn cast_if_needed(
-    src: TypedSrc,
-    target_type: &CType,
-    span: Span,
-    scope: &mut NameScope,
-    be: &mut BlockEmitter,
-    ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
-    let (dst_width, dst_sign) = target_type.get_width_sign().unwrap();
-    let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
-    if (dst_width, dst_sign) != (src_width, src_sign) {
-        let dst = scope.alloc_temp();
-        be.append_operation(ir::Op::Conv(ir::ConvOp {
-            dst_width,
-            dst_sign,
-            src_width,
-            src_sign,
-            dst: dst.clone(),
-            src: src.src,
-        }));
-        Ok(TypedSrc {
-            src: ir::Src::Var(dst),
-            t: QualifiedType {
-                t: target_type.clone(),
-                qualifiers: Qualifiers::empty(),
-            },
-        })
-    } else {
-        Ok(src)
-    }
-}
-
 fn integer_promote(
     src: (TypedSrc, Span),
     scope: &mut NameScope,
@@ -245,7 +290,7 @@ fn integer_promote(
 ) -> Result<TypedSrc, ()> {
     let promoted_type = src.0.t.clone().promote();
 
-    cast_if_needed(src.0, &promoted_type.t, src.1, scope, be, ec)
+    cast(src.0, &promoted_type.t, false, src.1, scope, be, ec)
 }
 
 /**
@@ -273,8 +318,8 @@ fn usual_arithmetic_convert(
         // Then the following rules are applied to the promoted operands
         let common_type = lhs.t.t.least_common_int_type(&rhs.t.t);
         Ok((
-            cast_if_needed(lhs, &common_type, lhs_span, scope, be, ec)?,
-            cast_if_needed(rhs, &common_type, rhs_span, scope, be, ec)?,
+            cast(lhs, &common_type, false, lhs_span, scope, be, ec)?,
+            cast(rhs, &common_type, false, rhs_span, scope, be, ec)?,
         ))
     } else {
         unreachable!()

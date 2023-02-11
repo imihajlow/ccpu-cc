@@ -8,7 +8,7 @@ use crate::lvalue::TypedLValue;
 use crate::name_scope::NameScope;
 use crate::{ctype, ir};
 
-use super::{cast_if_needed, compile_expression, usual_arithmetic_convert, TypedSrc};
+use super::{cast, compile_expression, usual_arithmetic_convert, TypedSrc};
 
 pub fn compile_add(
     lhs: Node<Expression>,
@@ -65,7 +65,7 @@ pub fn compile_add_inner(
             ec.record_error(CompileError::SizeOfIncomplete(lhs.t), lhs_span)?;
             unreachable!();
         }
-        let rhs_ssize = cast_if_needed(rhs, &ctype::SSIZE_TYPE, rhs_span, scope, be, ec)?;
+        let rhs_ssize = cast(rhs, &ctype::SSIZE_TYPE, false, rhs_span, scope, be, ec)?;
         let element_size = lhs
             .t
             .clone()

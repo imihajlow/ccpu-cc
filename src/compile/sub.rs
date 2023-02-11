@@ -7,7 +7,7 @@ use crate::error::{CompileError, ErrorCollector};
 use crate::name_scope::NameScope;
 use crate::{ctype, ir};
 
-use super::{cast_if_needed, compile_expression, usual_arithmetic_convert, TypedSrc};
+use super::{cast, compile_expression, usual_arithmetic_convert, TypedSrc};
 
 pub fn compile_sub(
     lhs: Node<Expression>,
@@ -74,7 +74,7 @@ pub fn compile_sub_inner(
         };
         let (width, sign) = ctype::SSIZE_TYPE.get_width_sign().unwrap();
         if rhs.t.t.is_integer() {
-            let rhs_ssize = cast_if_needed(rhs, &ctype::SSIZE_TYPE, rhs_span, scope, be, ec)?;
+            let rhs_ssize = cast(rhs, &ctype::SSIZE_TYPE, false, rhs_span, scope, be, ec)?;
             let offset_var = scope.alloc_temp();
             let target_var = scope.alloc_temp();
             be.append_operation(ir::Op::Mul(ir::BinaryOp {

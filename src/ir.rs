@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Formatter};
 
 use crate::machine;
 
@@ -34,6 +34,7 @@ pub enum Src {
 #[derive(Clone, PartialEq, Eq)]
 pub enum Op {
     Copy(UnaryUnsignedOp),
+    Bool(UnaryUnsignedOp),
     Add(BinaryOp),
     Sub(BinaryOp),
     Mul(BinaryOp),
@@ -246,6 +247,7 @@ impl std::fmt::Display for Op {
             Self::RShift(op) => write!(f, "rsh{}", op),
             Self::Compare(op) => write!(f, "cmp{}", op),
             Self::Conv(op) => write!(f, "conv{}", op),
+            Self::Bool(op) => write!(f, "bool{}", op),
             Self::Store(op) => write!(f, "st{}", op),
             Self::Load(op) => write!(f, "ld{}", op),
             Self::Call(op) => write!(f, "call{}", op),

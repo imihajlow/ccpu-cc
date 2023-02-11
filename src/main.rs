@@ -31,7 +31,8 @@ fn main() {
         &cfg,
         "
         void foo(void) {
-            int x,y;
+            int x,y,z;
+            x = y || z;
         }
     "
         .to_string(),

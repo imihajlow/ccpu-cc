@@ -11,7 +11,7 @@ use crate::{
     name_scope::NameScope,
 };
 
-use super::{cast_if_needed, compile_expression, TypedSrc};
+use super::{cast, compile_expression, TypedSrc};
 
 /**
  * Assignment according to 6.5.16.1
@@ -53,7 +53,7 @@ pub fn compile_assign_to_lval(
     if lhs_lval.t.t.is_arithmetic() && rhs_val.t.t.is_arithmetic() {
         // the left operand has atomic, qualified, or unqualified arithmetic type, and the right has arithmetic type;
         // the left operand has type atomic, qualified, or unqualified _Bool, and the right is a pointer.
-        let rhs_casted = cast_if_needed(rhs_val, &lhs_lval.t.t, rhs_span, scope, be, ec)?;
+        let rhs_casted = cast(rhs_val, &lhs_lval.t.t, false, rhs_span, scope, be, ec)?;
         let width = rhs_casted.t.t.get_width_sign().unwrap().0;
         match lhs_lval.lv {
             LValue::Var(v) => {
@@ -114,7 +114,7 @@ pub fn compile_assign_to_lval(
                 )?;
             }
         }
-        let rhs_casted = cast_if_needed(rhs_val, &lhs_lval.t.t, rhs_span, scope, be, ec)?;
+        let rhs_casted = cast(rhs_val, &lhs_lval.t.t, false, rhs_span, scope, be, ec)?;
         let width = rhs_casted.t.t.get_width_sign().unwrap().0;
         match lhs_lval.lv {
             LValue::Var(v) => {
