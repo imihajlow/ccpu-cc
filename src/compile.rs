@@ -1,15 +1,11 @@
 use lang_c::span::Span;
 use lang_c::{
-    ast::{
-        BinaryOperatorExpression, BlockItem, Declaration, Expression, Initializer, Statement,
-        StorageClassSpecifier,
-    },
+    ast::{BlockItem, Declaration, Expression, Initializer, Statement, StorageClassSpecifier},
     span::Node,
 };
 
 use crate::ctype::{CType, Qualifiers};
-use crate::error::CompileError;
-use crate::lvalue::{self, TypedLValue};
+use crate::lvalue::TypedLValue;
 use crate::{
     block_emitter::BlockEmitter,
     constant,
@@ -23,8 +19,9 @@ use crate::{
 
 mod add;
 mod assign;
-mod sub;
 mod binary;
+mod shift;
+mod sub;
 
 pub struct TypedSrc {
     pub src: ir::Src,
@@ -167,7 +164,7 @@ fn compile_declaration(
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
-    let (mut type_builder, stclass, _extra) =
+    let (type_builder, stclass, _extra) =
         TypeBuilder::new_from_specifiers(decl.node.specifiers, scope, ec)?;
     for init_declarator in decl.node.declarators {
         let tb = type_builder.stage2(init_declarator.span, ec)?;

@@ -3,6 +3,9 @@ use lang_c::span::Span;
 use lang_c::{ast::Expression, span::Node};
 
 use crate::block_emitter::BlockEmitter;
+use crate::compile::shift::{
+    compile_lshift, compile_lshift_inner, compile_rshift, compile_rshift_inner,
+};
 use crate::error::{CompileError, ErrorCollector};
 use crate::ir;
 use crate::lvalue::TypedLValue;
@@ -40,6 +43,8 @@ pub fn compile_binary_operator(
         BinaryOperator::BitwiseXor => {
             compile_bitwise(*op.node.lhs, *op.node.rhs, ir::Op::BXor, scope, be, ec)
         }
+        BinaryOperator::ShiftLeft => compile_lshift(*op.node.lhs, *op.node.rhs, scope, be, ec),
+        BinaryOperator::ShiftRight => compile_rshift(*op.node.lhs, *op.node.rhs, scope, be, ec),
         BinaryOperator::AssignPlus => compile_binary_and_assign(
             *op.node.lhs,
             *op.node.rhs,
@@ -80,6 +85,22 @@ pub fn compile_binary_operator(
             *op.node.lhs,
             *op.node.rhs,
             compile_bxor_inner,
+            scope,
+            be,
+            ec,
+        ),
+        BinaryOperator::AssignShiftLeft => compile_binary_and_assign(
+            *op.node.lhs,
+            *op.node.rhs,
+            compile_lshift_inner,
+            scope,
+            be,
+            ec,
+        ),
+        BinaryOperator::AssignShiftRight => compile_binary_and_assign(
+            *op.node.lhs,
+            *op.node.rhs,
+            compile_rshift_inner,
             scope,
             be,
             ec,
