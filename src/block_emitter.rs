@@ -49,7 +49,7 @@ impl BlockEmitter {
             },
         );
         let mut result = Vec::new();
-        for i in 0..=self.current_id {
+        for i in 0..self.next_id {
             result.push(blocks.remove(&i).unwrap());
         }
         result
@@ -88,11 +88,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Jump(cont_block_id)),
-            if ifs.node.else_statement.is_some() {
-                else_block_id
-            } else {
-                cont_block_id
-            },
+            else_block_id
         );
 
         if let Some(elses) = ifs.node.else_statement {
@@ -256,7 +252,7 @@ impl BlockEmitter {
         todo!()
     }
 
-    fn finish_block(&mut self, tail: LabeledTail, next_id: usize) {
+    fn finish_block(&mut self, tail: LabeledTail, next_block: usize) {
         let current_ops = mem::replace(&mut self.current_ops, Vec::new());
         self.blocks.insert(
             self.current_id,
@@ -266,7 +262,7 @@ impl BlockEmitter {
                 tail,
             },
         );
-        self.current_id = next_id;
+        self.current_id = next_block;
     }
 
     fn alloc_block_id(&mut self) -> usize {
