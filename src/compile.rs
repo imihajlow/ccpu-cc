@@ -25,6 +25,7 @@ mod binary;
 mod relational;
 mod shift;
 mod sub;
+mod unary;
 
 pub struct TypedSrc {
     pub src: ir::Src,
@@ -87,6 +88,7 @@ pub fn compile_expression(
         }
         Expression::BinaryOperator(o) => binary::compile_binary_operator(*o, scope, be, ec),
         Expression::GenericSelection(_) => unimplemented!(),
+        Expression::UnaryOperator(o) => unary::compile_unary_operator(*o, scope, be, ec),
         _ => todo!(),
     }
 }
