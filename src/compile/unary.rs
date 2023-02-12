@@ -1,13 +1,8 @@
-use lang_c::ast::{BinaryOperatorExpression, UnaryOperatorExpression};
+use lang_c::ast::UnaryOperatorExpression;
 use lang_c::span::Span;
 use lang_c::{ast::Expression, span::Node};
 
 use crate::block_emitter::BlockEmitter;
-use crate::compile::add::compile_index;
-use crate::compile::relational;
-use crate::compile::shift::{
-    compile_lshift, compile_lshift_inner, compile_rshift, compile_rshift_inner,
-};
 use crate::ctype::{self, QualifiedType, Qualifiers};
 use crate::error::{CompileError, ErrorCollector};
 use crate::ir;
@@ -15,8 +10,8 @@ use crate::lvalue::TypedLValue;
 use crate::name_scope::NameScope;
 
 use super::assign::compile_assign_to_lval;
-use super::{add, assign, int_promote, sub};
-use super::{compile_expression, usual_arithmetic_convert, TypedSrc};
+use super::{add, int_promote, sub};
+use super::{compile_expression, TypedSrc};
 
 pub fn compile_unary_operator(
     op: Node<UnaryOperatorExpression>,
@@ -31,7 +26,10 @@ pub fn compile_unary_operator(
         UnaryOperator::Minus => compile_unary_minus(operand, scope, be, ec),
         UnaryOperator::Complement => compile_unary_complement(operand, scope, be, ec),
         UnaryOperator::Negate => compile_unary_lnot(operand, scope, be, ec),
-        UnaryOperator::PreIncrement => compile_pre_increment(operand, scope, be, ec),
+        UnaryOperator::PreIncrement => compile_pre_incdec(true, operand, scope, be, ec),
+        UnaryOperator::PreDecrement => compile_pre_incdec(false, operand, scope, be, ec),
+        UnaryOperator::PostIncrement => compile_post_incdec(true, operand, scope, be, ec),
+        UnaryOperator::PostDecrement => compile_post_incdec(false, operand, scope, be, ec),
         _ => todo!(),
     }
 }
@@ -141,7 +139,8 @@ fn compile_unary_lnot(
     })
 }
 
-fn compile_pre_increment(
+fn compile_pre_incdec(
+    is_inc: bool,
     operand: Node<Expression>,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
@@ -150,10 +149,7 @@ fn compile_pre_increment(
     let span = operand.span;
     let operand = TypedLValue::new_compile(operand, scope, be, ec)?;
     if operand.t.is_const() {
-        ec.record_error(
-            CompileError::AssignmentToConstQualified(operand.t),
-            span,
-        )?;
+        ec.record_error(CompileError::AssignmentToConstQualified(operand.t), span)?;
         unreachable!();
     }
     if !operand.t.t.is_arithmetic() && !operand.t.t.is_pointer() {
@@ -163,10 +159,62 @@ fn compile_pre_increment(
     let operand_rvalue = operand.clone().compile_into_rvalue(scope, be)?;
     let one = TypedSrc {
         src: ir::Src::ConstInt(1),
-        t: QualifiedType { t: ctype::INT_TYPE, qualifiers: Qualifiers::empty() }
+        t: QualifiedType {
+            t: ctype::INT_TYPE,
+            qualifiers: Qualifiers::empty(),
+        },
     };
-    let addition_result = add::compile_add_inner((operand_rvalue, span), (one, span), scope, be, ec)?;
-    compile_assign_to_lval(operand, (addition_result, span), scope, be, ec)
+    let result = if is_inc {
+        add::compile_add_inner((operand_rvalue, span), (one, span), scope, be, ec)?
+    } else {
+        sub::compile_sub_inner((operand_rvalue, span), (one, span), scope, be, ec)?
+    };
+    compile_assign_to_lval(operand, (result, span), scope, be, ec)
+}
+
+fn compile_post_incdec(
+    is_inc: bool,
+    operand: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let span = operand.span;
+    let operand = TypedLValue::new_compile(operand, scope, be, ec)?;
+    if operand.t.is_const() {
+        ec.record_error(CompileError::AssignmentToConstQualified(operand.t), span)?;
+        unreachable!();
+    }
+    if !operand.t.t.is_arithmetic() && !operand.t.t.is_pointer() {
+        ec.record_error(CompileError::ScalarTypeRequired, span)?; // TODO array is scalar, but can't be used here
+        unreachable!();
+    }
+    let operand_rvalue = operand.clone().compile_into_rvalue(scope, be)?;
+    let operand_type = operand_rvalue.t.clone();
+    let old_val = scope.alloc_temp();
+    let width = operand_rvalue.t.t.get_scalar_width().unwrap();
+    be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+        dst: old_val.clone(),
+        src: operand_rvalue.clone().src,
+        width,
+    }));
+    let one = TypedSrc {
+        src: ir::Src::ConstInt(1),
+        t: QualifiedType {
+            t: ctype::INT_TYPE,
+            qualifiers: Qualifiers::empty(),
+        },
+    };
+    let result = if is_inc {
+        add::compile_add_inner((operand_rvalue, span), (one, span), scope, be, ec)?
+    } else {
+        sub::compile_sub_inner((operand_rvalue, span), (one, span), scope, be, ec)?
+    };
+    compile_assign_to_lval(operand, (result, span), scope, be, ec)?;
+    Ok(TypedSrc {
+        src: ir::Src::Var(old_val),
+        t: operand_type,
+    })
 }
 
 #[cfg(test)]
@@ -278,6 +326,154 @@ mod test {
                     dst: VarLocation::Local(2),
                     src: ir::Src::Var(VarLocation::Local(1)),
                     width: ir::Width::Word,
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_unary_5() {
+        let (tu, ec) = compile("void foo(void) { int x, y; x = ++y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(2),
+                    lhs: ir::Src::Var(VarLocation::Local(1)),
+                    rhs: ir::Src::ConstInt(1),
+                    width: ir::Width::Word,
+                    sign: true,
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(1),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_unary_6() {
+        let (tu, ec) = compile("void foo(void) { long int *x, *y; x = --y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Mul(ir::BinaryOp {
+                    dst: VarLocation::Local(2),
+                    lhs: ir::Src::ConstInt(1),
+                    rhs: ir::Src::ConstInt(4),
+                    width: ir::Width::Word,
+                    sign: true,
+                }),
+                ir::Op::Sub(ir::BinaryOp {
+                    dst: VarLocation::Local(3),
+                    lhs: ir::Src::Var(VarLocation::Local(1)),
+                    rhs: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word,
+                    sign: true,
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(1),
+                    src: ir::Src::Var(VarLocation::Local(3)),
+                    width: ir::Width::Word
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(3)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_unary_7() {
+        let (tu, ec) = compile("void foo(void) { int x, y; x = y++; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(2),
+                    src: ir::Src::Var(VarLocation::Local(1)),
+                    width: ir::Width::Word
+                }),
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(3),
+                    lhs: ir::Src::Var(VarLocation::Local(1)),
+                    rhs: ir::Src::ConstInt(1),
+                    width: ir::Width::Word,
+                    sign: true,
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(1),
+                    src: ir::Src::Var(VarLocation::Local(3)),
+                    width: ir::Width::Word
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_unary_8() {
+        let (tu, ec) = compile("void foo(void) { long int *x, *y; x = y--; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(2),
+                    src: ir::Src::Var(VarLocation::Local(1)),
+                    width: ir::Width::Word
+                }),
+                ir::Op::Mul(ir::BinaryOp {
+                    dst: VarLocation::Local(3),
+                    lhs: ir::Src::ConstInt(1),
+                    rhs: ir::Src::ConstInt(4),
+                    width: ir::Width::Word,
+                    sign: true,
+                }),
+                ir::Op::Sub(ir::BinaryOp {
+                    dst: VarLocation::Local(4),
+                    lhs: ir::Src::Var(VarLocation::Local(1)),
+                    rhs: ir::Src::Var(VarLocation::Local(3)),
+                    width: ir::Width::Word,
+                    sign: true,
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(1),
+                    src: ir::Src::Var(VarLocation::Local(4)),
+                    width: ir::Width::Word
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
