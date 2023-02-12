@@ -27,6 +27,7 @@ mod shift;
 mod sub;
 mod unary;
 
+#[derive(Clone)]
 pub struct TypedSrc {
     pub src: ir::Src,
     pub t: QualifiedType,

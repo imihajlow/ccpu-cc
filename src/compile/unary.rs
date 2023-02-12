@@ -14,6 +14,7 @@ use crate::ir;
 use crate::lvalue::TypedLValue;
 use crate::name_scope::NameScope;
 
+use super::assign::compile_assign_to_lval;
 use super::{add, assign, int_promote, sub};
 use super::{compile_expression, usual_arithmetic_convert, TypedSrc};
 
@@ -30,6 +31,7 @@ pub fn compile_unary_operator(
         UnaryOperator::Minus => compile_unary_minus(operand, scope, be, ec),
         UnaryOperator::Complement => compile_unary_complement(operand, scope, be, ec),
         UnaryOperator::Negate => compile_unary_lnot(operand, scope, be, ec),
+        UnaryOperator::PreIncrement => compile_pre_increment(operand, scope, be, ec),
         _ => todo!(),
     }
 }
@@ -137,6 +139,34 @@ fn compile_unary_lnot(
             qualifiers: Qualifiers::empty(),
         },
     })
+}
+
+fn compile_pre_increment(
+    operand: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let span = operand.span;
+    let operand = TypedLValue::new_compile(operand, scope, be, ec)?;
+    if operand.t.is_const() {
+        ec.record_error(
+            CompileError::AssignmentToConstQualified(operand.t),
+            span,
+        )?;
+        unreachable!();
+    }
+    if !operand.t.t.is_arithmetic() && !operand.t.t.is_pointer() {
+        ec.record_error(CompileError::ScalarTypeRequired, span)?; // TODO array is scalar, but can't be used here
+        unreachable!();
+    }
+    let operand_rvalue = operand.clone().compile_into_rvalue(scope, be)?;
+    let one = TypedSrc {
+        src: ir::Src::ConstInt(1),
+        t: QualifiedType { t: ctype::INT_TYPE, qualifiers: Qualifiers::empty() }
+    };
+    let addition_result = add::compile_add_inner((operand_rvalue, span), (one, span), scope, be, ec)?;
+    compile_assign_to_lval(operand, (addition_result, span), scope, be, ec)
 }
 
 #[cfg(test)]
