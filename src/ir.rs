@@ -1,4 +1,4 @@
-use std::fmt::{Formatter};
+use std::fmt::Formatter;
 
 use crate::machine;
 
@@ -53,6 +53,7 @@ pub enum Op {
     Store(StoreOp),
     Load(LoadOp),
     Call(CallOp),
+    LoadAddr(LoadAddrOp),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +140,12 @@ pub struct CallOp {
     pub dst_width: Width,
     pub name: String,
     pub args: Vec<(Src, Width)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadAddrOp {
+    pub dst: VarLocation,
+    pub src: VarLocation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -255,6 +262,7 @@ impl std::fmt::Display for Op {
             Self::Store(op) => write!(f, "st{}", op),
             Self::Load(op) => write!(f, "ld{}", op),
             Self::Call(op) => write!(f, "call{}", op),
+            Self::LoadAddr(op) => write!(f, "addr{}", op),
         }
     }
 }
@@ -361,6 +369,12 @@ impl std::fmt::Display for ConvOp {
             self.dst,
             self.src
         )
+    }
+}
+
+impl std::fmt::Display for LoadAddrOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, " {}, {}", self.dst, self.src)
     }
 }
 

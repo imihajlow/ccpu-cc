@@ -6,7 +6,7 @@ use crate::block_emitter::BlockEmitter;
 use crate::ctype::{self, QualifiedType, Qualifiers};
 use crate::error::{CompileError, ErrorCollector};
 use crate::ir;
-use crate::lvalue::TypedLValue;
+use crate::lvalue::{LValue, TypedLValue};
 use crate::name_scope::NameScope;
 
 use super::assign::compile_assign_to_lval;
@@ -30,6 +30,7 @@ pub fn compile_unary_operator(
         UnaryOperator::PreDecrement => compile_pre_incdec(false, operand, scope, be, ec),
         UnaryOperator::PostIncrement => compile_post_incdec(true, operand, scope, be, ec),
         UnaryOperator::PostDecrement => compile_post_incdec(false, operand, scope, be, ec),
+        UnaryOperator::Address => compile_address(operand, scope, be, ec),
         _ => todo!(),
     }
 }
@@ -215,6 +216,34 @@ fn compile_post_incdec(
         src: ir::Src::Var(old_val),
         t: operand_type,
     })
+}
+
+fn compile_address(
+    operand: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let operand = TypedLValue::new_compile(operand, scope, be, ec)?;
+
+    let mut t = operand.t.clone();
+    t.wrap_pointer(Qualifiers::empty());
+
+    match operand.lv {
+        LValue::Indirection(src) => Ok(TypedSrc { src, t }),
+        LValue::Var(v) => {
+            scope.fix_in_memory(&v);
+            let dst = scope.alloc_temp();
+            be.append_operation(ir::Op::LoadAddr(ir::LoadAddrOp {
+                dst: dst.clone(),
+                src: v,
+            }));
+            Ok(TypedSrc {
+                src: ir::Src::Var(dst),
+                t,
+            })
+        }
+    }
 }
 
 #[cfg(test)]
@@ -481,6 +510,51 @@ mod test {
                     width: ir::Width::Word
                 })
             ]
+        );
+    }
+
+    #[test]
+    fn test_addr_1() {
+        let (tu, ec) = compile("void foo(void) { int *x, y; x = &y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        let fixed_regs = tu.scope.get_fixed_regs();
+        assert_eq!(fixed_regs.len(), 1);
+        assert!(fixed_regs.contains(&1));
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::LoadAddr(ir::LoadAddrOp {
+                    dst: VarLocation::Local(2),
+                    src: VarLocation::Local(1),
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_addr_2() {
+        let (tu, ec) = compile("void foo(void) { int *x, *y; x = &*y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        let fixed_regs = tu.scope.get_fixed_regs();
+        assert_eq!(fixed_regs.len(), 0);
+        assert_eq!(
+            body[0].ops,
+            vec![ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Src::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })]
         );
     }
 }

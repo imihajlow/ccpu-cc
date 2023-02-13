@@ -2,11 +2,12 @@ use lang_c::{
     ast::StorageClassSpecifier,
     span::{Node, Span},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ctype::QualifiedType,
     error::{CompileError, CompileWarning, ErrorCollector},
+    ir,
 };
 use crate::{
     initializer::TypedValue,
@@ -22,6 +23,7 @@ pub struct NameScope {
     last_static_id: u32,
     defs: Vec<HashMap<Namespace, (Value, Span)>>,
     static_initializers: HashMap<GlobalVarId, TypedValue>,
+    fixed_regs: HashSet<ir::Reg>,
 }
 
 pub enum Value {
@@ -58,6 +60,7 @@ impl NameScope {
             last_static_id: 0,
             defs: vec![HashMap::new()],
             static_initializers: HashMap::new(),
+            fixed_regs: HashSet::new(),
         }
     }
 
@@ -284,15 +287,16 @@ impl NameScope {
         unreachable!();
     }
 
-    pub fn get_var(&self, name: &str, span: Span, ec: &mut ErrorCollector) -> Result<(&QualifiedType, VarLocation), ()> {
+    pub fn get_var(
+        &self,
+        name: &str,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<(&QualifiedType, VarLocation), ()> {
         if let Some(val) = self.get(name) {
             match val {
-                Value::AutoVar(t, r) => {
-                    Ok((t, VarLocation::Local(*r)))
-                }
-                Value::StaticVar(t, id, _, _) => {
-                    Ok((t, VarLocation::Global(id.clone())))
-                }
+                Value::AutoVar(t, r) => Ok((t, VarLocation::Local(*r))),
+                Value::StaticVar(t, id, _, _) => Ok((t, VarLocation::Global(id.clone()))),
                 Value::Type(_) => {
                     ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
                     unreachable!();
@@ -312,6 +316,20 @@ impl NameScope {
             }
         }
         return None;
+    }
+
+    pub fn fix_in_memory(&mut self, var: &VarLocation) {
+        match var {
+            VarLocation::Global(_) => (),
+            VarLocation::Local(n) => {
+                self.fixed_regs.insert(*n);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub fn get_fixed_regs(&self) -> &HashSet<ir::Reg> {
+        &self.fixed_regs
     }
 
     fn alloc_reg(&mut self) -> Reg {
