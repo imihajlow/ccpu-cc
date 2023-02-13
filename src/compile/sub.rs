@@ -98,7 +98,7 @@ pub fn compile_sub_inner(
         } else if rhs.t.t.is_dereferencable() {
             let lhs_pointee = lhs.t.t.clone().dereference().unwrap();
             let rhs_pointee = rhs.t.t.clone().dereference().unwrap();
-            if !lhs_pointee.is_compatible_to(&rhs_pointee) {
+            if !lhs_pointee.is_compatible_to(&rhs_pointee, false) {
                 ec.record_error(CompileError::PointersToIncompatible(lhs.t, rhs.t), rhs_span)?;
                 unreachable!();
             }

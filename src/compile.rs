@@ -88,9 +88,21 @@ pub fn compile_expression(
             })
         }
         Expression::BinaryOperator(o) => binary::compile_binary_operator(*o, scope, be, ec),
-        Expression::GenericSelection(_) => unimplemented!(),
         Expression::UnaryOperator(o) => unary::compile_unary_operator(*o, scope, be, ec),
-        _ => todo!(),
+        Expression::Comma(c) => compile_comma(*c, scope, be, ec),
+        Expression::Conditional(c) => be.append_conditional(*c, scope, ec),
+        Expression::Cast(_) => todo!(),
+        Expression::Call(_) => todo!(),
+        Expression::SizeOfTy(_) => todo!(),
+        Expression::SizeOfVal(_) => todo!(),
+        Expression::AlignOf(_) => todo!(),
+        Expression::OffsetOf(_) => todo!(),
+        Expression::StringLiteral(_) => todo!(),
+        Expression::Member(_) => todo!(),
+        Expression::CompoundLiteral(_) => todo!(),
+        Expression::VaArg(_) => todo!(),
+        Expression::GenericSelection(_) => unimplemented!(),
+        Expression::Statement(_) => unimplemented!(),
     }
 }
 
@@ -360,7 +372,7 @@ fn compile_declaration(
     Ok(())
 }
 
-fn integer_promote(
+pub fn integer_promote(
     src: (TypedSrc, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
@@ -402,4 +414,18 @@ fn usual_arithmetic_convert(
     } else {
         unreachable!()
     }
+}
+
+fn compile_comma(
+    c: Vec<Node<Expression>>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let mut result = None;
+    for e in c {
+        let r = compile_expression(e, scope, be, ec)?;
+        result.replace(r);
+    }
+    Ok(result.unwrap())
 }

@@ -182,7 +182,7 @@ pub fn compile_cmp_inner(
     } else if lhs.t.t.is_dereferencable() && rhs.t.t.is_dereferencable() {
         let lhs_inner = lhs.t.clone().dereference().unwrap();
         let rhs_inner = rhs.t.clone().dereference().unwrap();
-        if !lhs_inner.is_compatible_to(&rhs_inner) {
+        if !lhs_inner.is_compatible_to(&rhs_inner, false) {
             if (kind != ir::CompareKind::Equal && kind != ir::CompareKind::NotEqual)
                 || (!lhs_inner.t.is_void() && !rhs_inner.t.is_void())
             {

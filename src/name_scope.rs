@@ -18,6 +18,7 @@ use crate::{
  * Keep track of symbols across the whole translation unit.
  * Manages values of symbols and builds the export and import lists.
  */
+#[derive(Clone)]
 pub struct NameScope {
     last_reg: Reg,
     last_static_id: u32,
@@ -26,6 +27,7 @@ pub struct NameScope {
     fixed_regs: HashSet<ir::Reg>,
 }
 
+#[derive(Clone)]
 pub enum Value {
     Type(QualifiedType),
     AutoVar(QualifiedType, Reg),
@@ -37,7 +39,7 @@ pub enum Value {
     ),
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Clone)]
 enum Namespace {
     Default(String),
     Tag(String),

@@ -133,10 +133,13 @@ pub fn compile_assign_to_lval(
             }
         }
         Ok(rhs_casted)
-    } else {
+    } else if lhs_lval.t.is_compatible_to(&rhs_val.t, true) {
         // the left operand has an atomic, qualified, or unqualified version of a structure or union type
         // compatible with the type of the right;
-        todo!()
+        todo!("{}", rhs_val.t)
+    } else {
+        ec.record_error(CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t), rhs_span)?;
+        unreachable!();
     }
 }
 

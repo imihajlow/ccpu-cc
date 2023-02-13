@@ -1,18 +1,25 @@
 use std::{collections::HashMap, fmt::Formatter, mem};
 
 use lang_c::{
-    ast::{DoWhileStatement, Expression, ForStatement, IfStatement, WhileStatement},
+    ast::{
+        ConditionalExpression, DoWhileStatement, Expression, ForStatement, IfStatement,
+        WhileStatement,
+    },
     span::Node,
 };
 
 use crate::{
-    compile::{self, compile_expression, compile_statement, convert_to_bool, TypedSrc},
+    compile::{
+        self, cast, compile_expression, compile_statement, convert_to_bool, integer_promote,
+        TypedSrc,
+    },
     ctype::{self, QualifiedType, Qualifiers},
     error::{CompileError, ErrorCollector},
     ir,
     name_scope::NameScope,
 };
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LabeledTail {
     // TODO remove pub
     Tail(ir::Tail),
@@ -21,6 +28,7 @@ pub enum LabeledTail {
 
 pub type LabeledBlock = ir::GenericBlock<LabeledTail>; // TODO remove pub
 
+#[derive(Clone)]
 pub struct BlockEmitter {
     next_id: usize,
     current_id: usize,
@@ -88,7 +96,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Jump(cont_block_id)),
-            else_block_id
+            else_block_id,
         );
 
         if let Some(elses) = ifs.node.else_statement {
@@ -225,6 +233,174 @@ impl BlockEmitter {
         })
     }
 
+    pub fn append_conditional(
+        &mut self,
+        c: Node<ConditionalExpression>,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<TypedSrc, ()> {
+        let cond_span = c.node.condition.span;
+        let then_span = c.node.then_expression.span;
+        let else_span = c.node.else_expression.span;
+        let cond = compile_expression(*c.node.condition, scope, self, ec)?;
+        let cond_width = cond.t.t.get_scalar_width().ok_or_else(|| {
+            ec.record_error(CompileError::ScalarTypeRequired, cond_span)
+                .ok();
+        })?;
+        let cond_dst = scope.alloc_temp();
+        self.append_operation(ir::Op::Bool(ir::UnaryUnsignedOp {
+            dst: cond_dst.clone(),
+            src: cond.src,
+            width: cond_width,
+        }));
+
+        let then_block = self.alloc_block_id();
+        let else_block = self.alloc_block_id();
+        let cont_block = self.alloc_block_id();
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Cond(
+                ir::Src::Var(cond_dst),
+                then_block,
+                else_block,
+            )),
+            then_block,
+        );
+
+        let (then_type, else_type) = {
+            // alas, compile twice
+            let mut temp_scope = scope.clone();
+            let mut temp_be = self.clone();
+
+            let then_expr = compile_expression(
+                (*c.node.then_expression).clone(),
+                &mut temp_scope,
+                &mut temp_be,
+                ec,
+            )?;
+            let else_expr = compile_expression(
+                (*c.node.else_expression).clone(),
+                &mut temp_scope,
+                &mut temp_be,
+                ec,
+            )?;
+            (then_expr.t, else_expr.t)
+        };
+
+        if then_type.t.is_void() && else_type.t.is_void() {
+            todo!()
+        } else if then_type.t.is_arithmetic() && else_type.t.is_arithmetic() {
+            let result_dst = scope.alloc_temp();
+
+            if then_type.t.is_integer() && else_type.t.is_integer() {
+                let common_type = {
+                    let then_type_promoted = then_type.t.clone().promote();
+                    let else_type_promoted = else_type.t.clone().promote();
+                    then_type_promoted.least_common_int_type(&else_type_promoted)
+                };
+                let width = common_type.get_scalar_width().unwrap();
+
+                let then_src = compile_expression(*c.node.then_expression, scope, self, ec)?;
+                let then_promoted = integer_promote((then_src, then_span), scope, self, ec)?;
+                let then_casted = cast(
+                    then_promoted,
+                    &common_type,
+                    false,
+                    then_span,
+                    scope,
+                    self,
+                    ec,
+                )?;
+                self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: result_dst.clone(),
+                    src: then_casted.src,
+                    width,
+                }));
+
+                self.finish_block(LabeledTail::Tail(ir::Tail::Jump(cont_block)), else_block);
+
+                let else_src = compile_expression(*c.node.else_expression, scope, self, ec)?;
+                let else_promoted = integer_promote((else_src, else_span), scope, self, ec)?;
+                let else_casted = cast(
+                    else_promoted,
+                    &common_type,
+                    false,
+                    else_span,
+                    scope,
+                    self,
+                    ec,
+                )?;
+                self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: result_dst.clone(),
+                    src: else_casted.src,
+                    width,
+                }));
+
+                self.finish_block(LabeledTail::Tail(ir::Tail::Jump(cont_block)), cont_block);
+                Ok(TypedSrc {
+                    src: ir::Src::Var(result_dst),
+                    t: QualifiedType {
+                        t: common_type,
+                        qualifiers: Qualifiers::empty(),
+                    },
+                })
+            } else {
+                todo!("float")
+            }
+        } else if then_type.t.is_dereferencable() && else_type.t.is_dereferencable() {
+            let then_pointee = then_type.clone().dereference().unwrap();
+            let else_pointee = else_type.clone().dereference().unwrap();
+            let common_type = if !then_pointee.t.is_void()
+                && !else_pointee.t.is_void()
+                && then_pointee.is_compatible_to(&else_pointee, false)
+            {
+                then_type
+            } else if then_pointee.t.is_void() {
+                else_type
+            } else if else_pointee.t.is_void() {
+                then_type
+            } else {
+                ec.record_error(
+                    CompileError::IncompatibleTypes(then_type, else_type),
+                    else_span,
+                )?;
+                unreachable!()
+            };
+            let result_dst = scope.alloc_temp();
+            let width = common_type.t.get_scalar_width().unwrap();
+
+            let then_src = compile_expression(*c.node.then_expression, scope, self, ec)?;
+            self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: result_dst.clone(),
+                src: then_src.src,
+                width,
+            }));
+
+            self.finish_block(LabeledTail::Tail(ir::Tail::Jump(cont_block)), else_block);
+
+            let else_src = compile_expression(*c.node.else_expression, scope, self, ec)?;
+            self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: result_dst.clone(),
+                src: else_src.src,
+                width,
+            }));
+
+            self.finish_block(LabeledTail::Tail(ir::Tail::Jump(cont_block)), cont_block);
+            Ok(TypedSrc {
+                src: ir::Src::Var(result_dst),
+                t: common_type,
+            })
+        } else if then_type.t.is_same_struct_union(&else_type.t) {
+            todo!()
+        } else {
+            ec.record_error(
+                CompileError::IncompatibleTypes(then_type, else_type),
+                else_span,
+            )?;
+            unreachable!();
+        }
+    }
+
     pub fn append_while(
         &mut self,
         whiles: Node<WhileStatement>,
@@ -278,5 +454,75 @@ impl std::fmt::Display for LabeledTail {
             LabeledTail::Tail(t) => write!(f, "{}", t),
             LabeledTail::GotoLabel(l) => write!(f, "jmp {}", l),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ir::{self, VarLocation};
+    use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
+
+    use super::*;
+
+    fn compile(code: &str) -> (TranslationUnit, ErrorCollector) {
+        use lang_c::driver::{parse_preprocessed, Config, Flavor};
+        let mut cfg = Config::default();
+        cfg.flavor = Flavor::StdC11;
+        let p = parse_preprocessed(&cfg, code.to_string()).unwrap();
+        let mut ec = ErrorCollector::new();
+        let tu = TranslationUnit::translate(p.unit, &mut ec).unwrap();
+        assert_eq!(ec.get_error_count(), 0);
+        (tu, ec)
+    }
+
+    fn get_first_body(tu: &TranslationUnit) -> &Vec<LabeledBlock> {
+        tu.functions.first().unwrap().get_body()
+    }
+
+    #[test]
+    fn test_ternary_1() {
+        let (tu, ec) = compile("void foo(void) { int x, y, z; x = x ? y : z; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 4);
+        assert_eq!(
+            body[0].ops,
+            vec![ir::Op::Bool(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(3),
+                src: ir::Src::Var(VarLocation::Local(0)),
+                width: ir::Width::Word
+            })]
+        );
+        assert_eq!(
+            body[0].tail,
+            LabeledTail::Tail(ir::Tail::Cond(ir::Src::Var(VarLocation::Local(3)), 1, 2))
+        );
+        assert_eq!(
+            body[1].ops,
+            vec![ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(4),
+                src: ir::Src::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })]
+        );
+        assert_eq!(body[1].tail, LabeledTail::Tail(ir::Tail::Jump(3)));
+        assert_eq!(
+            body[2].ops,
+            vec![ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(4),
+                src: ir::Src::Var(VarLocation::Local(2)),
+                width: ir::Width::Word
+            })]
+        );
+        assert_eq!(body[2].tail, LabeledTail::Tail(ir::Tail::Jump(3)));
+        assert_eq!(
+            body[3].ops,
+            vec![ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Src::Var(VarLocation::Local(4)),
+                width: ir::Width::Word
+            })]
+        );
     }
 }

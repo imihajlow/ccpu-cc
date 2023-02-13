@@ -1,5 +1,4 @@
 use lang_c::ast::UnaryOperatorExpression;
-use lang_c::span::Span;
 use lang_c::{ast::Expression, span::Node};
 
 use crate::block_emitter::BlockEmitter;
