@@ -31,7 +31,7 @@ pub fn compile_unary_operator(
         UnaryOperator::PostIncrement => compile_post_incdec(true, operand, scope, be, ec),
         UnaryOperator::PostDecrement => compile_post_incdec(false, operand, scope, be, ec),
         UnaryOperator::Address => compile_address(operand, scope, be, ec),
-        _ => todo!(),
+        UnaryOperator::Indirection => compile_deref(operand, scope, be, ec),
     }
 }
 
@@ -242,6 +242,39 @@ fn compile_address(
                 src: ir::Src::Var(dst),
                 t,
             })
+        }
+    }
+}
+
+fn compile_deref(
+    operand: Node<Expression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedSrc, ()> {
+    let span = operand.span;
+    let operand = compile_expression(operand, scope, be, ec)?;
+
+    match operand.t.dereference() {
+        Ok(pointee) => {
+            if let Some(width) = pointee.t.get_scalar_width() {
+                let dst = scope.alloc_temp();
+                be.append_operation(ir::Op::Load(ir::LoadOp {
+                    dst: dst.clone(),
+                    src_addr: operand.src,
+                    width,
+                }));
+                Ok(TypedSrc {
+                    src: ir::Src::Var(dst),
+                    t: pointee,
+                })
+            } else {
+                todo!()
+            }
+        }
+        Err(t) => {
+            ec.record_error(CompileError::BadIndirection(t), span)?;
+            unreachable!();
         }
     }
 }
@@ -555,6 +588,32 @@ mod test {
                 src: ir::Src::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
+        );
+    }
+
+    #[test]
+    fn test_deref_1() {
+        let (tu, ec) = compile("void foo(void) { int x, *y; x = *y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        let fixed_regs = tu.scope.get_fixed_regs();
+        assert_eq!(fixed_regs.len(), 0);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Load(ir::LoadOp {
+                    dst: VarLocation::Local(2),
+                    src_addr: ir::Src::Var(VarLocation::Local(1)),
+                    width: ir::Width::Word,
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Src::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word
+                })
+            ]
         );
     }
 }
