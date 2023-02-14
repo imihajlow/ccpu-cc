@@ -5,7 +5,7 @@ use lang_c::{
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ctype::QualifiedType,
+    ctype::{FunctionArgs, QualifiedType},
     error::{CompileError, CompileWarning, ErrorCollector},
     ir,
 };
@@ -31,6 +31,7 @@ pub struct NameScope {
 pub enum Value {
     Type(QualifiedType),
     AutoVar(QualifiedType, Reg),
+    Arg(QualifiedType, usize),
     StaticVar(
         QualifiedType,
         GlobalVarId,
@@ -88,6 +89,24 @@ impl NameScope {
                 self.static_initializers.insert(id, initializer);
             }
         }
+    }
+
+    /**
+     * Push scope and declare function arguments.
+     */
+    pub fn start_function(&mut self, args: &FunctionArgs) {
+        let mut defs = HashMap::new();
+        if let FunctionArgs::List(l) = args {
+            for (i, (t, name, span)) in l.iter().enumerate() {
+                if let Some(name) = name {
+                    defs.insert(
+                        Namespace::Default(name.to_string()),
+                        (Value::Arg(t.clone(), i), *span),
+                    );
+                }
+            }
+        }
+        self.defs.push(defs);
     }
 
     /**
@@ -298,6 +317,7 @@ impl NameScope {
         if let Some(val) = self.get(name) {
             match val {
                 Value::AutoVar(t, r) => Ok((t, VarLocation::Local(*r))),
+                Value::Arg(t, n) => Ok((t, VarLocation::Arg(*n))),
                 Value::StaticVar(t, id, _, _) => Ok((t, VarLocation::Global(id.clone()))),
                 Value::Type(_) => {
                     ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
@@ -326,6 +346,7 @@ impl NameScope {
             VarLocation::Local(n) => {
                 self.fixed_regs.insert(*n);
             }
+            VarLocation::Arg(_) => (),
         }
     }
 
@@ -384,6 +405,7 @@ impl Value {
         match self {
             Value::Type(t) => t,
             Value::AutoVar(t, _) => t,
+            Value::Arg(t, _) => t,
             Value::StaticVar(t, _, _, _) => t,
         }
     }

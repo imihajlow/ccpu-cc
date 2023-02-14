@@ -9,7 +9,7 @@ use replace_with::replace_with_or_abort;
 use std::fmt::Formatter;
 
 #[rustfmt::skip]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CType {
     Void,
     Bool,
@@ -23,14 +23,14 @@ pub enum CType {
     Function { result: Box<QualifiedType>, args: FunctionArgs, vararg: bool },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FunctionArgs {
     Empty,
     Void,
-    List(Vec<(QualifiedType, Option<String>)>),
+    List(Vec<(QualifiedType, Option<String>, Span)>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QualifiedType {
     pub t: CType,
     pub qualifiers: Qualifiers,
@@ -202,7 +202,7 @@ impl FunctionArgs {
                 } else {
                     v1.iter()
                         .zip(v2)
-                        .all(|((t1, _), (t2, _))| t1.is_compatible_to(t2, true))
+                        .all(|((t1, _, _), (t2, _, _))| t1.is_compatible_to(t2, true))
                 }
             }
             _ => false,
@@ -494,14 +494,46 @@ impl std::fmt::Display for CType {
             Struct(id) => write!(f, "struct {}", id),
             Union(id) => write!(f, "union {}", id),
             Enum(id) => write!(f, "enum {}", id),
-            Function { .. } => todo!(),
+            Function {
+                result,
+                args,
+                vararg,
+            } => write!(
+                f,
+                "(fn ({}{}) -> {})",
+                result,
+                args,
+                if *vararg { ", ..." } else { "" }
+            ),
         }
     }
 }
 
+impl std::fmt::Display for FunctionArgs {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            FunctionArgs::Empty => Ok(()),
+            FunctionArgs::Void => f.write_str("void"),
+            FunctionArgs::List(l) => {
+                for s in l
+                    .iter()
+                    .map(|(t, _, _)| format!("{}", t))
+                    .intersperse(", ".to_string())
+                {
+                    f.write_str(&s)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
 impl std::fmt::Display for QualifiedType {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{} {}", self.t, self.qualifiers)
+        if !self.qualifiers.is_empty() {
+            write!(f, "{} {}", self.t, self.qualifiers)
+        } else {
+            write!(f, "{}", self.t)
+        }
     }
 }
 

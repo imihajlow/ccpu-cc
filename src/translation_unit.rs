@@ -153,7 +153,7 @@ mod test {
 
     use super::*;
 
-    use lang_c::driver::{parse_preprocessed, Config, Flavor};
+    use lang_c::{driver::{parse_preprocessed, Config, Flavor}, span::Span};
 
     fn translate(code: &str) -> (Result<TranslationUnit, ()>, ErrorCollector) {
         let mut cfg = Config::default();
@@ -791,7 +791,8 @@ mod test {
                         t: ctype::INT_TYPE,
                         qualifiers: Qualifiers::empty()
                     },
-                    Some("x".to_string())
+                    Some("x".to_string()),
+                    Span::span(7, 12)
                 )]),
                 vararg: false
             }

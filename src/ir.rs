@@ -18,6 +18,7 @@ pub type BlockNumber = usize;
 pub enum VarLocation {
     Global(GlobalVarId),
     Local(Reg),
+    Arg(usize),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -404,6 +405,7 @@ impl std::fmt::Display for VarLocation {
         match self {
             VarLocation::Local(r) => write!(f, "%{}", r),
             VarLocation::Global(id) => write!(f, "{}", id),
+            VarLocation::Arg(p) => write!(f, "%a{}", p),
         }
     }
 }

@@ -36,7 +36,7 @@ impl Function {
         if !node.node.declarations.is_empty() {
             unimplemented!("K&R functions");
         }
-        let (mut type_builder, storage_class, extra) =
+        let (type_builder, storage_class, extra) =
             TypeBuilder::new_from_specifiers(node.node.specifiers, scope, ec)?;
         let storage_class = match storage_class {
             None => GlobalStorageClass::Default,
@@ -65,8 +65,10 @@ impl Function {
         } else {
             unreachable!()
         };
+        scope.start_function(&args);
         let mut be = BlockEmitter::new();
         compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
+        scope.pop_and_collect_initializers();
         Ok(Self {
             is_inline: extra.is_inline,
             is_noreturn: extra.is_noreturn,
