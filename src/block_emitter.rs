@@ -292,7 +292,21 @@ impl BlockEmitter {
         };
 
         if then_type.t.is_void() && else_type.t.is_void() {
-            todo!()
+            compile_expression(*c.node.then_expression, scope, self, ec)?;
+
+            self.finish_block(LabeledTail::Tail(ir::Tail::Jump(cont_block)), else_block);
+
+            compile_expression(*c.node.else_expression, scope, self, ec)?;
+
+            self.finish_block(LabeledTail::Tail(ir::Tail::Jump(cont_block)), cont_block);
+
+            Ok(TypedRValue {
+                src: RValue::new_void(),
+                t: QualifiedType {
+                    t: ctype::CType::Void,
+                    qualifiers: Qualifiers::empty(),
+                },
+            })
         } else if then_type.t.is_arithmetic() && else_type.t.is_arithmetic() {
             let result_dst = scope.alloc_temp();
 

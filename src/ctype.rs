@@ -268,6 +268,14 @@ impl CType {
         }
     }
 
+    pub fn is_any_float(&self) -> bool {
+        if let CType::Float(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_scalar(&self) -> bool {
         use CType::*;
         match self {

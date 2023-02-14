@@ -44,6 +44,7 @@ pub enum CompileError {
     ArithmeticTypeRequired,
     IntegerTypeRequired,
     ScalarTypeRequired,
+    ArithmeticOrPointerTypeRequired(QualifiedType),
     PointerTypeRequired,
     BadTypesForOperator(String),
     CannotCompare(QualifiedType, QualifiedType),
@@ -209,6 +210,11 @@ impl std::fmt::Display for CompileError {
                 f,
                 "`{}' and `{}' are not pointers to compatible types",
                 t1, t2
+            ),
+            CompileError::ArithmeticOrPointerTypeRequired(t) => write!(
+                f,
+                "used type `{}' where arithmetic or pointer type is required",
+                t
             ),
         }
     }

@@ -1,3 +1,4 @@
+use lang_c::ast::CastExpression;
 use lang_c::span::Span;
 use lang_c::{
     ast::{BlockItem, Declaration, Expression, Initializer, Statement, StorageClassSpecifier},
@@ -7,7 +8,6 @@ use lang_c::{
 use crate::ctype::{self, CType, Qualifiers};
 use crate::error::CompileError;
 use crate::lvalue::TypedLValue;
-use crate::machine;
 use crate::{
     block_emitter::BlockEmitter,
     constant,
@@ -19,6 +19,7 @@ use crate::{
     rvalue::{RValue, TypedRValue},
     type_builder::TypeBuilder,
 };
+use crate::{machine, type_builder};
 
 mod add;
 mod assign;
@@ -72,7 +73,7 @@ pub fn compile_expression(
         Expression::UnaryOperator(o) => unary::compile_unary_operator(*o, scope, be, ec),
         Expression::Comma(c) => compile_comma(*c, scope, be, ec),
         Expression::Conditional(c) => be.append_conditional(*c, scope, ec),
-        Expression::Cast(_) => todo!(),
+        Expression::Cast(c) => compile_cast(*c, scope, be, ec),
         Expression::Call(_) => todo!(),
         Expression::SizeOfTy(_) => todo!(),
         Expression::SizeOfVal(_) => todo!(),
@@ -175,6 +176,11 @@ pub fn cast(
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<TypedRValue, ()> {
+    assert!(target_type.is_scalar());
+    assert!(src.t.t.is_scalar());
+    if target_type.is_any_float() || src.t.t.is_any_float() {
+        todo!()
+    }
     let (dst_width, dst_sign) = target_type.get_width_sign().unwrap();
     let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
     if (dst_width, dst_sign) != (src_width, src_sign) {
@@ -410,4 +416,44 @@ fn compile_comma(
         result.replace(r);
     }
     Ok(result.unwrap())
+}
+
+fn compile_cast(
+    c: Node<CastExpression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedRValue, ()> {
+    let type_span = c.node.type_name.span;
+    let expr_span = c.node.expression.span;
+    let target_type = type_builder::build_type_from_ast_type_name(c.node.type_name, scope, ec)?;
+    let val = compile_expression(*c.node.expression, scope, be, ec)?;
+
+    if target_type.t.is_void() {
+        Ok(TypedRValue {
+            src: RValue::new_void(),
+            t: target_type,
+        })
+    } else if target_type.t.is_arithmetic() || target_type.t.is_pointer() {
+        if !val.t.t.is_scalar() {
+            ec.record_error(CompileError::ScalarTypeRequired, expr_span)?;
+            unreachable!();
+        }
+
+        let casted = cast(val, &target_type.t, false, c.span, scope, be, ec)?;
+
+        Ok(TypedRValue {
+            src: casted.src,
+            t: QualifiedType {
+                t: casted.t.t,
+                qualifiers: target_type.qualifiers,
+            },
+        })
+    } else {
+        ec.record_error(
+            CompileError::ArithmeticOrPointerTypeRequired(target_type),
+            type_span,
+        )?;
+        unreachable!();
+    }
 }
