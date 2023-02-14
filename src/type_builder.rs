@@ -16,6 +16,7 @@ use lang_c::ast::DeclarationSpecifier;
 use lang_c::ast::Ellipsis;
 use lang_c::ast::FunctionSpecifier;
 use lang_c::ast::StorageClassSpecifier;
+use lang_c::ast::TypeName;
 use lang_c::span::Node;
 use lang_c::span::Span;
 use std::fmt::Formatter;
@@ -513,6 +514,23 @@ impl TypeBuilderStage2 {
             DerivedDeclarator::Block(_) => unimplemented!(),
         }
         Ok(())
+    }
+}
+
+pub fn build_type_from_ast_type_name(
+    node: Node<TypeName>,
+    scope: &NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<QualifiedType, ()> {
+    let mut builder = TypeBuilder::new();
+    for sq in node.node.specifiers {
+        builder.add_specifier_qualifier_node(sq, scope, ec)?;
+    }
+    let stage2 = builder.stage2(node.span, ec)?;
+    if let Some(declarator) = node.node.declarator {
+        Ok(stage2.process_declarator_node(declarator, scope, ec)?.1)
+    } else {
+        Ok(stage2.finalize())
     }
 }
 
