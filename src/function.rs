@@ -1,6 +1,10 @@
 use std::fmt::Formatter;
 
-use crate::{name_scope::{GlobalStorageClass, NameScope}, compile, block_emitter::{BlockEmitter, LabeledBlock}};
+use crate::{
+    block_emitter::{BlockEmitter, LabeledBlock},
+    compile,
+    name_scope::{GlobalStorageClass, NameScope},
+};
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
@@ -80,7 +84,6 @@ impl Function {
         &self.body
     }
 }
-
 
 impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {

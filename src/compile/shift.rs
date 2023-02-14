@@ -5,8 +5,9 @@ use crate::block_emitter::BlockEmitter;
 use crate::error::{CompileError, ErrorCollector};
 use crate::ir;
 use crate::name_scope::NameScope;
+use crate::rvalue::{RValue, TypedRValue};
 
-use super::{compile_expression, int_promote, TypedSrc};
+use super::{compile_expression, int_promote};
 
 pub fn compile_lshift(
     lhs: Node<Expression>,
@@ -14,7 +15,7 @@ pub fn compile_lshift(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
@@ -29,7 +30,7 @@ pub fn compile_rshift(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
@@ -39,33 +40,33 @@ pub fn compile_rshift(
 }
 
 pub fn compile_lshift_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     compile_shift_inner(lhs, rhs, ir::Op::LShift, scope, be, ec)
 }
 
 pub fn compile_rshift_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     compile_shift_inner(lhs, rhs, ir::Op::RShift, scope, be, ec)
 }
 
 fn compile_shift_inner<F>(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     constr: F,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()>
+) -> Result<TypedRValue, ()>
 where
     F: FnOnce(ir::ShiftOp) -> ir::Op,
 {
@@ -84,20 +85,22 @@ where
     let lhs = int_promote(lhs, scope, be);
     let rhs = int_promote(rhs, scope, be);
 
+    let (lhs_scalar, lhs_type) = lhs.unwrap_scalar_and_type();
+
     let dst = scope.alloc_temp();
-    let (lhs_width, lhs_sign) = lhs.t.t.get_width_sign().unwrap();
+    let (lhs_width, lhs_sign) = lhs_type.t.get_width_sign().unwrap();
 
     be.append_operation(constr(ir::ShiftOp {
         dst: dst.clone(),
         lhs_width,
         lhs_sign,
-        lhs: lhs.src,
-        rhs: rhs.src,
+        lhs: lhs_scalar,
+        rhs: rhs.unwrap_scalar(),
     }));
 
-    Ok(TypedSrc {
-        src: ir::Src::Var(dst),
-        t: lhs.t,
+    Ok(TypedRValue {
+        src: RValue::new_var(dst),
+        t: lhs_type,
     })
 }
 
@@ -137,12 +140,12 @@ mod test {
                     dst: VarLocation::Local(3),
                     lhs_width: ir::Width::Dword,
                     lhs_sign: true,
-                    lhs: ir::Src::Var(VarLocation::Local(1)),
-                    rhs: ir::Src::Var(VarLocation::Local(2))
+                    lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(2))
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(3)),
+                    src: ir::Scalar::Var(VarLocation::Local(3)),
                     width: ir::Width::Dword
                 })
             ]
@@ -163,12 +166,12 @@ mod test {
                     dst: VarLocation::Local(2),
                     lhs_width: ir::Width::Dword,
                     lhs_sign: true,
-                    lhs: ir::Src::Var(VarLocation::Local(0)),
-                    rhs: ir::Src::Var(VarLocation::Local(1))
+                    lhs: ir::Scalar::Var(VarLocation::Local(0)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(1))
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(2)),
+                    src: ir::Scalar::Var(VarLocation::Local(2)),
                     width: ir::Width::Dword
                 })
             ]

@@ -4,6 +4,7 @@ use lang_c::{ast::Expression, span::Node};
 use crate::ctype::CType;
 use crate::error::CompileError;
 use crate::lvalue::TypedLValue;
+use crate::rvalue::TypedRValue;
 use crate::{
     block_emitter::BlockEmitter,
     error::{CompileWarning, ErrorCollector},
@@ -11,7 +12,7 @@ use crate::{
     name_scope::NameScope,
 };
 
-use super::{cast, compile_expression, TypedSrc};
+use super::{cast, compile_expression};
 
 /**
  * Assignment according to 6.5.16.1
@@ -22,7 +23,7 @@ pub fn compile_assign(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let lhs_lval = TypedLValue::new_compile(lhs, scope, be, ec)?;
     if lhs_lval.t.is_const() {
@@ -42,11 +43,11 @@ pub fn compile_assign(
  */
 pub fn compile_assign_to_lval(
     lhs_lval: TypedLValue,
-    rhs: (TypedSrc, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     use crate::lvalue::LValue;
     let (rhs_val, rhs_span) = rhs;
 
@@ -59,14 +60,14 @@ pub fn compile_assign_to_lval(
             LValue::Var(v) => {
                 be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: v,
-                    src: rhs_casted.src.clone(),
+                    src: rhs_casted.clone().unwrap_scalar(),
                     width,
                 }));
             }
             LValue::Indirection(addr) => {
                 be.append_operation(ir::Op::Store(ir::StoreOp {
                     dst_addr: addr,
-                    src: rhs_casted.src.clone(),
+                    src: rhs_casted.clone().unwrap_scalar(),
                     width,
                 }));
             }
@@ -120,14 +121,14 @@ pub fn compile_assign_to_lval(
             LValue::Var(v) => {
                 be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: v,
-                    src: rhs_casted.src.clone(),
+                    src: rhs_casted.clone().unwrap_scalar(),
                     width,
                 }));
             }
             LValue::Indirection(addr) => {
                 be.append_operation(ir::Op::Store(ir::StoreOp {
                     dst_addr: addr,
-                    src: rhs_casted.src.clone(),
+                    src: rhs_casted.clone().unwrap_scalar(),
                     width,
                 }));
             }
@@ -138,7 +139,10 @@ pub fn compile_assign_to_lval(
         // compatible with the type of the right;
         todo!("{}", rhs_val.t)
     } else {
-        ec.record_error(CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t), rhs_span)?;
+        ec.record_error(
+            CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t),
+            rhs_span,
+        )?;
         unreachable!();
     }
 }
@@ -184,7 +188,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::ConstInt(15),
+                src: ir::Scalar::ConstInt(15),
                 width: ir::Width::Word
             })]
         );
@@ -203,13 +207,13 @@ mod test {
                     dst: VarLocation::Local(1),
                     dst_sign: false,
                     dst_width: ir::Width::Byte,
-                    src: ir::Src::ConstInt(15),
+                    src: ir::Scalar::ConstInt(15),
                     src_sign: true,
                     src_width: ir::Width::Word
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(1)),
+                    src: ir::Scalar::Var(VarLocation::Local(1)),
                     width: ir::Width::Byte
                 }),
             ]
@@ -225,8 +229,8 @@ mod test {
         assert_eq!(
             body[0].ops,
             vec![ir::Op::Store(ir::StoreOp {
-                dst_addr: ir::Src::Var(VarLocation::Local(0)),
-                src: ir::Src::ConstInt(15),
+                dst_addr: ir::Scalar::Var(VarLocation::Local(0)),
+                src: ir::Scalar::ConstInt(15),
                 width: ir::Width::Word
             })]
         );
@@ -242,7 +246,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::ConstInt(15),
+                src: ir::Scalar::ConstInt(15),
                 width: ir::Width::Word
             })]
         );
@@ -258,7 +262,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::Var(VarLocation::Local(1)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
         );
@@ -274,7 +278,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::Var(VarLocation::Local(1)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
         );
@@ -290,7 +294,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::Var(VarLocation::Local(1)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
         );
@@ -306,7 +310,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::Var(VarLocation::Local(1)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
         );
@@ -322,7 +326,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::Var(VarLocation::Local(1)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
         );
@@ -338,7 +342,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::Var(VarLocation::Local(1)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
         );
@@ -354,7 +358,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::Var(VarLocation::Local(1)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
         );

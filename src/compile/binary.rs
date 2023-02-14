@@ -12,16 +12,17 @@ use crate::error::{CompileError, ErrorCollector};
 use crate::ir;
 use crate::lvalue::TypedLValue;
 use crate::name_scope::NameScope;
+use crate::rvalue::{RValue, TypedRValue};
 
 use super::{add, assign, sub};
-use super::{compile_expression, usual_arithmetic_convert, TypedSrc};
+use super::{compile_expression, usual_arithmetic_convert};
 
 pub fn compile_binary_operator(
     op: Node<BinaryOperatorExpression>,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     use lang_c::ast::BinaryOperator;
     match op.node.operator.node {
         BinaryOperator::Assign => assign::compile_assign(*op.node.lhs, *op.node.rhs, scope, be, ec),
@@ -138,7 +139,7 @@ fn compile_multiplicative<F>(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()>
+) -> Result<TypedRValue, ()>
 where
     F: FnOnce(ir::BinaryOp) -> ir::Op,
 {
@@ -151,13 +152,13 @@ where
 }
 
 fn compile_multiplicative_inner<F>(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     constr: F,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()>
+) -> Result<TypedRValue, ()>
 where
     F: FnOnce(ir::BinaryOp) -> ir::Op,
 {
@@ -166,19 +167,20 @@ where
 
     if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
         let (lhs, rhs) = usual_arithmetic_convert((lhs, lhs_span), (rhs, rhs_span), scope, be, ec)?;
-        if lhs.t.t.is_integer() {
-            let (width, sign) = lhs.t.t.get_width_sign().unwrap();
+        let (lhs_scalar, lhs_type) = lhs.unwrap_scalar_and_type();
+        if lhs_type.t.is_integer() {
+            let (width, sign) = lhs_type.t.get_width_sign().unwrap();
             let target = scope.alloc_temp();
             be.append_operation(constr(ir::BinaryOp {
                 dst: target.clone(),
                 width,
                 sign,
-                lhs: lhs.src,
-                rhs: rhs.src,
+                lhs: lhs_scalar,
+                rhs: rhs.unwrap_scalar(),
             }));
-            Ok(TypedSrc {
-                src: ir::Src::Var(target),
-                t: lhs.t,
+            Ok(TypedRValue {
+                src: RValue::new_var(target),
+                t: lhs_type,
             })
         } else {
             todo!()
@@ -194,32 +196,32 @@ where
 }
 
 fn compile_mul_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     compile_multiplicative_inner(lhs, rhs, ir::Op::Mul, scope, be, ec)
 }
 
 fn compile_div_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     compile_multiplicative_inner(lhs, rhs, ir::Op::Div, scope, be, ec)
 }
 
 fn compile_mod_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     compile_multiplicative_inner(lhs, rhs, ir::Op::Mod, scope, be, ec)
 }
 
@@ -230,7 +232,7 @@ fn compile_bitwise<F>(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()>
+) -> Result<TypedRValue, ()>
 where
     F: FnOnce(ir::BinaryUnsignedOp) -> ir::Op,
 {
@@ -243,13 +245,13 @@ where
 }
 
 fn compile_bitwise_inner<F>(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     constr: F,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()>
+) -> Result<TypedRValue, ()>
 where
     F: FnOnce(ir::BinaryUnsignedOp) -> ir::Op,
 {
@@ -258,17 +260,18 @@ where
 
     if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
         let (lhs, rhs) = usual_arithmetic_convert((lhs, lhs_span), (rhs, rhs_span), scope, be, ec)?;
-        let (width, _) = lhs.t.t.get_width_sign().unwrap();
+        let (lhs_scalar, lhs_type) = lhs.unwrap_scalar_and_type();
+        let (width, _) = lhs_type.t.get_width_sign().unwrap();
         let target = scope.alloc_temp();
         be.append_operation(constr(ir::BinaryUnsignedOp {
             dst: target.clone(),
             width,
-            lhs: lhs.src,
-            rhs: rhs.src,
+            lhs: lhs_scalar,
+            rhs: rhs.unwrap_scalar(),
         }));
-        Ok(TypedSrc {
-            src: ir::Src::Var(target),
-            t: lhs.t,
+        Ok(TypedRValue {
+            src: RValue::new_var(target),
+            t: lhs_type,
         })
     } else {
         if !lhs.t.t.is_integer() {
@@ -281,32 +284,32 @@ where
 }
 
 fn compile_band_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     compile_bitwise_inner(lhs, rhs, ir::Op::BAnd, scope, be, ec)
 }
 
 fn compile_bor_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     compile_bitwise_inner(lhs, rhs, ir::Op::BOr, scope, be, ec)
 }
 
 fn compile_bxor_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     compile_bitwise_inner(lhs, rhs, ir::Op::BXor, scope, be, ec)
 }
 
@@ -317,15 +320,15 @@ fn compile_binary_and_assign<F>(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()>
+) -> Result<TypedRValue, ()>
 where
     F: FnOnce(
-        (TypedSrc, Span),
-        (TypedSrc, Span),
+        (TypedRValue, Span),
+        (TypedRValue, Span),
         &mut NameScope,
         &mut BlockEmitter,
         &mut ErrorCollector,
-    ) -> Result<TypedSrc, ()>,
+    ) -> Result<TypedRValue, ()>,
 {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;

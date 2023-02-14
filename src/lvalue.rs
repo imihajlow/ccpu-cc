@@ -2,18 +2,19 @@ use lang_c::ast::Expression;
 use lang_c::span::{Node, Span};
 
 use crate::block_emitter::BlockEmitter;
-use crate::compile::{self, compile_expression, TypedSrc, compile_pointer_offset, int_promote};
+use crate::compile::{self, compile_expression, compile_pointer_offset, int_promote};
 use crate::ctype::QualifiedType;
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
 use crate::ir::VarLocation;
-use crate::ir::{self, Src};
+use crate::ir::{self, Scalar};
 use crate::machine;
 use crate::name_scope::NameScope;
+use crate::rvalue::{RValue, TypedRValue};
 
 #[derive(Debug, Clone)]
 pub enum LValue {
     Var(VarLocation),
-    Indirection(Src),
+    Indirection(Scalar),
     // member access TODO
 }
 
@@ -56,10 +57,11 @@ impl TypedLValue {
                 match op.node.operator.node {
                     UnaryOperator::Indirection => {
                         let e = compile_expression(*op.node.operand, scope, be, ec)?;
-                        match e.t.dereference() {
+                        let (e_scalar, e_type) = e.unwrap_scalar_and_type();
+                        match e_type.dereference() {
                             Ok(t) => Ok(TypedLValue {
                                 t,
-                                lv: LValue::Indirection(e.src),
+                                lv: LValue::Indirection(e_scalar),
                             }),
                             Err(t) => {
                                 ec.record_error(CompileError::BadIndirection(t), expr.span)?;
@@ -82,11 +84,20 @@ impl TypedLValue {
                         let array = compile_expression(*op.node.lhs, scope, be, ec)?;
                         let index = compile_expression(*op.node.rhs, scope, be, ec)?;
 
-                        let offset = compile_pointer_offset((array, array_span), (index, index_span), false, scope, be, ec)?;
+                        let offset = compile_pointer_offset(
+                            (array, array_span),
+                            (index, index_span),
+                            false,
+                            scope,
+                            be,
+                            ec,
+                        )?;
+
+                        let (offset_scalar, offset_type) = offset.unwrap_scalar_and_type();
 
                         Ok(TypedLValue {
-                            t: offset.t.dereference().unwrap(),
-                            lv: LValue::Indirection(offset.src),
+                            t: offset_type.dereference().unwrap(),
+                            lv: LValue::Indirection(offset_scalar),
                         })
                     }
                     _ => {
@@ -108,11 +119,11 @@ impl TypedLValue {
         self,
         scope: &mut NameScope,
         be: &mut BlockEmitter,
-    ) -> Result<TypedSrc, ()> {
+    ) -> Result<TypedRValue, ()> {
         match self.lv {
-            LValue::Var(v) => Ok(TypedSrc {
+            LValue::Var(v) => Ok(TypedRValue {
                 t: self.t,
-                src: ir::Src::Var(v),
+                src: RValue::new_var(v),
             }),
             LValue::Indirection(src_addr) => {
                 if let Some((width, _)) = self.t.t.get_width_sign() {
@@ -122,8 +133,8 @@ impl TypedLValue {
                         src_addr,
                         width,
                     }));
-                    Ok(TypedSrc {
-                        src: ir::Src::Var(dst),
+                    Ok(TypedRValue {
+                        src: RValue::new_var(dst),
                         t: self.t,
                     })
                 } else {
@@ -165,13 +176,11 @@ mod test {
         assert_eq!(body.len(), 1);
         assert_eq!(
             body[0].ops,
-            vec![
-                ir::Op::Store(ir::StoreOp {
-                    dst_addr: ir::Src::Var(VarLocation::Local(0)),
-                    src: ir::Src::Var(VarLocation::Local(1)),
-                    width: ir::Width::Word
-                })
-            ]
+            vec![ir::Op::Store(ir::StoreOp {
+                dst_addr: ir::Scalar::Var(VarLocation::Local(0)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })]
         );
     }
 
@@ -187,21 +196,21 @@ mod test {
             vec![
                 ir::Op::Mul(ir::BinaryOp {
                     dst: VarLocation::Local(3),
-                    lhs: ir::Src::Var(VarLocation::Local(1)),
-                    rhs: ir::Src::ConstInt(2),
+                    lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                    rhs: ir::Scalar::ConstInt(2),
                     width: ir::Width::Word,
                     sign: true,
                 }),
                 ir::Op::Add(ir::BinaryOp {
                     dst: VarLocation::Local(4),
-                    lhs: ir::Src::Var(VarLocation::Local(0)),
-                    rhs: ir::Src::Var(VarLocation::Local(3)),
+                    lhs: ir::Scalar::Var(VarLocation::Local(0)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(3)),
                     width: ir::Width::Word,
                     sign: false,
                 }),
                 ir::Op::Store(ir::StoreOp {
-                    dst_addr: ir::Src::Var(VarLocation::Local(4)),
-                    src: ir::Src::Var(VarLocation::Local(2)),
+                    dst_addr: ir::Scalar::Var(VarLocation::Local(4)),
+                    src: ir::Scalar::Var(VarLocation::Local(2)),
                     width: ir::Width::Word
                 })
             ]
@@ -222,27 +231,27 @@ mod test {
                     dst: VarLocation::Local(3),
                     dst_width: ir::Width::Word,
                     dst_sign: true,
-                    src: ir::Src::Var(VarLocation::Local(1)),
+                    src: ir::Scalar::Var(VarLocation::Local(1)),
                     src_width: ir::Width::Byte,
                     src_sign: false,
                 }),
                 ir::Op::Mul(ir::BinaryOp {
                     dst: VarLocation::Local(4),
-                    lhs: ir::Src::Var(VarLocation::Local(3)),
-                    rhs: ir::Src::ConstInt(2),
+                    lhs: ir::Scalar::Var(VarLocation::Local(3)),
+                    rhs: ir::Scalar::ConstInt(2),
                     width: ir::Width::Word,
                     sign: true,
                 }),
                 ir::Op::Add(ir::BinaryOp {
                     dst: VarLocation::Local(5),
-                    lhs: ir::Src::Var(VarLocation::Local(0)),
-                    rhs: ir::Src::Var(VarLocation::Local(4)),
+                    lhs: ir::Scalar::Var(VarLocation::Local(0)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(4)),
                     width: ir::Width::Word,
                     sign: false,
                 }),
                 ir::Op::Store(ir::StoreOp {
-                    dst_addr: ir::Src::Var(VarLocation::Local(5)),
-                    src: ir::Src::Var(VarLocation::Local(2)),
+                    dst_addr: ir::Scalar::Var(VarLocation::Local(5)),
+                    src: ir::Scalar::Var(VarLocation::Local(2)),
                     width: ir::Width::Word
                 })
             ]

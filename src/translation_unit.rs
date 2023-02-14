@@ -136,7 +136,6 @@ fn match_storage_classes(old: &GlobalStorageClass, new: &GlobalStorageClass) -> 
     }
 }
 
-
 impl std::fmt::Display for TranslationUnit {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         for fun in &self.functions {

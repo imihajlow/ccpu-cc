@@ -5,9 +5,10 @@ use crate::block_emitter::BlockEmitter;
 use crate::ctype::{QualifiedType, Qualifiers};
 use crate::error::{CompileWarning, ErrorCollector};
 use crate::name_scope::NameScope;
+use crate::rvalue::{RValue, TypedRValue};
 use crate::{ctype, ir};
 
-use super::{compile_expression, usual_arithmetic_convert, TypedSrc};
+use super::{compile_expression, usual_arithmetic_convert};
 
 pub fn compile_equal_to(
     lhs: Node<Expression>,
@@ -15,7 +16,7 @@ pub fn compile_equal_to(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
@@ -37,7 +38,7 @@ pub fn compile_not_equal_to(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
@@ -59,7 +60,7 @@ pub fn compile_less_than(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
@@ -81,7 +82,7 @@ pub fn compile_less_or_equal(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
@@ -103,7 +104,7 @@ pub fn compile_greater_than(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
@@ -125,7 +126,7 @@ pub fn compile_greater_or_equal(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let lhs_span = lhs.span;
     let rhs_span = rhs.span;
     let lhs = compile_expression(lhs, scope, be, ec)?;
@@ -142,13 +143,13 @@ pub fn compile_greater_or_equal(
 }
 
 pub fn compile_cmp_inner(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     kind: ir::CompareKind,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let (lhs, lhs_span) = lhs;
     let (rhs, rhs_span) = rhs;
 
@@ -164,13 +165,13 @@ pub fn compile_cmp_inner(
                 kind,
                 dst: dst.clone(),
                 dst_width: ir::Width::INT_WIDTH,
-                lhs: lhs.src,
-                rhs: rhs.src,
+                lhs: lhs.unwrap_scalar(),
+                rhs: rhs.unwrap_scalar(),
                 width,
                 sign,
             }));
-            Ok(TypedSrc {
-                src: ir::Src::Var(dst),
+            Ok(TypedRValue {
+                src: RValue::new_var(dst),
                 t: QualifiedType {
                     t: ctype::INT_TYPE,
                     qualifiers: Qualifiers::empty(),
@@ -198,13 +199,13 @@ pub fn compile_cmp_inner(
             kind,
             dst: dst.clone(),
             dst_width: ir::Width::INT_WIDTH,
-            lhs: lhs.src,
-            rhs: rhs.src,
+            lhs: lhs.unwrap_scalar(),
+            rhs: rhs.unwrap_scalar(),
             width,
             sign,
         }));
-        Ok(TypedSrc {
-            src: ir::Src::Var(dst),
+        Ok(TypedRValue {
+            src: RValue::new_var(dst),
             t: QualifiedType {
                 t: ctype::INT_TYPE,
                 qualifiers: Qualifiers::empty(),
@@ -253,12 +254,12 @@ mod test {
                     dst: VarLocation::Local(3),
                     width: ir::Width::Word,
                     sign: true,
-                    lhs: ir::Src::Var(VarLocation::Local(1)),
-                    rhs: ir::Src::Var(VarLocation::Local(2))
+                    lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(2))
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(3)),
+                    src: ir::Scalar::Var(VarLocation::Local(3)),
                     width: ir::Width::Word
                 })
             ]
@@ -281,7 +282,7 @@ mod test {
                     dst_sign: false,
                     src_width: ir::Width::Word,
                     src_sign: true,
-                    src: ir::Src::Var(VarLocation::Local(1))
+                    src: ir::Scalar::Var(VarLocation::Local(1))
                 }),
                 ir::Op::Compare(ir::CompareOp {
                     kind: ir::CompareKind::GreaterOrEqual,
@@ -289,12 +290,12 @@ mod test {
                     dst: VarLocation::Local(4),
                     width: ir::Width::Dword,
                     sign: false,
-                    lhs: ir::Src::Var(VarLocation::Local(3)),
-                    rhs: ir::Src::Var(VarLocation::Local(2))
+                    lhs: ir::Scalar::Var(VarLocation::Local(3)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(2))
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(4)),
+                    src: ir::Scalar::Var(VarLocation::Local(4)),
                     width: ir::Width::Word
                 })
             ]
@@ -317,12 +318,12 @@ mod test {
                     dst: VarLocation::Local(3),
                     width: ir::Width::Word,
                     sign: false,
-                    lhs: ir::Src::Var(VarLocation::Local(1)),
-                    rhs: ir::Src::Var(VarLocation::Local(2))
+                    lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(2))
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(3)),
+                    src: ir::Scalar::Var(VarLocation::Local(3)),
                     width: ir::Width::Word
                 })
             ]
@@ -345,12 +346,12 @@ mod test {
                     dst: VarLocation::Local(3),
                     width: ir::Width::Word,
                     sign: false,
-                    lhs: ir::Src::Var(VarLocation::Local(1)),
-                    rhs: ir::Src::Var(VarLocation::Local(2))
+                    lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(2))
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(3)),
+                    src: ir::Scalar::Var(VarLocation::Local(3)),
                     width: ir::Width::Word
                 })
             ]
@@ -373,12 +374,12 @@ mod test {
                     dst: VarLocation::Local(3),
                     width: ir::Width::Word,
                     sign: false,
-                    lhs: ir::Src::Var(VarLocation::Local(1)),
-                    rhs: ir::Src::Var(VarLocation::Local(2))
+                    lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(2))
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(3)),
+                    src: ir::Scalar::Var(VarLocation::Local(3)),
                     width: ir::Width::Word
                 })
             ]
@@ -401,12 +402,12 @@ mod test {
                     dst: VarLocation::Local(3),
                     width: ir::Width::Word,
                     sign: false,
-                    lhs: ir::Src::Var(VarLocation::Local(1)),
-                    rhs: ir::Src::Var(VarLocation::Local(2))
+                    lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(2))
                 }),
                 ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: VarLocation::Local(0),
-                    src: ir::Src::Var(VarLocation::Local(3)),
+                    src: ir::Scalar::Var(VarLocation::Local(3)),
                     width: ir::Width::Word
                 })
             ]

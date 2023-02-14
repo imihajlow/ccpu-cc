@@ -16,6 +16,7 @@ use crate::{
     initializer::TypedValue,
     ir,
     name_scope::NameScope,
+    rvalue::{RValue, TypedRValue},
     type_builder::TypeBuilder,
 };
 
@@ -26,26 +27,6 @@ mod relational;
 mod shift;
 mod sub;
 mod unary;
-
-#[derive(Clone)]
-pub struct TypedSrc {
-    pub src: ir::Src,
-    pub t: QualifiedType,
-}
-
-impl TypedSrc {
-    pub fn new_from_typed_value(tv: TypedValue) -> Self {
-        use crate::initializer::Value;
-        match tv.val {
-            Value::Int(x) => Self {
-                src: ir::Src::ConstInt(x as u64),
-                t: tv.t,
-            },
-            Value::Void => panic!("void constant"),
-            _ => todo!(),
-        }
-    }
-}
 
 pub fn compile_statement(
     stat: Node<Statement>,
@@ -74,16 +55,16 @@ pub fn compile_expression(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     match expr.node {
         Expression::Constant(_) => {
             let v = constant::compute_constant_expr(expr, false, scope, ec)?;
-            Ok(TypedSrc::new_from_typed_value(v))
+            Ok(TypedRValue::new_from_typed_value(v))
         }
         Expression::Identifier(id) => {
             let (t, v) = scope.get_var(&id.node.name, id.span, ec)?;
-            Ok(TypedSrc {
-                src: ir::Src::Var(v),
+            Ok(TypedRValue {
+                src: RValue::new_var(v),
                 t: t.clone(),
             })
         }
@@ -131,7 +112,7 @@ pub fn compile_initializer(
  *
  * Panics if src is not an integer.
  */
-pub fn int_promote(src: TypedSrc, scope: &mut NameScope, be: &mut BlockEmitter) -> TypedSrc {
+pub fn int_promote(src: TypedRValue, scope: &mut NameScope, be: &mut BlockEmitter) -> TypedRValue {
     if !src.t.t.is_integer() {
         panic!("not an integer");
     }
@@ -148,23 +129,23 @@ pub fn int_promote(src: TypedSrc, scope: &mut NameScope, be: &mut BlockEmitter) 
             dst_width,
             dst_sign,
             dst: dst.clone(),
-            src: src.src,
+            src: src.unwrap_scalar(),
         }));
 
-        TypedSrc {
-            src: ir::Src::Var(dst),
+        TypedRValue {
+            src: RValue::new_var(dst),
             t: promoted_t,
         }
     }
 }
 
 pub fn convert_to_bool(
-    src: TypedSrc,
+    src: TypedRValue,
     span: Span,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     if !src.t.t.is_scalar() {
         ec.record_error(CompileError::ScalarTypeRequired, span)?;
         unreachable!();
@@ -173,11 +154,11 @@ pub fn convert_to_bool(
     let width = src.t.t.get_scalar_width().unwrap();
     be.append_operation(ir::Op::Bool(ir::UnaryUnsignedOp {
         dst: dst.clone(),
-        src: src.src,
+        src: src.unwrap_scalar(),
         width,
     }));
-    Ok(TypedSrc {
-        src: ir::Src::Var(dst),
+    Ok(TypedRValue {
+        src: RValue::new_var(dst),
         t: QualifiedType {
             t: CType::Int(1, false),
             qualifiers: Qualifiers::empty(),
@@ -186,14 +167,14 @@ pub fn convert_to_bool(
 }
 
 pub fn cast(
-    src: TypedSrc,
+    src: TypedRValue,
     target_type: &CType,
     copy_if_same_type: bool,
     span: Span,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let (dst_width, dst_sign) = target_type.get_width_sign().unwrap();
     let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
     if (dst_width, dst_sign) != (src_width, src_sign) {
@@ -204,10 +185,10 @@ pub fn cast(
             src_width,
             src_sign,
             dst: dst.clone(),
-            src: src.src,
+            src: src.unwrap_scalar(),
         }));
-        Ok(TypedSrc {
-            src: ir::Src::Var(dst),
+        Ok(TypedRValue {
+            src: RValue::new_var(dst),
             t: QualifiedType {
                 t: target_type.clone(),
                 qualifiers: Qualifiers::empty(),
@@ -218,11 +199,11 @@ pub fn cast(
             let dst = scope.alloc_temp();
             be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: dst.clone(),
-                src: src.src,
+                src: src.unwrap_scalar(),
                 width: dst_width,
             }));
-            Ok(TypedSrc {
-                src: ir::Src::Var(dst),
+            Ok(TypedRValue {
+                src: RValue::new_var(dst),
                 t: QualifiedType {
                     t: target_type.clone(),
                     qualifiers: Qualifiers::empty(),
@@ -240,13 +221,13 @@ pub fn cast(
  * Integer promotions are performed on index.
  */
 pub fn compile_pointer_offset(
-    ptr: (TypedSrc, Span),
-    index: (TypedSrc, Span),
+    ptr: (TypedRValue, Span),
+    index: (TypedRValue, Span),
     subtract: bool,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let (ptr, ptr_span) = ptr;
     let (index, index_span) = index;
 
@@ -277,34 +258,35 @@ pub fn compile_pointer_offset(
         .unwrap()
         .t
         .sizeof(ptr_span, ec)?;
-    let element_size_src = TypedSrc {
+    let element_size_src = TypedRValue {
         t: ctype::QualifiedType {
             t: ctype::SSIZE_TYPE,
             qualifiers: Qualifiers::empty(),
         },
-        src: ir::Src::ConstInt(element_size.into()),
+        src: RValue::new_const(element_size.into()),
     };
     let offset_var = scope.alloc_temp();
     let target_var = scope.alloc_temp();
     let (width, sign) = ctype::SSIZE_TYPE.get_width_sign().unwrap();
     be.append_operation(ir::Op::Mul(ir::BinaryOp {
         dst: offset_var.clone(),
-        lhs: index_ssize.src,
-        rhs: element_size_src.src,
+        lhs: index_ssize.unwrap_scalar(),
+        rhs: element_size_src.unwrap_scalar(),
         width,
         sign,
     }));
     let op = if !subtract { ir::Op::Add } else { ir::Op::Sub };
+    let (ptr_scalar, ptr_type) = ptr.unwrap_scalar_and_type();
     be.append_operation(op(ir::BinaryOp {
         dst: target_var.clone(),
-        lhs: ptr.src,
-        rhs: ir::Src::Var(offset_var),
+        lhs: ptr_scalar,
+        rhs: ir::Scalar::Var(offset_var),
         width,
         sign: false,
     }));
-    Ok(TypedSrc {
-        src: ir::Src::Var(target_var),
-        t: ptr.t,
+    Ok(TypedRValue {
+        src: RValue::new_var(target_var),
+        t: ptr_type,
     })
 }
 
@@ -373,11 +355,11 @@ fn compile_declaration(
 }
 
 pub fn integer_promote(
-    src: (TypedSrc, Span),
+    src: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let promoted_type = src.0.t.clone().promote();
 
     cast(src.0, &promoted_type.t, false, src.1, scope, be, ec)
@@ -387,12 +369,12 @@ pub fn integer_promote(
  * Perform usual arithmetic conversions according to 6.3.1.8
  */
 fn usual_arithmetic_convert(
-    lhs: (TypedSrc, Span),
-    rhs: (TypedSrc, Span),
+    lhs: (TypedRValue, Span),
+    rhs: (TypedRValue, Span),
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<(TypedSrc, TypedSrc), ()> {
+) -> Result<(TypedRValue, TypedRValue), ()> {
     let (lhs, lhs_span) = lhs;
     let (rhs, rhs_span) = rhs;
     if lhs.t.t.is_long_double() || rhs.t.t.is_long_double() {
@@ -421,7 +403,7 @@ fn compile_comma(
     scope: &mut NameScope,
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
-) -> Result<TypedSrc, ()> {
+) -> Result<TypedRValue, ()> {
     let mut result = None;
     for e in c {
         let r = compile_expression(e, scope, be, ec)?;

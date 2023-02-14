@@ -2,27 +2,27 @@
 #![feature(assert_matches)]
 #![feature(iter_intersperse)]
 
-
+mod block_emitter;
+mod compile;
+mod constant;
 mod ctype;
 mod error;
+mod function;
+mod initializer;
 mod ir;
+mod lvalue;
 mod machine;
+mod name_scope;
+mod rvalue;
+mod string;
 mod translation_unit;
 mod type_builder;
-mod constant;
-mod initializer;
-mod string;
-mod function;
-mod compile;
-mod name_scope;
-mod block_emitter;
-mod lvalue;
 
 #[macro_use]
 extern crate static_assertions;
 
-use lang_c::{driver::{parse_preprocessed, Config, Flavor}};
-use crate::{translation_unit::TranslationUnit, error::ErrorCollector};
+use crate::{error::ErrorCollector, translation_unit::TranslationUnit};
+use lang_c::driver::{parse_preprocessed, Config, Flavor};
 
 fn main() {
     let mut cfg = Config::default();

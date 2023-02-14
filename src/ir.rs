@@ -24,11 +24,10 @@ pub enum VarLocation {
 pub struct GlobalVarId(pub String, pub u32);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Src {
+pub enum Scalar {
     ConstInt(u64),
     SymbolOffset(String, u16),
     Var(VarLocation),
-    StackPointer,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -73,15 +72,15 @@ pub struct CompareOp {
     pub dst: VarLocation,
     pub width: Width,
     pub sign: Sign,
-    pub lhs: Src,
-    pub rhs: Src,
+    pub lhs: Scalar,
+    pub rhs: Scalar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnaryUnsignedOp {
     pub width: Width,
     pub dst: VarLocation,
-    pub src: Src,
+    pub src: Scalar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,16 +88,16 @@ pub struct BinaryOp {
     pub width: Width,
     pub sign: Sign,
     pub dst: VarLocation,
-    pub lhs: Src,
-    pub rhs: Src,
+    pub lhs: Scalar,
+    pub rhs: Scalar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BinaryUnsignedOp {
     pub width: Width,
     pub dst: VarLocation,
-    pub lhs: Src,
-    pub rhs: Src,
+    pub lhs: Scalar,
+    pub rhs: Scalar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,8 +105,8 @@ pub struct ShiftOp {
     pub lhs_width: Width,
     pub lhs_sign: Sign,
     pub dst: VarLocation,
-    pub lhs: Src,
-    pub rhs: Src, // only one byte is used
+    pub lhs: Scalar,
+    pub rhs: Scalar, // only one byte is used
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,21 +116,21 @@ pub struct ConvOp {
     pub dst: VarLocation,
     pub src_width: Width,
     pub src_sign: Sign,
-    pub src: Src,
+    pub src: Scalar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreOp {
-    pub dst_addr: Src,
+    pub dst_addr: Scalar,
     pub width: Width,
-    pub src: Src,
+    pub src: Scalar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadOp {
     pub width: Width,
     pub dst: VarLocation,
-    pub src_addr: Src,
+    pub src_addr: Scalar,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,7 +138,7 @@ pub struct CallOp {
     pub dst: VarLocation,
     pub dst_width: Width,
     pub name: String,
-    pub args: Vec<(Src, Width)>,
+    pub args: Vec<(Scalar, Width)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,7 +150,7 @@ pub struct LoadAddrOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tail {
     Jump(BlockNumber),
-    Cond(Src, BlockNumber, BlockNumber),
+    Cond(Scalar, BlockNumber, BlockNumber),
     Ret,
 }
 
@@ -389,14 +388,13 @@ impl std::fmt::Display for Width {
     }
 }
 
-impl std::fmt::Display for Src {
+impl std::fmt::Display for Scalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Src::ConstInt(x) => write!(f, "{}", x),
-            Src::SymbolOffset(sym, 0) => write!(f, "[{}]", sym),
-            Src::SymbolOffset(sym, offs) => write!(f, "[{}+0x{:x}]", sym, offs),
-            Src::Var(v) => write!(f, "{}", v),
-            Src::StackPointer => f.write_str("%SP"),
+            Scalar::ConstInt(x) => write!(f, "{}", x),
+            Scalar::SymbolOffset(sym, 0) => write!(f, "[{}]", sym),
+            Scalar::SymbolOffset(sym, offs) => write!(f, "[{}+0x{:x}]", sym, offs),
+            Scalar::Var(v) => write!(f, "{}", v),
         }
     }
 }

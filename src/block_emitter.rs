@@ -11,12 +11,12 @@ use lang_c::{
 use crate::{
     compile::{
         self, cast, compile_expression, compile_statement, convert_to_bool, integer_promote,
-        TypedSrc,
     },
     ctype::{self, QualifiedType, Qualifiers},
     error::{CompileError, ErrorCollector},
     ir,
     name_scope::NameScope,
+    rvalue::{RValue, TypedRValue},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,7 +86,11 @@ impl BlockEmitter {
         let cond_bool = convert_to_bool(cond, cond_span, scope, self, ec)?;
 
         self.finish_block(
-            LabeledTail::Tail(ir::Tail::Cond(cond_bool.src, then_block_id, else_block_id)),
+            LabeledTail::Tail(ir::Tail::Cond(
+                cond_bool.unwrap_scalar(),
+                then_block_id,
+                else_block_id,
+            )),
             then_block_id,
         );
 
@@ -119,7 +123,7 @@ impl BlockEmitter {
         rhs: Node<Expression>,
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
-    ) -> Result<TypedSrc, ()> {
+    ) -> Result<TypedRValue, ()> {
         let lhs_span = lhs.span;
         let rhs_span = rhs.span;
         let result_var = scope.alloc_temp();
@@ -131,7 +135,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                lhs_bool.src,
+                lhs_bool.unwrap_scalar(),
                 rhs_block_id,
                 shortcut_block_id,
             )),
@@ -144,7 +148,7 @@ impl BlockEmitter {
         let width = rhs_int.t.t.get_scalar_width().unwrap();
         self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
             dst: result_var.clone(),
-            src: rhs_int.src,
+            src: rhs_int.unwrap_scalar(),
             width,
         }));
 
@@ -155,7 +159,7 @@ impl BlockEmitter {
 
         self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
             dst: result_var.clone(),
-            src: ir::Src::ConstInt(0),
+            src: ir::Scalar::ConstInt(0),
             width,
         }));
 
@@ -164,8 +168,8 @@ impl BlockEmitter {
             cont_block_id,
         );
 
-        Ok(TypedSrc {
-            src: ir::Src::Var(result_var),
+        Ok(TypedRValue {
+            src: RValue::new_var(result_var),
             t: QualifiedType {
                 t: ctype::INT_TYPE,
                 qualifiers: Qualifiers::empty(),
@@ -179,7 +183,7 @@ impl BlockEmitter {
         rhs: Node<Expression>,
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
-    ) -> Result<TypedSrc, ()> {
+    ) -> Result<TypedRValue, ()> {
         let lhs_span = lhs.span;
         let rhs_span = rhs.span;
         let result_var = scope.alloc_temp();
@@ -191,7 +195,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                lhs_bool.src,
+                lhs_bool.unwrap_scalar(),
                 shortcut_block_id,
                 rhs_block_id,
             )),
@@ -204,7 +208,7 @@ impl BlockEmitter {
         let width = rhs_int.t.t.get_scalar_width().unwrap();
         self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
             dst: result_var.clone(),
-            src: rhs_int.src,
+            src: rhs_int.unwrap_scalar(),
             width,
         }));
 
@@ -215,7 +219,7 @@ impl BlockEmitter {
 
         self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
             dst: result_var.clone(),
-            src: ir::Src::ConstInt(1),
+            src: ir::Scalar::ConstInt(1),
             width,
         }));
 
@@ -224,8 +228,8 @@ impl BlockEmitter {
             cont_block_id,
         );
 
-        Ok(TypedSrc {
-            src: ir::Src::Var(result_var),
+        Ok(TypedRValue {
+            src: RValue::new_var(result_var),
             t: QualifiedType {
                 t: ctype::INT_TYPE,
                 qualifiers: Qualifiers::empty(),
@@ -238,7 +242,7 @@ impl BlockEmitter {
         c: Node<ConditionalExpression>,
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
-    ) -> Result<TypedSrc, ()> {
+    ) -> Result<TypedRValue, ()> {
         let cond_span = c.node.condition.span;
         let then_span = c.node.then_expression.span;
         let else_span = c.node.else_expression.span;
@@ -250,7 +254,7 @@ impl BlockEmitter {
         let cond_dst = scope.alloc_temp();
         self.append_operation(ir::Op::Bool(ir::UnaryUnsignedOp {
             dst: cond_dst.clone(),
-            src: cond.src,
+            src: cond.unwrap_scalar(),
             width: cond_width,
         }));
 
@@ -260,7 +264,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                ir::Src::Var(cond_dst),
+                ir::Scalar::Var(cond_dst),
                 then_block,
                 else_block,
             )),
@@ -313,7 +317,7 @@ impl BlockEmitter {
                 )?;
                 self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: result_dst.clone(),
-                    src: then_casted.src,
+                    src: then_casted.unwrap_scalar(),
                     width,
                 }));
 
@@ -332,13 +336,13 @@ impl BlockEmitter {
                 )?;
                 self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
                     dst: result_dst.clone(),
-                    src: else_casted.src,
+                    src: else_casted.unwrap_scalar(),
                     width,
                 }));
 
                 self.finish_block(LabeledTail::Tail(ir::Tail::Jump(cont_block)), cont_block);
-                Ok(TypedSrc {
-                    src: ir::Src::Var(result_dst),
+                Ok(TypedRValue {
+                    src: RValue::new_var(result_dst),
                     t: QualifiedType {
                         t: common_type,
                         qualifiers: Qualifiers::empty(),
@@ -372,7 +376,7 @@ impl BlockEmitter {
             let then_src = compile_expression(*c.node.then_expression, scope, self, ec)?;
             self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: result_dst.clone(),
-                src: then_src.src,
+                src: then_src.unwrap_scalar(),
                 width,
             }));
 
@@ -381,13 +385,13 @@ impl BlockEmitter {
             let else_src = compile_expression(*c.node.else_expression, scope, self, ec)?;
             self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: result_dst.clone(),
-                src: else_src.src,
+                src: else_src.unwrap_scalar(),
                 width,
             }));
 
             self.finish_block(LabeledTail::Tail(ir::Tail::Jump(cont_block)), cont_block);
-            Ok(TypedSrc {
-                src: ir::Src::Var(result_dst),
+            Ok(TypedRValue {
+                src: RValue::new_var(result_dst),
                 t: common_type,
             })
         } else if then_type.t.is_same_struct_union(&else_type.t) {
@@ -490,19 +494,19 @@ mod test {
             body[0].ops,
             vec![ir::Op::Bool(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(3),
-                src: ir::Src::Var(VarLocation::Local(0)),
+                src: ir::Scalar::Var(VarLocation::Local(0)),
                 width: ir::Width::Word
             })]
         );
         assert_eq!(
             body[0].tail,
-            LabeledTail::Tail(ir::Tail::Cond(ir::Src::Var(VarLocation::Local(3)), 1, 2))
+            LabeledTail::Tail(ir::Tail::Cond(ir::Scalar::Var(VarLocation::Local(3)), 1, 2))
         );
         assert_eq!(
             body[1].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(4),
-                src: ir::Src::Var(VarLocation::Local(1)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word
             })]
         );
@@ -511,7 +515,7 @@ mod test {
             body[2].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(4),
-                src: ir::Src::Var(VarLocation::Local(2)),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word
             })]
         );
@@ -520,7 +524,7 @@ mod test {
             body[3].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Src::Var(VarLocation::Local(4)),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             })]
         );

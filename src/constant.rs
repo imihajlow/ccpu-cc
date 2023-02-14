@@ -1,4 +1,6 @@
-use lang_c::ast::{BinaryOperatorExpression, ConditionalExpression, UnaryOperatorExpression, StaticAssert};
+use lang_c::ast::{
+    BinaryOperatorExpression, ConditionalExpression, StaticAssert, UnaryOperatorExpression,
+};
 use lang_c::span::Span;
 use lang_c::{
     ast::{CastExpression, Constant, Expression, Initializer},
@@ -102,10 +104,13 @@ pub fn compute_constant_expr(
     }
 }
 
-pub fn check_static_assert(sa: Node<StaticAssert>, scope: &NameScope, ec: &mut ErrorCollector) -> Result<(), ()> {
+pub fn check_static_assert(
+    sa: Node<StaticAssert>,
+    scope: &NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<(), ()> {
     let expr_span = sa.node.expression.span;
-    let val =
-        compute_constant_expr(*sa.node.expression, false, scope, ec)?;
+    let val = compute_constant_expr(*sa.node.expression, false, scope, ec)?;
     if val.t.t.is_integer() {
         if val.is_zero() {
             ec.record_error(
