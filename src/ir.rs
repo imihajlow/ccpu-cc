@@ -136,9 +136,8 @@ pub struct LoadOp {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallOp {
-    pub dst: VarLocation,
-    pub dst_width: Width,
-    pub name: String,
+    pub dst: Option<(VarLocation, Width)>,
+    pub addr: Scalar,
     pub args: Vec<(Scalar, Width)>,
 }
 
@@ -353,7 +352,21 @@ impl std::fmt::Display for LoadOp {
 
 impl std::fmt::Display for CallOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        todo!()
+        if let Some((dst, dst_width)) = self.dst.as_ref() {
+            write!(f, "{} {}, {}(", dst_width, dst, self.addr)?;
+        } else {
+            write!(f, " {}(", self.addr)?;
+        }
+        for s in self
+            .args
+            .iter()
+            .map(|(s, w)| format!("{} {}", w, s))
+            .intersperse(", ".to_string())
+        {
+            f.write_str(&s)?;
+        }
+        f.write_str(")")?;
+        Ok(())
     }
 }
 

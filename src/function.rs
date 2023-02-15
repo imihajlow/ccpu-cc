@@ -38,6 +38,20 @@ impl Function {
         }
         let (type_builder, storage_class, extra) =
             TypeBuilder::new_from_specifiers(node.node.specifiers, scope, ec)?;
+        let type_builder = type_builder.stage2(node.span, ec)?;
+        let (name, t) = type_builder.process_declarator_node(node.node.declarator, scope, ec)?;
+        let name = name.unwrap();
+        scope.declare(&name, t.clone(), &storage_class, None, node.span, ec)?;
+        let (return_type, args, is_vararg) = if let CType::Function {
+            result,
+            args,
+            vararg,
+        } = t.t
+        {
+            (*result, args, vararg)
+        } else {
+            unreachable!()
+        };
         let storage_class = match storage_class {
             None => GlobalStorageClass::Default,
             Some(stc) => match stc.node {
@@ -51,19 +65,6 @@ impl Function {
                 StorageClassSpecifier::Extern => GlobalStorageClass::Extern,
                 StorageClassSpecifier::Static => GlobalStorageClass::Static,
             },
-        };
-        let type_builder = type_builder.stage2(node.span, ec)?;
-        let (name, t) = type_builder.process_declarator_node(node.node.declarator, scope, ec)?;
-        let name = name.unwrap();
-        let (return_type, args, is_vararg) = if let CType::Function {
-            result,
-            args,
-            vararg,
-        } = t.t
-        {
-            (*result, args, vararg)
-        } else {
-            unreachable!()
         };
         scope.start_function(&args);
         let mut be = BlockEmitter::new();

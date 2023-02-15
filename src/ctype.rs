@@ -501,9 +501,9 @@ impl std::fmt::Display for CType {
             } => write!(
                 f,
                 "(fn ({}{}) -> {})",
-                result,
                 args,
-                if *vararg { ", ..." } else { "" }
+                if *vararg { ", ..." } else { "" },
+                result
             ),
         }
     }

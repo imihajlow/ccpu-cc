@@ -1,11 +1,11 @@
-use lang_c::ast::CastExpression;
+use lang_c::ast::{CallExpression, CastExpression};
 use lang_c::span::Span;
 use lang_c::{
     ast::{BlockItem, Declaration, Expression, Initializer, Statement, StorageClassSpecifier},
     span::Node,
 };
 
-use crate::ctype::{self, CType, Qualifiers};
+use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
 use crate::lvalue::TypedLValue;
 use crate::{
@@ -74,7 +74,7 @@ pub fn compile_expression(
         Expression::Comma(c) => compile_comma(*c, scope, be, ec),
         Expression::Conditional(c) => be.append_conditional(*c, scope, ec),
         Expression::Cast(c) => compile_cast(*c, scope, be, ec),
-        Expression::Call(_) => todo!(),
+        Expression::Call(c) => compile_call(*c, scope, be, ec),
         Expression::SizeOfTy(_) => todo!(),
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(_) => todo!(),
@@ -455,5 +455,250 @@ fn compile_cast(
             type_span,
         )?;
         unreachable!();
+    }
+}
+
+fn compile_call(
+    c: Node<CallExpression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedRValue, ()> {
+    let callee_span = c.node.callee.span;
+    let mut args_srcs = Vec::new();
+    for arg in c.node.arguments {
+        let span = arg.span;
+        let rvalue = compile_expression(arg, scope, be, ec)?;
+        args_srcs.push((rvalue, span));
+    }
+    let callee = compile_expression(*c.node.callee, scope, be, ec)?;
+    let (result_type, arg_types, vararg) = if let CType::Function {
+        result,
+        args,
+        vararg,
+    } = callee.t.t.clone()
+    {
+        (*result, args, vararg)
+    } else if let Ok(QualifiedType {
+        t: CType::Function {
+            result,
+            args,
+            vararg,
+        },
+        ..
+    }) = callee.t.clone().dereference()
+    {
+        (*result, args, vararg)
+    } else {
+        ec.record_error(CompileError::NotAFunction(callee.t), callee_span)?;
+        unreachable!();
+    };
+
+    let given_args_count = args_srcs.len();
+
+    let arg_locations = match arg_types {
+        FunctionArgs::Void => {
+            if given_args_count != 0 {
+                ec.record_error(CompileError::TooManyArguments(given_args_count, 0), c.span)?;
+                unreachable!()
+            }
+            Vec::new()
+        }
+        FunctionArgs::Empty => {
+            ec.record_warning(CompileWarning::ImplicitArgumentTypes, c.span)?;
+
+            let mut arg_locations = Vec::new();
+            for (arg_src, span) in args_srcs {
+                arg_locations.push(compile_argument(None, arg_src, span, scope, be, ec)?);
+            }
+            arg_locations
+        }
+        FunctionArgs::List(arg_types) => {
+            let expected_args_count = arg_types.len();
+            if given_args_count < expected_args_count {
+                ec.record_error(
+                    CompileError::TooFewArguments(given_args_count, expected_args_count),
+                    c.span,
+                )?;
+                unreachable!()
+            }
+            if given_args_count > expected_args_count && !vararg {
+                ec.record_error(
+                    CompileError::TooManyArguments(given_args_count, expected_args_count),
+                    c.span,
+                )?;
+                unreachable!()
+            }
+
+            let mut args_src_iter = args_srcs.into_iter();
+            let mut arg_locations = Vec::new();
+            for (arg_type, _, _) in arg_types {
+                let (arg_src, span) = args_src_iter.next().unwrap();
+                arg_locations.push(compile_argument(
+                    Some(arg_type),
+                    arg_src,
+                    span,
+                    scope,
+                    be,
+                    ec,
+                )?);
+            }
+
+            for (arg_src, span) in args_src_iter {
+                arg_locations.push(compile_argument(None, arg_src, span, scope, be, ec)?);
+            }
+
+            arg_locations
+        }
+    };
+
+    let result_location = if result_type.t.is_void() {
+        None
+    } else if result_type.t.is_scalar() {
+        let dst = scope.alloc_temp();
+        Some((dst, result_type.t.get_scalar_width().unwrap()))
+    } else {
+        todo!("return struct")
+    };
+
+    be.append_operation(ir::Op::Call(ir::CallOp {
+        dst: result_location.clone(),
+        addr: callee.unwrap_scalar(),
+        args: arg_locations,
+    }));
+
+    if let Some((result, _)) = result_location {
+        Ok(TypedRValue {
+            src: RValue::new_var(result),
+            t: result_type,
+        })
+    } else {
+        Ok(TypedRValue {
+            src: RValue::new_void(),
+            t: result_type,
+        })
+    }
+}
+
+fn compile_argument(
+    arg_type: Option<QualifiedType>,
+    arg_src: TypedRValue,
+    span: Span,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<(ir::Scalar, ir::Width), ()> {
+    if let Some(arg_type) = arg_type {
+        if arg_type.t.is_scalar() {
+            let dst = cast(arg_src, &arg_type.t, true, span, scope, be, ec)?;
+            let (s, t) = dst.unwrap_scalar_and_type();
+            let w = t.t.get_scalar_width().unwrap();
+            Ok((s, w))
+        } else {
+            todo!()
+        }
+    } else {
+        todo!()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ir::{self, VarLocation};
+    use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
+
+    use super::*;
+
+    fn compile(code: &str) -> (TranslationUnit, ErrorCollector) {
+        use lang_c::driver::{parse_preprocessed, Config, Flavor};
+        let mut cfg = Config::default();
+        cfg.flavor = Flavor::StdC11;
+        let p = parse_preprocessed(&cfg, code.to_string()).unwrap();
+        let mut ec = ErrorCollector::new();
+        let tu = TranslationUnit::translate(p.unit, &mut ec).unwrap();
+        assert_eq!(ec.get_error_count(), 0);
+        (tu, ec)
+    }
+
+    fn get_first_body(tu: &TranslationUnit) -> &Vec<LabeledBlock> {
+        tu.functions[0].get_body()
+    }
+
+    #[test]
+    fn test_call_1() {
+        let (tu, ec) = compile("void bar(int x, unsigned char y); void foo(void) { bar(10, 20); }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Scalar::ConstInt(10),
+                    width: ir::Width::Word
+                }),
+                ir::Op::Conv(ir::ConvOp {
+                    dst: VarLocation::Local(1),
+                    dst_width: ir::Width::Byte,
+                    dst_sign: false,
+                    src: ir::Scalar::ConstInt(20),
+                    src_width: ir::Width::Word,
+                    src_sign: true,
+                }),
+                ir::Op::Call(ir::CallOp {
+                    addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId(
+                        "bar".to_string(),
+                        0
+                    ))),
+                    dst: None,
+                    args: vec![
+                        (ir::Scalar::Var(VarLocation::Local(0)), ir::Width::Word),
+                        (ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Byte)
+                    ]
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_call_2() {
+        let (tu, ec) = compile("long bar(int x); void foo(void) { int x = bar(10); }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(1),
+                    src: ir::Scalar::ConstInt(10),
+                    width: ir::Width::Word
+                }),
+                ir::Op::Call(ir::CallOp {
+                    addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId(
+                        "bar".to_string(),
+                        0
+                    ))),
+                    dst: Some((VarLocation::Local(2), ir::Width::Dword)),
+                    args: vec![(ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Word),]
+                }),
+                ir::Op::Conv(ir::ConvOp {
+                    dst: VarLocation::Local(3),
+                    dst_width: ir::Width::Word,
+                    dst_sign: true,
+                    src: ir::Scalar::Var(VarLocation::Local(2)),
+                    src_width: ir::Width::Dword,
+                    src_sign: true,
+                }),
+                ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: VarLocation::Local(0),
+                    src: ir::Scalar::Var(VarLocation::Local(3)),
+                    width: ir::Width::Word
+                }),
+            ]
+        );
     }
 }

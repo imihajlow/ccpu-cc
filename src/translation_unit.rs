@@ -153,7 +153,10 @@ mod test {
 
     use super::*;
 
-    use lang_c::{driver::{parse_preprocessed, Config, Flavor}, span::Span};
+    use lang_c::{
+        driver::{parse_preprocessed, Config, Flavor},
+        span::Span,
+    };
 
     fn translate(code: &str) -> (Result<TranslationUnit, ()>, ErrorCollector) {
         let mut cfg = Config::default();

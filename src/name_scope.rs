@@ -185,7 +185,7 @@ impl NameScope {
                     };
 
                 // check types
-                if &t != old_val.get_type() {
+                if !t.is_compatible_to(&old_val.get_type(), true) {
                     return ec.record_error(CompileError::ConflictingTypes(name.to_string()), span);
                 }
 
