@@ -21,7 +21,7 @@ pub fn compute_constant_initializer(
     initializer: Node<Initializer>,
     target_type: &QualifiedType,
     allow_var: bool,
-    scope: &NameScope,
+    scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let v = match initializer.node {
@@ -37,7 +37,7 @@ pub fn compute_constant_initializer(
 pub fn compute_constant_expr(
     expr: Node<Expression>,
     allow_var: bool,
-    scope: &NameScope,
+    scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let expr = expr.node;
@@ -106,7 +106,7 @@ pub fn compute_constant_expr(
 
 pub fn check_static_assert(
     sa: Node<StaticAssert>,
-    scope: &NameScope,
+    scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     let expr_span = sa.node.expression.span;
@@ -127,7 +127,7 @@ pub fn check_static_assert(
 fn process_condition_expression_node(
     node: Node<ConditionalExpression>,
     allow_var: bool,
-    scope: &NameScope,
+    scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     let cond_span = node.node.condition.span;
@@ -166,7 +166,7 @@ fn process_condition_expression_node(
 fn process_binary_operator_expression_node(
     node: Node<BinaryOperatorExpression>,
     allow_var: bool,
-    scope: &NameScope,
+    scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     use lang_c::ast::BinaryOperator;
@@ -515,7 +515,7 @@ where
 fn process_unary_operator_expression_node(
     node: Node<UnaryOperatorExpression>,
     allow_var: bool,
-    scope: &NameScope,
+    scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
     use lang_c::ast::UnaryOperator;
@@ -567,13 +567,11 @@ fn process_unary_operator_expression_node(
 fn process_cast_expression_node(
     c: Node<CastExpression>,
     allow_var: bool,
-    scope: &NameScope,
+    scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedValue, ()> {
-    let mut type_builder = TypeBuilder::new();
-    for sq in c.node.type_name.node.specifiers {
-        type_builder.add_specifier_qualifier_node(sq, scope, ec)?;
-    }
+    let mut type_builder =
+        TypeBuilder::new_from_specifiers_qualifiers(c.node.type_name.node.specifiers, scope, ec)?;
     let type_builder = type_builder.stage2(c.span, ec)?;
     let new_type = if let Some(decl) = c.node.type_name.node.declarator {
         type_builder.process_declarator_node(decl, scope, ec)?.1

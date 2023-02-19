@@ -83,11 +83,14 @@ pub fn compile_assign_to_lval(
         //     and the type pointed to by the left has all the qualifiers of the type pointed to by the right;
         // ... and the right is a null pointer constant;
         match &rhs_val.t.t {
-            CType::Void
-            | CType::Float(_)
-            | CType::Struct(_)
-            | CType::Union(_)
-            | CType::Function { .. } => {
+            CType::Void | CType::Float(_) | CType::Function { .. } => {
+                ec.record_error(
+                    CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t),
+                    rhs_span,
+                )?;
+                unreachable!()
+            }
+            CType::Tagged(tti) if !tti.is_enum() => {
                 ec.record_error(
                     CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t),
                     rhs_span,
@@ -108,12 +111,19 @@ pub fn compile_assign_to_lval(
                     }
                 }
             }
-            CType::Bool | CType::Enum(_) | CType::Int(_, _) => {
+            CType::Bool | CType::Int(_, _) => {
                 ec.record_warning(
                     CompileWarning::IncompatibleTypes(lhs_lval.t.clone(), rhs_val.t.clone()),
                     rhs_span,
                 )?;
             }
+            CType::Tagged(tti) if tti.is_enum() => {
+                ec.record_warning(
+                    CompileWarning::IncompatibleTypes(lhs_lval.t.clone(), rhs_val.t.clone()),
+                    rhs_span,
+                )?;
+            }
+            CType::Tagged(_) => unreachable!(),
         }
         let rhs_casted = cast(rhs_val, &lhs_lval.t.t, false, rhs_span, scope, be, ec)?;
         let width = rhs_casted.t.t.get_width_sign().unwrap().0;

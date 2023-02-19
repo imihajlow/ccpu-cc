@@ -28,6 +28,8 @@ pub enum CompileError {
     ArraySizeNegative,
     // Global definition errors
     TypeRedefinition(String),
+    TaggedTypedRedefinition(String),
+    RedefinitionWithDifferentTag(String),
     ConflictingTypes(String),
     ConflictingStorageClass(String),
     TypedefInitialized,
@@ -152,6 +154,12 @@ impl std::fmt::Display for CompileError {
             CompileError::TypeTooLong => write!(f, "too long"),
             CompileError::WrongModifiers(t) => write!(f, "wrong modifiers for {}", t),
             CompileError::TypeRedefinition(t) => write!(f, "type '{}' is redefined", t),
+            CompileError::TaggedTypedRedefinition(t) => write!(f, "'{}' is redefined", t),
+            CompileError::RedefinitionWithDifferentTag(t) => write!(
+                f,
+                "use of '{}' with tag type that does not match previous declaration",
+                t
+            ),
             CompileError::ConflictingTypes(s) => write!(f, "conflicting types for {}", s),
             CompileError::ConflictingStorageClass(s) => {
                 write!(f, "conflicting storage classes for {}", s)

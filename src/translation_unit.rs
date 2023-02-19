@@ -30,7 +30,7 @@ impl TranslationUnit {
         for Node { node: ed, .. } in tu.0.into_iter() {
             match ed {
                 ExternalDeclaration::StaticAssert(node) => {
-                    constant::check_static_assert(node, &r.scope, ec)?;
+                    constant::check_static_assert(node, &mut r.scope, ec)?;
                 }
                 ExternalDeclaration::Declaration(n) => {
                     if r.add_declaration(n, ec).is_err() {
@@ -54,7 +54,7 @@ impl TranslationUnit {
     fn add_declaration(&mut self, n: Node<Declaration>, ec: &mut ErrorCollector) -> Result<(), ()> {
         let decl = n.node;
         let (mut type_builder, storage_class, _extra) =
-            TypeBuilder::new_from_specifiers(decl.specifiers, &self.scope, ec)?;
+            TypeBuilder::new_from_specifiers(decl.specifiers, &mut self.scope, ec)?;
 
         let mut has_error = false;
         for init_declarator in decl.declarators {
@@ -87,15 +87,18 @@ impl TranslationUnit {
         let init_declarator_span = init_declarator.span;
         let init_declarator = init_declarator.node;
         let type_builder = type_builder.stage2(init_declarator_span, ec)?;
-        let (id, t) =
-            type_builder.process_declarator_node(init_declarator.declarator, &self.scope, ec)?;
+        let (id, t) = type_builder.process_declarator_node(
+            init_declarator.declarator,
+            &mut self.scope,
+            ec,
+        )?;
 
         let initializer = if let Some(initializer) = init_declarator.initializer {
             Some(compute_constant_initializer(
                 initializer,
                 &t,
                 false,
-                &self.scope,
+                &mut self.scope,
                 ec,
             )?)
         } else {

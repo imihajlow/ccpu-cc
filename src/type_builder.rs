@@ -1,8 +1,10 @@
 use crate::constant;
+use crate::constant::check_static_assert;
 use crate::ctype::CType;
 use crate::ctype::FunctionArgs;
 use crate::ctype::QualifiedType;
 use crate::ctype::Qualifiers;
+use crate::ctype::TaggedTypeIdentifier;
 use crate::ctype::DOUBLE_TYPE;
 use crate::ctype::FLOAT_TYPE;
 use crate::ctype::LDOUBLE_TYPE;
@@ -15,7 +17,9 @@ use crate::name_scope::NameScope;
 use lang_c::ast::DeclarationSpecifier;
 use lang_c::ast::Ellipsis;
 use lang_c::ast::FunctionSpecifier;
+use lang_c::ast::SpecifierQualifier;
 use lang_c::ast::StorageClassSpecifier;
+use lang_c::ast::StructType;
 use lang_c::ast::TypeName;
 use lang_c::span::Node;
 use lang_c::span::Span;
@@ -51,6 +55,7 @@ enum BaseType {
     Double,
     Bool,
     Alias(String, QualifiedType),
+    Tagged(TaggedTypeIdentifier),
 }
 
 #[derive(PartialEq, Eq)]
@@ -79,7 +84,7 @@ impl TypeBuilder {
 
     pub fn new_from_specifiers(
         specs: Vec<Node<DeclarationSpecifier>>,
-        scope: &NameScope,
+        scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(Self, Option<Node<StorageClassSpecifier>>, ExtraSpecifiers), ()> {
         let mut extra = ExtraSpecifiers {
@@ -114,6 +119,18 @@ impl TypeBuilder {
         Ok((type_builder, storage_class, extra))
     }
 
+    pub fn new_from_specifiers_qualifiers(
+        sqs: Vec<Node<SpecifierQualifier>>,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<Self, ()> {
+        let mut r = Self::new();
+        for sq in sqs {
+            r.add_specifier_qualifier_node(sq, scope, ec)?;
+        }
+        Ok(r)
+    }
+
     pub fn add_type_qualifier_node(
         &mut self,
         qual: Node<lang_c::ast::TypeQualifier>,
@@ -123,10 +140,10 @@ impl TypeBuilder {
         Ok(())
     }
 
-    pub fn add_type_specifier_node(
+    fn add_type_specifier_node(
         &mut self,
         spec: Node<lang_c::ast::TypeSpecifier>,
-        scope: &NameScope,
+        scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         use lang_c::ast::TypeSpecifier;
@@ -144,7 +161,7 @@ impl TypeBuilder {
             TypeSpecifier::Long => self.set_long(span, ec)?,
             TypeSpecifier::Short => self.set_short(span, ec)?,
             TypeSpecifier::TypedefName(n) => self.set_alias(n.node.name, n.span, scope, ec)?,
-            TypeSpecifier::Struct(_) => todo!(),
+            TypeSpecifier::Struct(s) => self.set_struct(s, scope, ec)?,
             TypeSpecifier::Enum(_) => todo!(),
             TypeSpecifier::TypeOf(_) => todo!(),
             TypeSpecifier::Atomic(_) => unimplemented!("atomic"),
@@ -154,13 +171,12 @@ impl TypeBuilder {
         Ok(())
     }
 
-    pub fn add_specifier_qualifier_node(
+    fn add_specifier_qualifier_node(
         &mut self,
         sq: Node<lang_c::ast::SpecifierQualifier>,
-        scope: &NameScope,
+        scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        use lang_c::ast::SpecifierQualifier;
         let sq = sq.node;
         match sq {
             SpecifierQualifier::TypeQualifier(q) => self.add_type_qualifier_node(q, ec),
@@ -213,6 +229,7 @@ impl TypeBuilder {
             },
             Some(BaseType::Bool) => CType::Bool,
             Some(BaseType::Alias(_, t)) => t.t.clone(),
+            Some(BaseType::Tagged(tti)) => CType::Tagged(tti.clone()),
         };
 
         Ok(TypeBuilderStage2 {
@@ -352,11 +369,11 @@ impl TypeBuilder {
                     }
                     Ok(())
                 }
-                BaseType::Alias(name, _) => match (&self.modifier, &self.sign) {
+                BaseType::Alias(_, _) | BaseType::Tagged(_) => match (&self.modifier, &self.sign) {
                     (TypeModifier::None, SignModifier::Default) => Ok(()),
                     _ => {
                         ec.record_error(
-                            CompileError::WrongModifiers(format!("typedef {}", &name)),
+                            CompileError::WrongModifiers(format!("{}", &base_type)),
                             span,
                         )?;
                         Err(())
@@ -364,6 +381,57 @@ impl TypeBuilder {
                 },
             },
         }
+    }
+
+    fn set_struct(
+        &mut self,
+        s: Node<StructType>,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        use lang_c::ast::{StructDeclaration, StructKind};
+        let span = s.span;
+        let kind = s.node.kind.node;
+        let name = s.node.identifier.map(|id| id.node.name);
+        let members = if let Some(v) = s.node.declarations {
+            let mut members = Vec::new();
+            for m in v {
+                match m.node {
+                    StructDeclaration::StaticAssert(sa) => check_static_assert(sa, scope, ec)?,
+                    StructDeclaration::Field(f) => {
+                        let type_builder = TypeBuilder::new_from_specifiers_qualifiers(
+                            f.node.specifiers,
+                            scope,
+                            ec,
+                        )?;
+                        for decl in f.node.declarators {
+                            if decl.node.bit_width.is_some() {
+                                unimplemented!("bit width");
+                            }
+                            let stage2 = type_builder.stage2(decl.span, ec)?;
+                            let (name, t) = if let Some(decl) = decl.node.declarator {
+                                stage2.process_declarator_node(decl, scope, ec)?
+                            } else {
+                                (None, stage2.finalize())
+                            };
+                            if let Some(name) = name {
+                                members.push((name, t))
+                            } else {
+                                ec.record_warning(CompileWarning::EmptyDeclaration, decl.span)?;
+                            }
+                        }
+                    }
+                }
+            }
+            Some(members)
+        } else {
+            None
+        };
+        let t = match kind {
+            StructKind::Struct => scope.declare_struct(name, members, span, ec)?,
+            StructKind::Union => scope.declare_union(name, members, span, ec)?,
+        };
+        self.set_base_type(BaseType::Tagged(t), span, ec)
     }
 }
 
@@ -374,7 +442,7 @@ impl TypeBuilderStage2 {
     pub fn process_declarator_node(
         mut self,
         declarator: Node<lang_c::ast::Declarator>,
-        scope: &NameScope,
+        scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(Option<String>, QualifiedType), ()> {
         use lang_c::ast::DeclaratorKind;
@@ -412,7 +480,7 @@ impl TypeBuilderStage2 {
     fn add_derived_declarator_node(
         &mut self,
         dd: Node<lang_c::ast::DerivedDeclarator>,
-        scope: &NameScope,
+        scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         use lang_c::ast::{DerivedDeclarator, PointerQualifier};
@@ -519,7 +587,7 @@ impl TypeBuilderStage2 {
 
 pub fn build_type_from_ast_type_name(
     node: Node<TypeName>,
-    scope: &NameScope,
+    scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<QualifiedType, ()> {
     let mut builder = TypeBuilder::new();
@@ -566,6 +634,7 @@ impl std::fmt::Display for BaseType {
             BaseType::Double => f.write_str("double"),
             BaseType::Bool => f.write_str("_Bool"),
             BaseType::Alias(name, t) => write!(f, "{} (aka {})", name, t),
+            BaseType::Tagged(t) => write!(f, "tagged type {}", t),
         }
     }
 }

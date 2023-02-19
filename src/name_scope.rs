@@ -5,7 +5,7 @@ use lang_c::{
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ctype::{FunctionArgs, QualifiedType},
+    ctype::{CType, FunctionArgs, QualifiedType, TaggedTypeIdentifier, TaggedTypeKind},
     error::{CompileError, CompileWarning, ErrorCollector},
     ir,
 };
@@ -22,9 +22,10 @@ use crate::{
 pub struct NameScope {
     last_reg: Reg,
     last_static_id: u32,
-    defs: Vec<HashMap<Namespace, (Value, Span)>>,
+    defs: Vec<Scope>,
     static_initializers: HashMap<GlobalVarId, TypedValue>,
     fixed_regs: HashSet<ir::Reg>,
+    tagged_types: Vec<(Tagged, Span)>,
 }
 
 #[derive(Clone)]
@@ -40,10 +41,27 @@ pub enum Value {
     ),
 }
 
-#[derive(Eq, Hash, PartialEq, Clone)]
-enum Namespace {
-    Default(String),
-    Tag(String),
+#[derive(Clone)]
+struct Scope {
+    default: HashMap<String, (Value, Span)>,
+    tagged: HashMap<String, usize>,
+}
+
+#[derive(Clone)]
+enum Tagged {
+    Enum(Enum),
+    Struct(StructUnion),
+    Union(StructUnion),
+}
+
+#[derive(Clone)]
+pub struct Enum {
+    values: Option<Vec<(String, i128)>>,
+}
+
+#[derive(Clone)]
+pub struct StructUnion {
+    members: Option<Vec<(String, QualifiedType)>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -61,9 +79,10 @@ impl NameScope {
         Self {
             last_reg: 0,
             last_static_id: 0,
-            defs: vec![HashMap::new()],
+            defs: vec![Scope::new()],
             static_initializers: HashMap::new(),
             fixed_regs: HashSet::new(),
+            tagged_types: Vec::new(),
         }
     }
 
@@ -71,7 +90,7 @@ impl NameScope {
      * Go down one level.
      */
     pub fn push(&mut self) {
-        self.defs.push(HashMap::new());
+        self.defs.push(Scope::new());
     }
 
     /**
@@ -83,7 +102,7 @@ impl NameScope {
         if self.defs.len() == 0 {
             panic!("NameScope is popped above the global level");
         }
-        for (_key, (val, _span)) in m.drain() {
+        for (_key, (val, _span)) in m.default.drain() {
             if let Value::StaticVar(t, id, _, initializer) = val {
                 let initializer = initializer.unwrap_or_else(|| TypedValue::new_default(t));
                 self.static_initializers.insert(id, initializer);
@@ -99,14 +118,11 @@ impl NameScope {
         if let FunctionArgs::List(l) = args {
             for (i, (t, name, span)) in l.iter().enumerate() {
                 if let Some(name) = name {
-                    defs.insert(
-                        Namespace::Default(name.to_string()),
-                        (Value::Arg(t.clone(), i), *span),
-                    );
+                    defs.insert(name.to_string(), (Value::Arg(t.clone(), i), *span));
                 }
             }
         }
-        self.defs.push(defs);
+        self.defs.push(Scope::new_with_defs(defs));
     }
 
     /**
@@ -136,12 +152,11 @@ impl NameScope {
             (None, None)
         };
 
-        let key = Namespace::Default(name.to_string());
         if let Some(StorageClassSpecifier::Typedef) = storage_class {
             if initializer.is_some() {
                 return ec.record_error(CompileError::TypedefInitialized, span);
             }
-            if let Some((old_val, _)) = self.remove_at_same_level(&key) {
+            if let Some((old_val, _)) = self.remove_at_same_level(name) {
                 if !old_val.is_type() {
                     return ec.record_error(
                         CompileError::ConflictingStorageClass(name.to_string()),
@@ -152,7 +167,7 @@ impl NameScope {
                     return ec.record_error(CompileError::TypeRedefinition(name.to_string()), span);
                 }
             }
-            self.insert(key, Value::Type(t), span);
+            self.insert(name, Value::Type(t), span);
         } else if self.is_at_global_level() {
             let storage_class = match GlobalStorageClass::from_ast_storage_class(storage_class) {
                 Ok(class) => class,
@@ -163,7 +178,7 @@ impl NameScope {
             } else {
                 None
             };
-            if let Some((old_val, _)) = self.remove_at_same_level(&key) {
+            if let Some((old_val, _)) = self.remove_at_same_level(name) {
                 // check that both definitions are variables
                 if !old_val.is_var() {
                     return ec.record_error(
@@ -209,25 +224,25 @@ impl NameScope {
                 let combined_initializer = initializer.or(old_initializer);
 
                 self.insert(
-                    key,
+                    name,
                     Value::StaticVar(t, old_var_id, combined_storage_class, combined_initializer),
                     span,
                 );
             } else {
                 let var_id = self.alloc_global_var_id(name);
                 self.insert(
-                    key,
+                    name,
                     Value::StaticVar(t, var_id, storage_class, initializer),
                     span,
                 );
             }
         } else {
             // local variable
-            if self.exists_at_any_level(&key).is_some() {
+            if self.exists_at_any_level(name).is_some() {
                 ec.record_warning(CompileWarning::LocalVarShadow(name.to_string()), span)?;
             }
 
-            if self.remove_at_same_level(&key).is_some() {
+            if self.remove_at_same_level(name).is_some() {
                 return ec.record_error(CompileError::VarRedefinition(name.to_string()), span);
             }
 
@@ -240,7 +255,7 @@ impl NameScope {
                     };
                     let id = self.alloc_global_var_id(name);
                     self.insert(
-                        key,
+                        name,
                         Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
                         span,
                     );
@@ -250,7 +265,7 @@ impl NameScope {
                 | Some(StorageClassSpecifier::Register) => {
                     assert!(initializer.is_none());
                     let id = self.alloc_reg();
-                    self.insert(key, Value::AutoVar(t, id), span);
+                    self.insert(name, Value::AutoVar(t, id), span);
                 }
                 Some(StorageClassSpecifier::Extern) => {
                     return ec
@@ -261,6 +276,39 @@ impl NameScope {
             }
         }
         Ok(())
+    }
+
+    pub fn declare_struct(
+        &mut self,
+        name: Option<String>,
+        members: Option<Vec<(String, QualifiedType)>>,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<TaggedTypeIdentifier, ()> {
+        let tagged = Tagged::Struct(StructUnion { members });
+        self.declare_tagged(name, tagged, span, ec)
+    }
+
+    pub fn declare_union(
+        &mut self,
+        name: Option<String>,
+        members: Option<Vec<(String, QualifiedType)>>,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<TaggedTypeIdentifier, ()> {
+        let tagged = Tagged::Union(StructUnion { members });
+        self.declare_tagged(name, tagged, span, ec)
+    }
+
+    pub fn declare_enum(
+        &mut self,
+        name: Option<String>,
+        values: Option<Vec<(String, i128)>>,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<TaggedTypeIdentifier, ()> {
+        let tagged = Tagged::Enum(Enum { values });
+        self.declare_tagged(name, tagged, span, ec)
     }
 
     pub fn get_type_alias(
@@ -331,13 +379,20 @@ impl NameScope {
     }
 
     pub fn get(&self, name: &str) -> Option<&Value> {
-        let key = Namespace::Default(name.to_string());
         for m in self.defs.iter().rev() {
-            if let Some((val, _)) = m.get(&key) {
+            if let Some((val, _)) = m.default.get(name) {
                 return Some(val);
             }
         }
         return None;
+    }
+
+    pub fn get_tagged_type(&self, name: &str) -> CType {
+        let id = self
+            .find_tagged_id(name)
+            .expect("any use of tagged types follows their definitions");
+        let tti = TaggedTypeIdentifier::new(id, name, self.tagged_types[id].0.get_kind());
+        CType::Tagged(tti)
     }
 
     pub fn fix_in_memory(&mut self, var: &VarLocation) {
@@ -371,21 +426,79 @@ impl NameScope {
         self.defs.len() == 1
     }
 
-    fn remove_at_same_level(&mut self, ns: &Namespace) -> Option<(Value, Span)> {
-        self.defs.last_mut().unwrap().remove(ns)
+    fn remove_at_same_level(&mut self, key: &str) -> Option<(Value, Span)> {
+        self.defs.last_mut().unwrap().default.remove(key)
     }
 
-    fn exists_at_any_level(&self, ns: &Namespace) -> Option<Span> {
+    fn exists_at_any_level(&self, key: &str) -> Option<Span> {
         for m in self.defs.iter().rev() {
-            if let Some((_val, span)) = m.get(ns) {
+            if let Some((_val, span)) = m.default.get(key) {
                 return Some(*span);
             }
         }
         None
     }
 
-    fn insert(&mut self, key: Namespace, val: Value, span: Span) {
-        self.defs.last_mut().unwrap().insert(key, (val, span));
+    fn insert(&mut self, key: &str, val: Value, span: Span) {
+        self.defs
+            .last_mut()
+            .unwrap()
+            .default
+            .insert(key.to_string(), (val, span));
+    }
+
+    fn declare_tagged(
+        &mut self,
+        name: Option<String>,
+        val: Tagged,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<TaggedTypeIdentifier, ()> {
+        let kind = val.get_kind();
+        let id = if let Some(name) = &name {
+            if let Some(id) = self.find_tagged_id(&name) {
+                if !self.tagged_types[id].0.is_same_tag_as(&val) {
+                    ec.record_error(
+                        CompileError::RedefinitionWithDifferentTag(name.to_string()),
+                        span,
+                    )?;
+                    unreachable!()
+                }
+            }
+            match self.defs.last().unwrap().tagged.get(name) {
+                None => {
+                    self.tagged_types.push((val, span));
+                    self.tagged_types.len() - 1
+                }
+                Some(id) => {
+                    let (old_type, _) = &self.tagged_types[*id];
+                    if val.is_complete() && old_type.is_complete() {
+                        ec.record_error(
+                            CompileError::TaggedTypedRedefinition(name.to_string()),
+                            span,
+                        )?;
+                        unreachable!();
+                    }
+                    if val.is_complete() {
+                        self.tagged_types[*id] = (val, span);
+                    }
+                    *id
+                }
+            }
+        } else {
+            self.tagged_types.push((val, span));
+            self.tagged_types.len() - 1
+        };
+        Ok(TaggedTypeIdentifier::new_opt(id, name, kind))
+    }
+
+    fn find_tagged_id(&self, name: &str) -> Option<usize> {
+        for m in self.defs.iter().rev() {
+            if let Some(id) = m.tagged.get(name) {
+                return Some(*id);
+            }
+        }
+        None
     }
 }
 
@@ -442,6 +555,48 @@ impl GlobalStorageClass {
             Some(StorageClassSpecifier::Extern) => Ok(GlobalStorageClass::Extern),
             Some(StorageClassSpecifier::Static) => Ok(GlobalStorageClass::Static),
             Some(_) => Err(()),
+        }
+    }
+}
+
+impl Scope {
+    fn new() -> Self {
+        Self {
+            default: HashMap::new(),
+            tagged: HashMap::new(),
+        }
+    }
+
+    fn new_with_defs(defs: HashMap<String, (Value, Span)>) -> Self {
+        Self {
+            default: defs,
+            tagged: HashMap::new(),
+        }
+    }
+}
+
+impl Tagged {
+    fn is_complete(&self) -> bool {
+        match self {
+            Tagged::Enum(e) => e.values.is_some(),
+            Tagged::Struct(s) | Tagged::Union(s) => s.members.is_some(),
+        }
+    }
+
+    fn is_same_tag_as(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Tagged::Enum(_), Tagged::Enum(_))
+            | (Tagged::Struct(_), Tagged::Struct(_))
+            | (Tagged::Union(_), Tagged::Union(_)) => true,
+            _ => false,
+        }
+    }
+
+    fn get_kind(&self) -> TaggedTypeKind {
+        match self {
+            Tagged::Enum(_) => TaggedTypeKind::Enum,
+            Tagged::Struct(_) => TaggedTypeKind::Struct,
+            Tagged::Union(_) => TaggedTypeKind::Union,
         }
     }
 }

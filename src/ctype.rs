@@ -17,9 +17,7 @@ pub enum CType {
     Float(u8),
     Pointer(Box<QualifiedType>),
     Array(Box<QualifiedType>, Option<u32>),
-    Struct(TypeIdentifier),
-    Union(TypeIdentifier),
-    Enum(TypeIdentifier),
+    Tagged(TaggedTypeIdentifier),
     Function { result: Box<QualifiedType>, args: FunctionArgs, vararg: bool },
 }
 
@@ -45,10 +43,18 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub enum TypeIdentifier {
-    Anon(usize),
-    Named(String),
+#[derive(Debug, Clone, Hash)]
+pub struct TaggedTypeIdentifier {
+    id: usize,
+    name: Option<String>,
+    kind: TaggedTypeKind,
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq)]
+pub enum TaggedTypeKind {
+    Struct,
+    Union,
+    Enum,
 }
 
 pub const CHAR_TYPE: CType = CType::Int(1, CHAR_SIGNED);
@@ -221,8 +227,7 @@ impl CType {
             return true;
         }
         match (self, other) {
-            (CType::Struct(x), CType::Struct(y)) if x == y => true,
-            (CType::Union(x), CType::Union(y)) if x == y => true,
+            (CType::Tagged(x), CType::Tagged(y)) if x == y => true,
             _ => false,
         }
     }
@@ -233,7 +238,10 @@ impl CType {
             Int(_, _) => true,
             Bool => true,
             Float(_) => true,
-            Enum(_) => true,
+            Tagged(TaggedTypeIdentifier {
+                kind: TaggedTypeKind::Enum,
+                ..
+            }) => true,
             _ => false,
         }
     }
@@ -243,7 +251,10 @@ impl CType {
         match self {
             Int(_, _) => true,
             Bool => true,
-            Enum(_) => true,
+            Tagged(TaggedTypeIdentifier {
+                kind: TaggedTypeKind::Enum,
+                ..
+            }) => true,
             _ => false,
         }
     }
@@ -282,7 +293,10 @@ impl CType {
             Int(_, _) => true,
             Bool => true,
             Float(_) => true,
-            Enum(_) => true,
+            Tagged(TaggedTypeIdentifier {
+                kind: TaggedTypeKind::Enum,
+                ..
+            }) => true,
             Pointer(_) => true,
             Array(_, _) => true,
             _ => false,
@@ -293,8 +307,11 @@ impl CType {
         use CType::*;
         match self {
             Array(_, _) => true,
-            Struct(_) => true,
-            Union(_) => true,
+            Tagged(TaggedTypeIdentifier { kind, .. }) => match kind {
+                TaggedTypeKind::Struct => true,
+                TaggedTypeKind::Union => true,
+                TaggedTypeKind::Enum => false,
+            },
             _ => false,
         }
     }
@@ -330,8 +347,11 @@ impl CType {
     pub fn is_same_struct_union(&self, other: &Self) -> bool {
         use CType::*;
         match (self, other) {
-            (Struct(x), Struct(y)) if x == y => true,
-            (Union(x), Union(y)) if x == y => true,
+            (Tagged(x), Tagged(y)) => match (x.kind, y.kind) {
+                (TaggedTypeKind::Struct, TaggedTypeKind::Struct)
+                | (TaggedTypeKind::Union, TaggedTypeKind::Union) => x == y,
+                _ => false,
+            },
             _ => false,
         }
     }
@@ -359,11 +379,11 @@ impl CType {
             CType::Pointer(_) => Ok(machine::PTR_SIZE as u32),
             CType::Array(t, Some(n)) => Ok(t.t.sizeof(span, ec)? * *n),
             CType::Array(_, None) => Ok(machine::PTR_SIZE as u32),
-            CType::Struct(_) => todo!(),
-            CType::Union(_) => todo!(),
-            CType::Enum(_) => todo!(),
+            CType::Tagged(_) => todo!(),
         }
     }
+
+    // pub fn alignof(&self)
 
     pub fn get_width_sign(&self) -> Option<(ir::Width, bool)> {
         match self {
@@ -372,7 +392,10 @@ impl CType {
             CType::Array(_, _) | CType::Pointer(_) => {
                 Some((ir::Width::new(machine::PTR_SIZE), false))
             }
-            CType::Union(_) => todo!(),
+            CType::Tagged(t) => match t.kind {
+                TaggedTypeKind::Enum => todo!(),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -382,7 +405,10 @@ impl CType {
             CType::Int(size, _) | CType::Float(size) => Some(ir::Width::new(*size)),
             CType::Bool => Some(ir::Width::new(machine::BOOL_SIZE)),
             CType::Array(_, _) | CType::Pointer(_) => Some(ir::Width::new(machine::PTR_SIZE)),
-            CType::Union(_) => todo!(),
+            CType::Tagged(t) => match t.kind {
+                TaggedTypeKind::Enum => todo!(),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -390,8 +416,7 @@ impl CType {
     pub fn is_complete(&self) -> bool {
         match self {
             CType::Void => false,
-            CType::Struct(_) => todo!(),
-            CType::Union(_) => todo!(),
+            CType::Tagged(_) => todo!(),
             _ => true,
         }
     }
@@ -458,11 +483,40 @@ impl CType {
     }
 }
 
-impl std::fmt::Display for TypeIdentifier {
+impl TaggedTypeIdentifier {
+    pub fn new(id: usize, name: &str, kind: TaggedTypeKind) -> Self {
+        Self {
+            id,
+            name: Some(name.to_string()),
+            kind,
+        }
+    }
+
+    pub fn new_opt(id: usize, name: Option<String>, kind: TaggedTypeKind) -> Self {
+        Self { id, name, kind }
+    }
+
+    pub fn is_enum(&self) -> bool {
+        self.kind == TaggedTypeKind::Enum
+    }
+}
+
+impl PartialEq for TaggedTypeIdentifier {
+    fn eq(&self, other: &TaggedTypeIdentifier) -> bool {
+        self.id == other.id
+    }
+}
+
+impl std::fmt::Display for TaggedTypeIdentifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        match self {
-            TypeIdentifier::Anon(_) => f.write_str("<anonymous>"),
-            TypeIdentifier::Named(name) => f.write_str(name),
+        match self.kind {
+            TaggedTypeKind::Struct => f.write_str("struct ")?,
+            TaggedTypeKind::Union => f.write_str("union ")?,
+            TaggedTypeKind::Enum => f.write_str("enum ")?,
+        }
+        match &self.name {
+            None => f.write_str("<anonymous>"),
+            Some(name) => f.write_str(&name),
         }
     }
 }
@@ -491,9 +545,7 @@ impl std::fmt::Display for CType {
             Pointer(inner) => write!(f, "{} *", inner),
             Array(inner, None) => write!(f, "{} []", inner),
             Array(inner, Some(n)) => write!(f, "{} [{}]", inner, n),
-            Struct(id) => write!(f, "struct {}", id),
-            Union(id) => write!(f, "union {}", id),
-            Enum(id) => write!(f, "enum {}", id),
+            Tagged(id) => id.fmt(f),
             Function {
                 result,
                 args,
