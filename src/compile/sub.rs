@@ -56,17 +56,13 @@ pub fn compile_sub_inner(
             todo!()
         }
     } else if lhs.t.t.is_dereferencable() {
-        if !lhs.t.t.dereferences_to_complete() {
-            ec.record_error(CompileError::SizeOfIncomplete(lhs.t), lhs_span)?;
-            unreachable!();
-        }
         let element_size = lhs
             .t
             .clone()
             .dereference()
             .unwrap()
             .t
-            .sizeof(lhs_span, ec)?;
+            .sizeof(scope, lhs_span, ec)?;
         let element_size_src = TypedRValue {
             t: ctype::QualifiedType {
                 t: ctype::SSIZE_TYPE,

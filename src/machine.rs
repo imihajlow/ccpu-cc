@@ -6,6 +6,13 @@ pub const LLONG_SIZE: u8 = 8;
 pub const PTR_SIZE: u8 = 2;
 pub const BOOL_SIZE: u8 = 1;
 
+pub const SHORT_ALIGN: u32 = 2;
+pub const INT_ALIGN: u32 = 2;
+pub const LONG_ALIGN: u32 = 4;
+pub const LLONG_ALIGN: u32 = 8;
+pub const PTR_ALIGN: u32 = 2;
+pub const BOOL_ALIGN: u32 = 1;
+
 const_assert!(SHORT_SIZE >= 2);
 const_assert!(INT_SIZE >= 2);
 const_assert!(LONG_SIZE >= 4);

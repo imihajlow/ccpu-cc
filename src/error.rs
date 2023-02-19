@@ -1,7 +1,10 @@
 use lang_c::span::Span;
 use std::fmt::Formatter;
 
-use crate::{ctype::QualifiedType, string::StringParseError};
+use crate::{
+    ctype::{CType, QualifiedType},
+    string::StringParseError,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum CompileError {
@@ -55,7 +58,7 @@ pub enum CompileError {
     BadSubsript,
     NotAssignable,
     AssignmentToConstQualified(QualifiedType),
-    SizeOfIncomplete(QualifiedType),
+    SizeOfIncomplete(CType),
     PointersToIncompatible(QualifiedType, QualifiedType),
     // Function call errors
     NotAFunction(QualifiedType),

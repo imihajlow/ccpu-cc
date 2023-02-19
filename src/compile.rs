@@ -245,14 +245,10 @@ pub fn compile_pointer_offset(
         ec.record_error(CompileError::IntegerTypeRequired, ptr_span)?;
         unreachable!();
     }
-    if !ptr.t.t.dereferences_to_complete() {
-        ec.record_error(CompileError::SizeOfIncomplete(ptr.t), ptr_span)?;
-        unreachable!();
-    }
 
     let index = int_promote(index, scope, be);
 
-    if index.t.t.sizeof(index_span, ec)? > machine::PTR_SIZE.into() {
+    if index.t.t.sizeof(scope, index_span, ec)? > machine::PTR_SIZE.into() {
         ec.record_warning(CompileWarning::IndexTooWide(index.t.clone()), index_span)?;
     }
 
@@ -263,7 +259,7 @@ pub fn compile_pointer_offset(
         .dereference()
         .unwrap()
         .t
-        .sizeof(ptr_span, ec)?;
+        .sizeof(scope, ptr_span, ec)?;
     let element_size_src = TypedRValue {
         t: ctype::QualifiedType {
             t: ctype::SSIZE_TYPE,

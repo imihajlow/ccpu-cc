@@ -373,12 +373,10 @@ impl NameScope {
         return None;
     }
 
-    pub fn get_tagged_type(&self, name: &str) -> CType {
-        let id = self
-            .find_tagged_id(name)
-            .expect("any use of tagged types follows their definitions");
-        let tti = TaggedTypeIdentifier::new(id, name, self.tagged_types[id].0.get_kind());
-        CType::Tagged(tti)
+    pub fn get_tagged_type(&self, tti: &TaggedTypeIdentifier) -> &Tagged {
+        let result = &self.tagged_types[tti.id].0;
+        assert_eq!(result.get_kind(), tti.kind);
+        result
     }
 
     pub fn fix_in_memory(&mut self, var: &VarLocation) {

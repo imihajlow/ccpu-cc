@@ -1,7 +1,8 @@
 use crate::{
-    error::{CompileWarning, ErrorCollector},
+    error::{CompileError, CompileWarning, ErrorCollector},
     ir,
     machine::{self, *},
+    name_scope::NameScope,
 };
 use bitflags::bitflags;
 use lang_c::span::Span;
@@ -45,9 +46,9 @@ bitflags! {
 
 #[derive(Debug, Clone, Hash)]
 pub struct TaggedTypeIdentifier {
-    id: usize,
-    name: Option<String>,
-    kind: TaggedTypeKind,
+    pub id: usize,
+    pub name: Option<String>,
+    pub kind: TaggedTypeKind,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq)]
@@ -367,7 +368,12 @@ impl CType {
         }
     }
 
-    pub fn sizeof(&self, span: Span, ec: &mut ErrorCollector) -> Result<u32, ()> {
+    pub fn sizeof(
+        &self,
+        scope: &NameScope,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<u32, ()> {
         match self {
             CType::Void | CType::Function { .. } => {
                 ec.record_warning(CompileWarning::InvalidSizeof, span)?;
@@ -377,13 +383,48 @@ impl CType {
             CType::Int(s, _) => Ok(*s as u32),
             CType::Float(s) => Ok(*s as u32),
             CType::Pointer(_) => Ok(machine::PTR_SIZE as u32),
-            CType::Array(t, Some(n)) => Ok(t.t.sizeof(span, ec)? * *n),
+            CType::Array(t, Some(n)) => Ok(t.t.sizeof(scope, span, ec)? * *n),
             CType::Array(_, None) => Ok(machine::PTR_SIZE as u32),
-            CType::Tagged(_) => todo!(),
+            CType::Tagged(tti) => {
+                let tagged = scope.get_tagged_type(tti);
+                if !tagged.is_complete() {
+                    ec.record_error(CompileError::SizeOfIncomplete(self.clone()), span)?;
+                    unreachable!();
+                }
+                tagged.sizeof(scope, span, ec)
+            }
         }
     }
 
-    // pub fn alignof(&self)
+    pub fn alignof(
+        &self,
+        scope: &NameScope,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<u32, ()> {
+        #[allow(unreachable_patterns)]
+        match self {
+            CType::Void | CType::Function { .. } => Ok(1),
+            CType::Bool => Ok(BOOL_ALIGN),
+            CType::Int(1, _) => Ok(1),
+            CType::Int(SHORT_SIZE, _) => Ok(SHORT_ALIGN),
+            CType::Int(INT_SIZE, _) => Ok(INT_ALIGN),
+            CType::Int(LONG_SIZE, _) => Ok(LONG_ALIGN),
+            CType::Int(LLONG_SIZE, _) => Ok(LLONG_ALIGN),
+            CType::Int(_, _) => unreachable!(),
+            CType::Float(s) => Ok(*s as u32),
+            CType::Pointer(_) => Ok(PTR_ALIGN),
+            CType::Array(t, _) => t.t.alignof(scope, span, ec),
+            CType::Tagged(tti) => {
+                let tagged = scope.get_tagged_type(tti);
+                if !tagged.is_complete() {
+                    ec.record_error(CompileError::SizeOfIncomplete(self.clone()), span)?;
+                    unreachable!();
+                }
+                tagged.alignof(scope, span, ec)
+            }
+        }
+    }
 
     pub fn get_width_sign(&self) -> Option<(ir::Width, bool)> {
         match self {
