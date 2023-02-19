@@ -4,6 +4,9 @@ use lang_c::{
 };
 use std::collections::{HashMap, HashSet};
 
+use crate::tagged::Enum;
+use crate::tagged::StructUnion;
+use crate::tagged::Tagged;
 use crate::{
     ctype::{CType, FunctionArgs, QualifiedType, TaggedTypeIdentifier, TaggedTypeKind},
     error::{CompileError, CompileWarning, ErrorCollector},
@@ -45,23 +48,6 @@ pub enum Value {
 struct Scope {
     default: HashMap<String, (Value, Span)>,
     tagged: HashMap<String, usize>,
-}
-
-#[derive(Clone)]
-enum Tagged {
-    Enum(Enum),
-    Struct(StructUnion),
-    Union(StructUnion),
-}
-
-#[derive(Clone)]
-pub struct Enum {
-    values: Option<Vec<(String, i128)>>,
-}
-
-#[derive(Clone)]
-pub struct StructUnion {
-    members: Option<Vec<(String, QualifiedType)>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -285,7 +271,7 @@ impl NameScope {
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<TaggedTypeIdentifier, ()> {
-        let tagged = Tagged::Struct(StructUnion { members });
+        let tagged = Tagged::new_struct(members);
         self.declare_tagged(name, tagged, span, ec)
     }
 
@@ -296,7 +282,7 @@ impl NameScope {
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<TaggedTypeIdentifier, ()> {
-        let tagged = Tagged::Union(StructUnion { members });
+        let tagged = Tagged::new_union(members);
         self.declare_tagged(name, tagged, span, ec)
     }
 
@@ -307,7 +293,7 @@ impl NameScope {
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<TaggedTypeIdentifier, ()> {
-        let tagged = Tagged::Enum(Enum { values });
+        let tagged = Tagged::new_enum(values);
         self.declare_tagged(name, tagged, span, ec)
     }
 
@@ -591,32 +577,6 @@ impl Scope {
     }
 }
 
-impl Tagged {
-    fn is_complete(&self) -> bool {
-        match self {
-            Tagged::Enum(e) => e.values.is_some(),
-            Tagged::Struct(s) | Tagged::Union(s) => s.members.is_some(),
-        }
-    }
-
-    fn is_same_tag_as(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Tagged::Enum(_), Tagged::Enum(_))
-            | (Tagged::Struct(_), Tagged::Struct(_))
-            | (Tagged::Union(_), Tagged::Union(_)) => true,
-            _ => false,
-        }
-    }
-
-    fn get_kind(&self) -> TaggedTypeKind {
-        match self {
-            Tagged::Enum(_) => TaggedTypeKind::Enum,
-            Tagged::Struct(_) => TaggedTypeKind::Struct,
-            Tagged::Union(_) => TaggedTypeKind::Union,
-        }
-    }
-}
-
 fn match_storage_classes(
     old: GlobalStorageClass,
     new: GlobalStorageClass,
@@ -659,7 +619,8 @@ mod test {
 
     #[test]
     fn test_struct_1() {
-        let (tu, ec) = compile("struct X { int x; }; void foo(void) { struct X x; struct X *p = &x; }");
+        let (tu, ec) =
+            compile("struct X { int x; }; void foo(void) { struct X x; struct X *p = &x; }");
         ec.print_issues();
         assert_eq!(ec.get_warning_count(), 0);
         let body = get_first_body(&tu);

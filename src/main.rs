@@ -17,6 +17,7 @@ mod rvalue;
 mod string;
 mod translation_unit;
 mod type_builder;
+mod tagged;
 
 #[macro_use]
 extern crate static_assertions;
