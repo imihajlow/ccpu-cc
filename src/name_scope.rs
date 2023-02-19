@@ -447,6 +447,15 @@ impl NameScope {
             .insert(key.to_string(), (val, span));
     }
 
+    fn push_tagged(&mut self, name: Option<String>, val: Tagged, span: Span) -> usize {
+        self.tagged_types.push((val, span));
+        let id = self.tagged_types.len() - 1;
+        if let Some(name) = name {
+            self.defs.last_mut().unwrap().tagged.insert(name, id);
+        }
+        id
+    }
+
     fn declare_tagged(
         &mut self,
         name: Option<String>,
@@ -456,49 +465,56 @@ impl NameScope {
     ) -> Result<TaggedTypeIdentifier, ()> {
         let kind = val.get_kind();
         let id = if let Some(name) = &name {
-            if let Some(id) = self.find_tagged_id(&name) {
-                if !self.tagged_types[id].0.is_same_tag_as(&val) {
+            if let Some((id, lvl)) = self.find_tagged_id_and_level(&name) {
+                let prev = &self.tagged_types[id].0;
+                if !prev.is_same_tag_as(&val) {
                     ec.record_error(
                         CompileError::RedefinitionWithDifferentTag(name.to_string()),
                         span,
                     )?;
                     unreachable!()
                 }
-            }
-            match self.defs.last().unwrap().tagged.get(name) {
-                None => {
-                    self.tagged_types.push((val, span));
-                    self.tagged_types.len() - 1
-                }
-                Some(id) => {
-                    let (old_type, _) = &self.tagged_types[*id];
-                    if val.is_complete() && old_type.is_complete() {
+                if !val.is_complete() {
+                    id
+                } else if prev.is_complete() {
+                    if lvl == 0 {
+                        // two same types on the same level -> error
                         ec.record_error(
                             CompileError::TaggedTypedRedefinition(name.to_string()),
                             span,
                         )?;
                         unreachable!();
+                    } else {
+                        // distinct new type
+                        self.push_tagged(Some(name.to_string()), val, span)
                     }
-                    if val.is_complete() {
-                        self.tagged_types[*id] = (val, span);
-                    }
-                    *id
+                } else {
+                    self.tagged_types[id] = (val, span);
+                    id
                 }
+            } else {
+                self.push_tagged(Some(name.to_string()), val, span)
             }
         } else {
-            self.tagged_types.push((val, span));
-            self.tagged_types.len() - 1
+            self.push_tagged(None, val, span)
         };
         Ok(TaggedTypeIdentifier::new_opt(id, name, kind))
     }
 
-    fn find_tagged_id(&self, name: &str) -> Option<usize> {
-        for m in self.defs.iter().rev() {
+    /**
+     * If name has been declared, return id and level where level 0 is current level.
+     */
+    fn find_tagged_id_and_level(&self, name: &str) -> Option<(usize, usize)> {
+        for (lvl, m) in self.defs.iter().rev().enumerate() {
             if let Some(id) = m.tagged.get(name) {
-                return Some(*id);
+                return Some((*id, lvl));
             }
         }
         None
+    }
+
+    fn find_tagged_id(&self, name: &str) -> Option<usize> {
+        self.find_tagged_id_and_level(name).map(|(id, _)| id)
     }
 }
 
@@ -617,5 +633,36 @@ fn match_storage_classes(
         (Static, Default) => None,
         (Default, _) => Some(Default),
         (_, Default) => Some(Default),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
+
+    use super::*;
+
+    fn compile(code: &str) -> (TranslationUnit, ErrorCollector) {
+        use lang_c::driver::{parse_preprocessed, Config, Flavor};
+        let mut cfg = Config::default();
+        cfg.flavor = Flavor::StdC11;
+        let p = parse_preprocessed(&cfg, code.to_string()).unwrap();
+        let mut ec = ErrorCollector::new();
+        let tu = TranslationUnit::translate(p.unit, &mut ec).unwrap();
+        assert_eq!(ec.get_error_count(), 0);
+        (tu, ec)
+    }
+
+    fn get_first_body(tu: &TranslationUnit) -> &Vec<LabeledBlock> {
+        tu.functions[0].get_body()
+    }
+
+    #[test]
+    fn test_struct_1() {
+        let (tu, ec) = compile("struct X { int x; }; void foo(void) { struct X x; struct X *p = &x; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
     }
 }
