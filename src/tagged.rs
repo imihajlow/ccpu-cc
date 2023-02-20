@@ -30,7 +30,7 @@ impl Tagged {
     }
 
     pub fn new_union(members: Option<Vec<(String, QualifiedType)>>) -> Self {
-        Self::Struct(StructUnion { members })
+        Self::Union(StructUnion { members })
     }
 
     pub fn new_enum(values: Option<Vec<(String, i128)>>) -> Self {

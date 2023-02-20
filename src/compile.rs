@@ -13,7 +13,6 @@ use crate::{
     constant,
     ctype::QualifiedType,
     error::{CompileWarning, ErrorCollector},
-    initializer::TypedValue,
     ir,
     name_scope::NameScope,
     rvalue::{RValue, TypedRValue},
@@ -21,11 +20,14 @@ use crate::{
 };
 use crate::{machine, type_builder};
 
+use self::sizeof::{compile_alignof, compile_sizeof_type, compile_sizeof_val};
+
 mod add;
 mod assign;
 mod binary;
 mod relational;
 mod shift;
+mod sizeof;
 mod sub;
 mod unary;
 
@@ -75,9 +77,9 @@ pub fn compile_expression(
         Expression::Conditional(c) => be.append_conditional(*c, scope, ec),
         Expression::Cast(c) => compile_cast(*c, scope, be, ec),
         Expression::Call(c) => compile_call(*c, scope, be, ec),
-        Expression::SizeOfTy(_) => todo!(),
-        Expression::SizeOfVal(_) => todo!(),
-        Expression::AlignOf(_) => todo!(),
+        Expression::SizeOfTy(si) => compile_sizeof_type(*si, scope, ec),
+        Expression::SizeOfVal(si) => compile_sizeof_val(*si, scope, be, ec),
+        Expression::AlignOf(si) => compile_alignof(*si, scope, ec),
         Expression::OffsetOf(_) => todo!(),
         Expression::StringLiteral(_) => todo!(),
         Expression::Member(_) => todo!(),

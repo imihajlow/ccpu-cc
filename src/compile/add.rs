@@ -2,16 +2,12 @@ use lang_c::span::Span;
 use lang_c::{ast::Expression, span::Node};
 
 use crate::block_emitter::BlockEmitter;
-use crate::ctype::Qualifiers;
 use crate::error::{CompileError, ErrorCollector};
-use crate::lvalue::TypedLValue;
+use crate::ir;
 use crate::name_scope::NameScope;
 use crate::rvalue::{RValue, TypedRValue};
-use crate::{ctype, ir};
 
-use super::{
-    cast, compile_expression, compile_pointer_offset, int_promote, usual_arithmetic_convert,
-};
+use super::{compile_expression, compile_pointer_offset, usual_arithmetic_convert};
 
 pub fn compile_add(
     lhs: Node<Expression>,
