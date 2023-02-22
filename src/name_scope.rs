@@ -267,7 +267,7 @@ impl NameScope {
     pub fn declare_struct(
         &mut self,
         name: Option<String>,
-        members: Option<Vec<(String, QualifiedType)>>,
+        members: Option<Vec<(Option<String>, QualifiedType)>>,
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<TaggedTypeIdentifier, ()> {
@@ -278,7 +278,7 @@ impl NameScope {
     pub fn declare_union(
         &mut self,
         name: Option<String>,
-        members: Option<Vec<(String, QualifiedType)>>,
+        members: Option<Vec<(Option<String>, QualifiedType)>>,
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<TaggedTypeIdentifier, ()> {

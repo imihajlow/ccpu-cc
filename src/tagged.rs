@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use lang_c::span::Span;
 
 use crate::ctype::QualifiedType;
@@ -21,15 +23,15 @@ pub struct Enum {
 
 #[derive(Clone)]
 pub struct StructUnion {
-    members: Option<Vec<(String, QualifiedType)>>,
+    members: Option<Vec<(Option<String>, QualifiedType)>>,
 }
 
 impl Tagged {
-    pub fn new_struct(members: Option<Vec<(String, QualifiedType)>>) -> Self {
+    pub fn new_struct(members: Option<Vec<(Option<String>, QualifiedType)>>) -> Self {
         Self::Struct(StructUnion { members })
     }
 
-    pub fn new_union(members: Option<Vec<(String, QualifiedType)>>) -> Self {
+    pub fn new_union(members: Option<Vec<(Option<String>, QualifiedType)>>) -> Self {
         Self::Union(StructUnion { members })
     }
 
@@ -85,6 +87,31 @@ impl Tagged {
             Tagged::Struct(su) => sizeof_struct(su, scope, span, ec),
             Tagged::Union(su) => sizeof_union(su, scope, span, ec),
         }
+    }
+
+    /**
+     * For a struct or union, make a set of member names.
+     * Names from nested anonymous structs/unions are included recursively.
+     */
+    pub fn collect_member_names(&self, scope: &NameScope) -> HashSet<String> {
+        let mut result = HashSet::new();
+        match self {
+            Tagged::Struct(su) | Tagged::Union(su) => {
+                if let Some(members) = su.members.as_ref() {
+                    for (name, t) in members {
+                        // names are guaranteed by TypeBuilder to be unique
+                        if let Some(name) = name.as_ref() {
+                            result.insert(name.to_string());
+                        } else if let Some(tti) = t.t.get_anon_struct_or_union_id() {
+                            let inner_names = scope.get_tagged_type(tti).collect_member_names(scope);
+                            result.extend(inner_names.into_iter());
+                        }
+                    }
+                }
+            }
+            _ => ()
+        }
+        result
     }
 }
 
@@ -171,14 +198,14 @@ mod test {
         let su = StructUnion {
             members: Some(vec![
                 (
-                    "x".to_string(),
+                    Some("x".to_string()),
                     QualifiedType {
                         t: CType::Int(2, true),
                         qualifiers: Qualifiers::empty(),
                     },
                 ),
                 (
-                    "y".to_string(),
+                    Some("y".to_string()),
                     QualifiedType {
                         t: CType::Int(4, true),
                         qualifiers: Qualifiers::empty(),
@@ -199,14 +226,14 @@ mod test {
         let su = StructUnion {
             members: Some(vec![
                 (
-                    "x".to_string(),
+                    Some("x".to_string()),
                     QualifiedType {
                         t: CType::Int(2, true),
                         qualifiers: Qualifiers::empty(),
                     },
                 ),
                 (
-                    "y".to_string(),
+                    Some("y".to_string()),
                     QualifiedType {
                         t: CType::Int(4, true),
                         qualifiers: Qualifiers::empty(),

@@ -29,6 +29,7 @@ pub enum CompileError {
     NotAVar(String),
     ArraySizeNotInteger(QualifiedType),
     ArraySizeNegative,
+    MemberRedeclaration(String),
     // Global definition errors
     TypeRedefinition(String),
     TaggedTypedRedefinition(String),
@@ -219,6 +220,7 @@ impl std::fmt::Display for CompileError {
                 write!(f, "size of array has non-integer type '{}'", t)
             }
             CompileError::ArraySizeNegative => write!(f, "negative array size"),
+            CompileError::MemberRedeclaration(s) => write!(f, "member '{}' is redeclared", s),
             CompileError::SizeOfIncomplete(t) => {
                 write!(f, "size of an incompete type '{}' is unknown", t)
             }

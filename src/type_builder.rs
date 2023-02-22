@@ -23,6 +23,7 @@ use lang_c::ast::StructType;
 use lang_c::ast::TypeName;
 use lang_c::span::Node;
 use lang_c::span::Span;
+use std::collections::HashMap;
 use std::fmt::Formatter;
 
 /**
@@ -395,6 +396,7 @@ impl TypeBuilder {
         let name = s.node.identifier.map(|id| id.node.name);
         let members = if let Some(v) = s.node.declarations {
             let mut members = Vec::new();
+            let mut used_names = HashMap::new();
             for m in v {
                 match m.node {
                     StructDeclaration::StaticAssert(sa) => check_static_assert(sa, scope, ec)?,
@@ -415,9 +417,33 @@ impl TypeBuilder {
                                 (None, stage2.finalize())
                             };
                             if let Some(name) = name {
-                                members.push((name, t))
+                                if used_names.insert(name.to_string(), decl.span).is_some() {
+                                    ec.record_error(
+                                        CompileError::MemberRedeclaration(name),
+                                        decl.span,
+                                    )?;
+                                    unreachable!();
+                                }
+                                members.push((Some(name), t))
                             } else {
-                                ec.record_warning(CompileWarning::EmptyDeclaration, decl.span)?;
+                                if let Some(tti) = t.t.get_anon_struct_or_union_id() {
+                                    let inner_names =
+                                        scope.get_tagged_type(tti).collect_member_names(scope);
+                                    for name in inner_names.iter() {
+                                        if let Some(span) =
+                                            used_names.insert(name.to_string(), decl.span)
+                                        {
+                                            ec.record_error(
+                                                CompileError::MemberRedeclaration(name.to_string()),
+                                                span,
+                                            )?;
+                                            unreachable!();
+                                        }
+                                    }
+                                    members.push((None, t))
+                                } else {
+                                    ec.record_warning(CompileWarning::EmptyDeclaration, decl.span)?;
+                                }
                             }
                         }
                     }
