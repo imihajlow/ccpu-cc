@@ -90,7 +90,7 @@ pub fn compile_assign_to_lval(
                 )?;
                 unreachable!()
             }
-            CType::Tagged(tti) if !tti.is_enum() => {
+            CType::StructUnion(_) => {
                 ec.record_error(
                     CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t),
                     rhs_span,
@@ -117,13 +117,12 @@ pub fn compile_assign_to_lval(
                     rhs_span,
                 )?;
             }
-            CType::Tagged(tti) if tti.is_enum() => {
+            CType::Enum(id) => {
                 ec.record_warning(
                     CompileWarning::IncompatibleTypes(lhs_lval.t.clone(), rhs_val.t.clone()),
                     rhs_span,
                 )?;
             }
-            CType::Tagged(_) => unreachable!(),
         }
         let rhs_casted = cast(rhs_val, &lhs_lval.t.t, false, rhs_span, scope, be, ec)?;
         let width = rhs_casted.t.t.get_width_sign().unwrap().0;

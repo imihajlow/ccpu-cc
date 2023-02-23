@@ -18,7 +18,8 @@ pub enum CType {
     Float(u8),
     Pointer(Box<QualifiedType>),
     Array(Box<QualifiedType>, Option<u32>),
-    Tagged(TaggedTypeIdentifier),
+    StructUnion(StructUnionIdentifier),
+    Enum(EnumIdentifier),
     Function { result: Box<QualifiedType>, args: FunctionArgs, vararg: bool },
 }
 
@@ -45,17 +46,22 @@ bitflags! {
 }
 
 #[derive(Debug, Clone, Hash)]
-pub struct TaggedTypeIdentifier {
+pub struct StructUnionIdentifier {
     pub id: usize,
     pub name: Option<String>,
-    pub kind: TaggedTypeKind,
+    pub kind: StructUnionKind,
+}
+
+#[derive(Debug, Clone, Hash)]
+pub struct EnumIdentifier {
+    pub id: usize,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq)]
-pub enum TaggedTypeKind {
+pub enum StructUnionKind {
     Struct,
     Union,
-    Enum,
 }
 
 pub const CHAR_TYPE: CType = CType::Int(1, CHAR_SIGNED);
@@ -203,8 +209,7 @@ impl QualifiedType {
         ec: &mut ErrorCollector,
     ) -> Result<(u32, QualifiedType), ()> {
         match &self.t {
-            CType::Tagged(tti) if tti.kind != TaggedTypeKind::Enum => {
-                let tagged = scope.get_tagged_type(tti);
+            CType::StructUnion(id) => {
                 todo!()
             }
             _ => {
@@ -247,7 +252,8 @@ impl CType {
             return true;
         }
         match (self, other) {
-            (CType::Tagged(x), CType::Tagged(y)) if x == y => true,
+            (CType::StructUnion(x), CType::StructUnion(y)) if x == y => true,
+            (CType::Enum(x), CType::Enum(y)) if x == y => true,
             _ => false,
         }
     }
@@ -258,10 +264,7 @@ impl CType {
             Int(_, _) => true,
             Bool => true,
             Float(_) => true,
-            Tagged(TaggedTypeIdentifier {
-                kind: TaggedTypeKind::Enum,
-                ..
-            }) => true,
+            Enum(_) => true,
             _ => false,
         }
     }
@@ -271,10 +274,7 @@ impl CType {
         match self {
             Int(_, _) => true,
             Bool => true,
-            Tagged(TaggedTypeIdentifier {
-                kind: TaggedTypeKind::Enum,
-                ..
-            }) => true,
+            Enum(_) => true,
             _ => false,
         }
     }
@@ -313,10 +313,7 @@ impl CType {
             Int(_, _) => true,
             Bool => true,
             Float(_) => true,
-            Tagged(TaggedTypeIdentifier {
-                kind: TaggedTypeKind::Enum,
-                ..
-            }) => true,
+            Enum(_) => true,
             Pointer(_) => true,
             Array(_, _) => true,
             _ => false,
@@ -327,11 +324,7 @@ impl CType {
         use CType::*;
         match self {
             Array(_, _) => true,
-            Tagged(TaggedTypeIdentifier { kind, .. }) => match kind {
-                TaggedTypeKind::Struct => true,
-                TaggedTypeKind::Union => true,
-                TaggedTypeKind::Enum => false,
-            },
+            StructUnion(_) => true,
             _ => false,
         }
     }
@@ -367,11 +360,7 @@ impl CType {
     pub fn is_same_struct_union(&self, other: &Self) -> bool {
         use CType::*;
         match (self, other) {
-            (Tagged(x), Tagged(y)) => match (x.kind, y.kind) {
-                (TaggedTypeKind::Struct, TaggedTypeKind::Struct)
-                | (TaggedTypeKind::Union, TaggedTypeKind::Union) => x == y,
-                _ => false,
-            },
+            (StructUnion(x), StructUnion(y)) => x == y,
             _ => false,
         }
     }
@@ -379,7 +368,8 @@ impl CType {
     pub fn is_complete(&self) -> bool {
         match self {
             CType::Void => false,
-            CType::Tagged(_) => todo!(),
+            CType::Enum(_) => todo!(),
+            CType::StructUnion(_) => todo!(),
             _ => true,
         }
     }
@@ -391,11 +381,12 @@ impl CType {
         }
     }
 
-    pub fn get_anon_struct_or_union_id(&self) -> Option<&TaggedTypeIdentifier> {
-        if let CType::Tagged(tti) = self {
-            match tti.kind {
-                TaggedTypeKind::Struct | TaggedTypeKind::Union if tti.name.is_none() => Some(tti),
-                _ => None,
+    pub fn get_anon_struct_or_union_id(&self) -> Option<&StructUnionIdentifier> {
+        if let CType::StructUnion(su) = self {
+            if su.name.is_none() {
+                Some(su)
+            } else {
+                None
             }
         } else {
             None
@@ -430,14 +421,15 @@ impl CType {
             CType::Pointer(_) => Ok(machine::PTR_SIZE as u32),
             CType::Array(t, Some(n)) => Ok(t.t.sizeof(scope, span, ec)? * *n),
             CType::Array(_, None) => Ok(machine::PTR_SIZE as u32),
-            CType::Tagged(tti) => {
-                let tagged = scope.get_tagged_type(tti);
-                if !tagged.is_complete() {
+            CType::StructUnion(su) => {
+                let su = scope.get_struct_union(su);
+                if !su.is_complete() {
                     ec.record_error(CompileError::SizeOfIncomplete(self.clone()), span)?;
                     unreachable!();
                 }
-                tagged.sizeof(scope, span, ec)
+                su.sizeof(scope, span, ec)
             }
+            CType::Enum(_) => Ok(machine::INT_SIZE as u32),
         }
     }
 
@@ -460,14 +452,15 @@ impl CType {
             CType::Float(s) => Ok(*s as u32),
             CType::Pointer(_) => Ok(PTR_ALIGN),
             CType::Array(t, _) => t.t.alignof(scope, span, ec),
-            CType::Tagged(tti) => {
-                let tagged = scope.get_tagged_type(tti);
-                if !tagged.is_complete() {
+            CType::StructUnion(su) => {
+                let su = scope.get_struct_union(su);
+                if !su.is_complete() {
                     ec.record_error(CompileError::SizeOfIncomplete(self.clone()), span)?;
                     unreachable!();
                 }
-                tagged.alignof(scope, span, ec)
+                su.alignof(scope, span, ec)
             }
+            CType::Enum(_) => Ok(machine::INT_ALIGN),
         }
     }
 
@@ -478,10 +471,8 @@ impl CType {
             CType::Array(_, _) | CType::Pointer(_) => {
                 Some((ir::Width::new(machine::PTR_SIZE), false))
             }
-            CType::Tagged(t) => match t.kind {
-                TaggedTypeKind::Enum => todo!(),
-                _ => None,
-            },
+            CType::Enum(_) => todo!(),
+            CType::StructUnion(_) => None,
             _ => None,
         }
     }
@@ -491,10 +482,8 @@ impl CType {
             CType::Int(size, _) | CType::Float(size) => Some(ir::Width::new(*size)),
             CType::Bool => Some(ir::Width::new(machine::BOOL_SIZE)),
             CType::Array(_, _) | CType::Pointer(_) => Some(ir::Width::new(machine::PTR_SIZE)),
-            CType::Tagged(t) => match t.kind {
-                TaggedTypeKind::Enum => todo!(),
-                _ => None,
-            },
+            CType::Enum(_) => Some(ir::Width::new(machine::INT_SIZE)),
+            CType::StructUnion(_) => None,
             _ => None,
         }
     }
@@ -554,37 +543,34 @@ impl CType {
     }
 }
 
-impl TaggedTypeIdentifier {
-    pub fn new(id: usize, name: &str, kind: TaggedTypeKind) -> Self {
-        Self {
-            id,
-            name: Some(name.to_string()),
-            kind,
-        }
-    }
-
-    pub fn new_opt(id: usize, name: Option<String>, kind: TaggedTypeKind) -> Self {
-        Self { id, name, kind }
-    }
-
-    pub fn is_enum(&self) -> bool {
-        self.kind == TaggedTypeKind::Enum
-    }
-}
-
-impl PartialEq for TaggedTypeIdentifier {
-    fn eq(&self, other: &TaggedTypeIdentifier) -> bool {
+impl PartialEq for StructUnionIdentifier {
+    fn eq(&self, other: &StructUnionIdentifier) -> bool {
         self.id == other.id
     }
 }
 
-impl std::fmt::Display for TaggedTypeIdentifier {
+impl PartialEq for EnumIdentifier {
+    fn eq(&self, other: &EnumIdentifier) -> bool {
+        self.id == other.id
+    }
+}
+
+impl std::fmt::Display for StructUnionIdentifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self.kind {
-            TaggedTypeKind::Struct => f.write_str("struct ")?,
-            TaggedTypeKind::Union => f.write_str("union ")?,
-            TaggedTypeKind::Enum => f.write_str("enum ")?,
+            StructUnionKind::Struct => f.write_str("struct ")?,
+            StructUnionKind::Union => f.write_str("union ")?,
         }
+        match &self.name {
+            None => f.write_str("<anonymous>"),
+            Some(name) => f.write_str(&name),
+        }
+    }
+}
+
+impl std::fmt::Display for EnumIdentifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.write_str("enum ")?;
         match &self.name {
             None => f.write_str("<anonymous>"),
             Some(name) => f.write_str(&name),
@@ -616,7 +602,8 @@ impl std::fmt::Display for CType {
             Pointer(inner) => write!(f, "{} *", inner),
             Array(inner, None) => write!(f, "{} []", inner),
             Array(inner, Some(n)) => write!(f, "{} [{}]", inner, n),
-            Tagged(id) => id.fmt(f),
+            StructUnion(id) => id.fmt(f),
+            Enum(id) => id.fmt(f),
             Function {
                 result,
                 args,

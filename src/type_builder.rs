@@ -1,10 +1,11 @@
 use crate::constant;
 use crate::constant::check_static_assert;
 use crate::ctype::CType;
+use crate::ctype::EnumIdentifier;
 use crate::ctype::FunctionArgs;
 use crate::ctype::QualifiedType;
 use crate::ctype::Qualifiers;
-use crate::ctype::TaggedTypeIdentifier;
+use crate::ctype::StructUnionIdentifier;
 use crate::ctype::DOUBLE_TYPE;
 use crate::ctype::FLOAT_TYPE;
 use crate::ctype::LDOUBLE_TYPE;
@@ -56,7 +57,8 @@ enum BaseType {
     Double,
     Bool,
     Alias(String, QualifiedType),
-    Tagged(TaggedTypeIdentifier),
+    StructUnion(StructUnionIdentifier),
+    Enum(EnumIdentifier),
 }
 
 #[derive(PartialEq, Eq)]
@@ -230,7 +232,8 @@ impl TypeBuilder {
             },
             Some(BaseType::Bool) => CType::Bool,
             Some(BaseType::Alias(_, t)) => t.t.clone(),
-            Some(BaseType::Tagged(tti)) => CType::Tagged(tti.clone()),
+            Some(BaseType::StructUnion(id)) => CType::StructUnion(id.clone()),
+            Some(BaseType::Enum(id)) => CType::Enum(id.clone()),
         };
 
         Ok(TypeBuilderStage2 {
@@ -370,16 +373,18 @@ impl TypeBuilder {
                     }
                     Ok(())
                 }
-                BaseType::Alias(_, _) | BaseType::Tagged(_) => match (&self.modifier, &self.sign) {
-                    (TypeModifier::None, SignModifier::Default) => Ok(()),
-                    _ => {
-                        ec.record_error(
-                            CompileError::WrongModifiers(format!("{}", &base_type)),
-                            span,
-                        )?;
-                        Err(())
+                BaseType::Alias(_, _) | BaseType::StructUnion(_) | BaseType::Enum(_) => {
+                    match (&self.modifier, &self.sign) {
+                        (TypeModifier::None, SignModifier::Default) => Ok(()),
+                        _ => {
+                            ec.record_error(
+                                CompileError::WrongModifiers(format!("{}", &base_type)),
+                                span,
+                            )?;
+                            Err(())
+                        }
                     }
-                },
+                }
             },
         }
     }
@@ -428,7 +433,7 @@ impl TypeBuilder {
                             } else {
                                 if let Some(tti) = t.t.get_anon_struct_or_union_id() {
                                     let inner_names =
-                                        scope.get_tagged_type(tti).collect_member_names(scope);
+                                        scope.get_struct_union(tti).collect_member_names(scope);
                                     for name in inner_names.iter() {
                                         if let Some(span) =
                                             used_names.insert(name.to_string(), decl.span)
@@ -457,7 +462,7 @@ impl TypeBuilder {
             StructKind::Struct => scope.declare_struct(name, members, span, ec)?,
             StructKind::Union => scope.declare_union(name, members, span, ec)?,
         };
-        self.set_base_type(BaseType::Tagged(t), span, ec)
+        self.set_base_type(BaseType::StructUnion(t), span, ec)
     }
 }
 
@@ -660,7 +665,8 @@ impl std::fmt::Display for BaseType {
             BaseType::Double => f.write_str("double"),
             BaseType::Bool => f.write_str("_Bool"),
             BaseType::Alias(name, t) => write!(f, "{} (aka {})", name, t),
-            BaseType::Tagged(t) => write!(f, "tagged type {}", t),
+            BaseType::StructUnion(t) => write!(f, "{}", t),
+            BaseType::Enum(t) => write!(f, "{}", t),
         }
     }
 }

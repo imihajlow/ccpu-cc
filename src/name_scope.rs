@@ -4,13 +4,14 @@ use lang_c::{
 };
 use std::collections::{HashMap, HashSet};
 
-use crate::tagged::Enum;
-use crate::tagged::StructUnion;
-use crate::tagged::Tagged;
 use crate::{
-    ctype::{CType, FunctionArgs, QualifiedType, TaggedTypeIdentifier, TaggedTypeKind},
+    ctype::{
+        CType, EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind,
+    },
+    enums::Enum,
     error::{CompileError, CompileWarning, ErrorCollector},
     ir,
+    struct_union::StructUnion,
 };
 use crate::{
     initializer::TypedValue,
@@ -55,6 +56,12 @@ pub enum GlobalStorageClass {
     Default,
     Static,
     Extern,
+}
+
+#[derive(Clone)]
+enum Tagged {
+    Enum(Enum),
+    StructUnion(StructUnion),
 }
 
 impl NameScope {
@@ -270,9 +277,14 @@ impl NameScope {
         members: Option<Vec<(Option<String>, QualifiedType)>>,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<TaggedTypeIdentifier, ()> {
+    ) -> Result<StructUnionIdentifier, ()> {
         let tagged = Tagged::new_struct(members);
-        self.declare_tagged(name, tagged, span, ec)
+        let id = self.declare_tagged(name.clone(), tagged, span, ec)?;
+        Ok(StructUnionIdentifier {
+            id,
+            name,
+            kind: StructUnionKind::Struct,
+        })
     }
 
     pub fn declare_union(
@@ -281,9 +293,14 @@ impl NameScope {
         members: Option<Vec<(Option<String>, QualifiedType)>>,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<TaggedTypeIdentifier, ()> {
+    ) -> Result<StructUnionIdentifier, ()> {
         let tagged = Tagged::new_union(members);
-        self.declare_tagged(name, tagged, span, ec)
+        let id = self.declare_tagged(name.clone(), tagged, span, ec)?;
+        Ok(StructUnionIdentifier {
+            id,
+            name,
+            kind: StructUnionKind::Union,
+        })
     }
 
     pub fn declare_enum(
@@ -292,9 +309,10 @@ impl NameScope {
         values: Option<Vec<(String, i128)>>,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<TaggedTypeIdentifier, ()> {
+    ) -> Result<EnumIdentifier, ()> {
         let tagged = Tagged::new_enum(values);
-        self.declare_tagged(name, tagged, span, ec)
+        let id = self.declare_tagged(name.clone(), tagged, span, ec)?;
+        Ok(EnumIdentifier { id, name })
     }
 
     pub fn get_type_alias(
@@ -373,10 +391,21 @@ impl NameScope {
         return None;
     }
 
-    pub fn get_tagged_type(&self, tti: &TaggedTypeIdentifier) -> &Tagged {
-        let result = &self.tagged_types[tti.id].0;
-        assert_eq!(result.get_kind(), tti.kind);
-        result
+    pub fn get_struct_union(&self, id: &StructUnionIdentifier) -> &StructUnion {
+        if let Tagged::StructUnion(su) = self.get_tagged_type(id.id) {
+            assert_eq!(id.kind, su.get_kind());
+            su
+        } else {
+            panic!("wrong struct/union id")
+        }
+    }
+
+    pub fn get_enum(&self, id: &EnumIdentifier) -> &Enum {
+        if let Tagged::Enum(en) = self.get_tagged_type(id.id) {
+            en
+        } else {
+            panic!("wrong struct/union id")
+        }
     }
 
     pub fn fix_in_memory(&mut self, var: &VarLocation) {
@@ -392,6 +421,11 @@ impl NameScope {
     #[cfg(test)]
     pub fn get_fixed_regs(&self) -> &HashSet<ir::Reg> {
         &self.fixed_regs
+    }
+
+    fn get_tagged_type(&self, id: usize) -> &Tagged {
+        let result = &self.tagged_types[id].0;
+        result
     }
 
     fn alloc_reg(&mut self) -> Reg {
@@ -446,8 +480,7 @@ impl NameScope {
         val: Tagged,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<TaggedTypeIdentifier, ()> {
-        let kind = val.get_kind();
+    ) -> Result<usize, ()> {
         let id = if let Some(name) = &name {
             if let Some((id, lvl)) = self.find_tagged_id_and_level(&name) {
                 let prev = &self.tagged_types[id].0;
@@ -482,7 +515,7 @@ impl NameScope {
         } else {
             self.push_tagged(None, val, span)
         };
-        Ok(TaggedTypeIdentifier::new_opt(id, name, kind))
+        Ok(id)
     }
 
     /**
@@ -573,6 +606,90 @@ impl Scope {
             tagged: HashMap::new(),
         }
     }
+}
+
+impl Tagged {
+    fn new_struct(members: Option<Vec<(Option<String>, QualifiedType)>>) -> Self {
+        Self::StructUnion(StructUnion::new_struct(members))
+    }
+
+    fn new_union(members: Option<Vec<(Option<String>, QualifiedType)>>) -> Self {
+        Self::StructUnion(StructUnion::new_union(members))
+    }
+
+    fn new_enum(values: Option<Vec<(String, i128)>>) -> Self {
+        Self::Enum(Enum::new(values))
+    }
+
+    fn is_complete(&self) -> bool {
+        match self {
+            Tagged::Enum(e) => e.is_complete(),
+            Tagged::StructUnion(s) => s.is_complete(),
+        }
+    }
+
+    fn is_same_tag_as(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Tagged::Enum(_), Tagged::Enum(_)) => true,
+            (Tagged::StructUnion(s), Tagged::StructUnion(o)) => s.get_kind() == o.get_kind(),
+            _ => false,
+        }
+    }
+
+    // pub fn get_kind(&self) -> TaggedTypeKind {
+    //     match self {
+    //         Tagged::Enum(_) => TaggedTypeKind::Enum,
+    //         Tagged::Struct(_) => TaggedTypeKind::Struct,
+    //         Tagged::Union(_) => TaggedTypeKind::Union,
+    //     }
+    // }
+
+    // pub fn alignof(
+    //     &self,
+    //     scope: &NameScope,
+    //     span: Span,
+    //     ec: &mut ErrorCollector,
+    // ) -> Result<u32, ()> {
+    //     match self {
+    //         Tagged::Enum(_) => Ok(machine::INT_ALIGN),
+    //         Tagged::Struct(su) => alignof_struct(su, scope, span, ec),
+    //         Tagged::Union(su) => alignof_union(su, scope, span, ec),
+    //     }
+    // }
+
+    // pub fn sizeof(
+    //     &self,
+    //     scope: &NameScope,
+    //     span: Span,
+    //     ec: &mut ErrorCollector,
+    // ) -> Result<u32, ()> {
+    //     match self {
+    //         Tagged::Enum(_) => Ok(machine::INT_SIZE as u32),
+    //         Tagged::Struct(su) => sizeof_struct(su, scope, span, ec),
+    //         Tagged::Union(su) => sizeof_union(su, scope, span, ec),
+    //     }
+    // }
+
+    // /**
+    //  * For a struct or a union, find a field by its name.
+    //  *
+    //  * Returns field offset and its type.
+    //  */
+    // pub fn get_field(
+    //     &self,
+    //     name: &str,
+    //     scope: &NameScope,
+    //     span: Span,
+    //     ec: &mut ErrorCollector,
+    // ) -> Result<(u32, QualifiedType), ()> {
+    //     match self {
+    //         Tagged::Struct(su) | Tagged::Union(su) => {
+    //         }
+    //         Tagged::Enum(_) => {
+
+    //         }
+    //     }
+    // }
 }
 
 fn match_storage_classes(

@@ -6,6 +6,7 @@ mod block_emitter;
 mod compile;
 mod constant;
 mod ctype;
+mod enums;
 mod error;
 mod function;
 mod initializer;
@@ -15,7 +16,7 @@ mod machine;
 mod name_scope;
 mod rvalue;
 mod string;
-mod tagged;
+mod struct_union;
 mod translation_unit;
 mod type_builder;
 
