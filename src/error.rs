@@ -61,6 +61,7 @@ pub enum CompileError {
     AssignmentToConstQualified(QualifiedType),
     SizeOfIncomplete(CType),
     PointersToIncompatible(QualifiedType, QualifiedType),
+    NotAStruct(QualifiedType),
     // Function call errors
     NotAFunction(QualifiedType),
     TooManyArguments(usize, usize),
@@ -229,6 +230,7 @@ impl std::fmt::Display for CompileError {
                 "'{}' and '{}' are not pointers to compatible types",
                 t1, t2
             ),
+            CompileError::NotAStruct(t) => write!(f, "type '{}' is not a struct or union", t),
             CompileError::ArithmeticOrPointerTypeRequired(t) => write!(
                 f,
                 "used type '{}' where arithmetic or pointer type is required",

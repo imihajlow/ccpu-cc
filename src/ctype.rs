@@ -194,6 +194,25 @@ impl QualifiedType {
             Err(t) => Err(Self { t, ..self }),
         }
     }
+
+    pub fn get_field(
+        &self,
+        name: &str,
+        scope: &NameScope,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<(u32, QualifiedType), ()> {
+        match &self.t {
+            CType::Tagged(tti) if tti.kind != TaggedTypeKind::Enum => {
+                let tagged = scope.get_tagged_type(tti);
+                todo!()
+            }
+            _ => {
+                ec.record_error(CompileError::NotAStruct(self.clone()), span)?;
+                unreachable!();
+            }
+        }
+    }
 }
 
 impl FunctionArgs {
@@ -357,6 +376,32 @@ impl CType {
         }
     }
 
+    pub fn is_complete(&self) -> bool {
+        match self {
+            CType::Void => false,
+            CType::Tagged(_) => todo!(),
+            _ => true,
+        }
+    }
+
+    pub fn dereferences_to_complete(&self) -> bool {
+        match self {
+            CType::Pointer(t) | CType::Array(t, _) => t.t.is_complete(),
+            _ => false,
+        }
+    }
+
+    pub fn get_anon_struct_or_union_id(&self) -> Option<&TaggedTypeIdentifier> {
+        if let CType::Tagged(tti) = self {
+            match tti.kind {
+                TaggedTypeKind::Struct | TaggedTypeKind::Union if tti.name.is_none() => Some(tti),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
     /**
      * Do the integer type promotion.
      */
@@ -451,21 +496,6 @@ impl CType {
                 _ => None,
             },
             _ => None,
-        }
-    }
-
-    pub fn is_complete(&self) -> bool {
-        match self {
-            CType::Void => false,
-            CType::Tagged(_) => todo!(),
-            _ => true,
-        }
-    }
-
-    pub fn dereferences_to_complete(&self) -> bool {
-        match self {
-            CType::Pointer(t) | CType::Array(t, _) => t.t.is_complete(),
-            _ => false,
         }
     }
 

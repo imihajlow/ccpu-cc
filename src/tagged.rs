@@ -90,7 +90,7 @@ impl Tagged {
     }
 
     /**
-     * For a struct or union, make a set of member names.
+     * For a struct or a union, make a set of member names.
      * Names from nested anonymous structs/unions are included recursively.
      */
     pub fn collect_member_names(&self, scope: &NameScope) -> HashSet<String> {
@@ -103,15 +103,37 @@ impl Tagged {
                         if let Some(name) = name.as_ref() {
                             result.insert(name.to_string());
                         } else if let Some(tti) = t.t.get_anon_struct_or_union_id() {
-                            let inner_names = scope.get_tagged_type(tti).collect_member_names(scope);
+                            let inner_names =
+                                scope.get_tagged_type(tti).collect_member_names(scope);
                             result.extend(inner_names.into_iter());
                         }
                     }
                 }
             }
-            _ => ()
+            _ => (),
         }
         result
+    }
+
+    /**
+     * For a struct or a union, find a field by its name.
+     *
+     * Returns field offset and its type.
+     */
+    pub fn get_field(
+        &self,
+        name: &str,
+        scope: &NameScope,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<(u32, QualifiedType), ()> {
+        match self {
+            Tagged::Struct(su) | Tagged::Union(su) => {
+            }
+            Tagged::Enum(_) => {
+
+            }
+        }
     }
 }
 
