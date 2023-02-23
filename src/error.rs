@@ -60,6 +60,7 @@ pub enum CompileError {
     NotAssignable,
     AssignmentToConstQualified(QualifiedType),
     SizeOfIncomplete(CType),
+    IncompleteStruct(CType),
     PointersToIncompatible(QualifiedType, QualifiedType),
     NotAStruct(QualifiedType),
     // Function call errors
@@ -224,6 +225,9 @@ impl std::fmt::Display for CompileError {
             CompileError::MemberRedeclaration(s) => write!(f, "member '{}' is redeclared", s),
             CompileError::SizeOfIncomplete(t) => {
                 write!(f, "size of an incompete type '{}' is unknown", t)
+            }
+            CompileError::IncompleteStruct(t) => {
+                write!(f, "incomplete definition of type '{}'", t)
             }
             CompileError::PointersToIncompatible(t1, t2) => write!(
                 f,

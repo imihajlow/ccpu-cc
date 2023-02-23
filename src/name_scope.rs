@@ -635,61 +635,6 @@ impl Tagged {
             _ => false,
         }
     }
-
-    // pub fn get_kind(&self) -> TaggedTypeKind {
-    //     match self {
-    //         Tagged::Enum(_) => TaggedTypeKind::Enum,
-    //         Tagged::Struct(_) => TaggedTypeKind::Struct,
-    //         Tagged::Union(_) => TaggedTypeKind::Union,
-    //     }
-    // }
-
-    // pub fn alignof(
-    //     &self,
-    //     scope: &NameScope,
-    //     span: Span,
-    //     ec: &mut ErrorCollector,
-    // ) -> Result<u32, ()> {
-    //     match self {
-    //         Tagged::Enum(_) => Ok(machine::INT_ALIGN),
-    //         Tagged::Struct(su) => alignof_struct(su, scope, span, ec),
-    //         Tagged::Union(su) => alignof_union(su, scope, span, ec),
-    //     }
-    // }
-
-    // pub fn sizeof(
-    //     &self,
-    //     scope: &NameScope,
-    //     span: Span,
-    //     ec: &mut ErrorCollector,
-    // ) -> Result<u32, ()> {
-    //     match self {
-    //         Tagged::Enum(_) => Ok(machine::INT_SIZE as u32),
-    //         Tagged::Struct(su) => sizeof_struct(su, scope, span, ec),
-    //         Tagged::Union(su) => sizeof_union(su, scope, span, ec),
-    //     }
-    // }
-
-    // /**
-    //  * For a struct or a union, find a field by its name.
-    //  *
-    //  * Returns field offset and its type.
-    //  */
-    // pub fn get_field(
-    //     &self,
-    //     name: &str,
-    //     scope: &NameScope,
-    //     span: Span,
-    //     ec: &mut ErrorCollector,
-    // ) -> Result<(u32, QualifiedType), ()> {
-    //     match self {
-    //         Tagged::Struct(su) | Tagged::Union(su) => {
-    //         }
-    //         Tagged::Enum(_) => {
-
-    //         }
-    //     }
-    // }
 }
 
 fn match_storage_classes(

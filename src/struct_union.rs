@@ -4,8 +4,9 @@ use lang_c::span::Span;
 
 use crate::ctype::QualifiedType;
 use crate::ctype::StructUnionKind;
-use crate::error::ErrorCollector;
+use crate::error::{CompileError, ErrorCollector};
 use crate::name_scope::NameScope;
+use crate::utils;
 
 #[derive(Clone)]
 pub struct StructUnion {
@@ -49,6 +50,27 @@ impl StructUnion {
         match self.kind {
             StructUnionKind::Struct => self.sizeof_struct(scope, span, ec),
             StructUnionKind::Union => self.sizeof_union(scope, span, ec),
+        }
+    }
+
+    /**
+     * Find a field by its name.
+     *
+     * Returns field offset and its type.
+     * Returns `Ok(None)` if not found.
+     * Returns `Err(())` on error (e.g. incomplete types).
+     */
+    pub fn get_field(
+        &self,
+        name: &str,
+        scope: &NameScope,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<Option<(u32, QualifiedType)>, ()> {
+        assert!(self.is_complete());
+        match self.kind {
+            StructUnionKind::Struct => self.get_field_struct(name, scope, span, ec),
+            StructUnionKind::Union => self.get_field_union(name, scope, span, ec),
         }
     }
 
@@ -126,10 +148,7 @@ impl StructUnion {
         let mut size = 0;
         for (_, t) in members {
             let align = t.t.alignof(scope, span, ec)?;
-            let rem = size % align;
-            if rem != 0 {
-                size += align - rem;
-            }
+            size = utils::align(size, align);
             size += t.t.sizeof(scope, span, ec)?;
         }
         Ok(size)
@@ -150,6 +169,62 @@ impl StructUnion {
             size = std::cmp::max(size, t.t.sizeof(scope, span, ec)?);
         }
         Ok(size)
+    }
+
+    fn get_field_struct(
+        &self,
+        name: &str,
+        scope: &NameScope,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<Option<(u32, QualifiedType)>, ()> {
+        let members = self
+            .members
+            .as_ref()
+            .expect("complete types only at this point");
+        let mut offset = 0;
+        for (member_name, t) in members {
+            let align = t.t.alignof(scope, span, ec)?;
+            offset = utils::align(offset, align);
+            if let Some(member_name) = member_name.as_ref() {
+                if member_name == name {
+                    return Ok(Some((offset, t.clone())));
+                }
+            } else if let Some(id) = t.t.get_anon_struct_or_union_id() {
+                let nested = scope.get_struct_union(id);
+                if let Some((nested_offset, t)) = nested.get_field(name, scope, span, ec)? {
+                    return Ok(Some((offset + nested_offset, t)));
+                }
+            }
+            offset += t.t.sizeof(scope, span, ec)?;
+        }
+        Ok(None)
+    }
+
+    fn get_field_union(
+        &self,
+        name: &str,
+        scope: &NameScope,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<Option<(u32, QualifiedType)>, ()> {
+        let members = self
+            .members
+            .as_ref()
+            .expect("complete types only at this point");
+        for (member_name, t) in members {
+            if let Some(member_name) = member_name.as_ref() {
+                if member_name == name {
+                    return Ok(Some((0, t.clone())));
+                }
+            } else if let Some(id) = t.t.get_anon_struct_or_union_id() {
+                let nested = scope.get_struct_union(id);
+                if let Some(r) = nested.get_field(name, scope, span, ec)? {
+                    return Ok(Some(r));
+                }
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -213,5 +288,76 @@ mod test {
         assert_eq!(su.sizeof(&scope, Span::none(), &mut ec), Ok(8)); // struct { int x; long y; };
         su.kind = StructUnionKind::Union;
         assert_eq!(su.sizeof(&scope, Span::none(), &mut ec), Ok(4)); // union { int x; long y; };
+    }
+
+    #[test]
+    fn test_field_1() {
+        let mut su = StructUnion {
+            members: Some(vec![
+                (
+                    Some("x".to_string()),
+                    QualifiedType {
+                        t: CType::Int(2, true),
+                        qualifiers: Qualifiers::empty(),
+                    },
+                ),
+                (
+                    Some("y".to_string()),
+                    QualifiedType {
+                        t: CType::Int(4, true),
+                        qualifiers: Qualifiers::empty(),
+                    },
+                ),
+            ]),
+            kind: StructUnionKind::Struct,
+        };
+        let mut ec = &mut ErrorCollector::new();
+        let scope = NameScope::new();
+        // struct { int x; long y; };
+        assert_eq!(
+            su.get_field("x", &scope, Span::none(), &mut ec).unwrap(),
+            Some((
+                0,
+                QualifiedType {
+                    t: CType::Int(2, true),
+                    qualifiers: Qualifiers::empty(),
+                }
+            ))
+        );
+        assert_eq!(
+            su.get_field("y", &scope, Span::none(), &mut ec).unwrap(),
+            Some((
+                4,
+                QualifiedType {
+                    t: CType::Int(4, true),
+                    qualifiers: Qualifiers::empty(),
+                }
+            ))
+        );
+        assert_eq!(su.get_field("z", &scope, Span::none(), ec), Ok(None));
+
+        // union { int x; long y; };
+        su.kind = StructUnionKind::Union;
+        assert_eq!(
+            su.get_field("x", &scope, Span::none(), &mut ec).unwrap(),
+            Some((
+                0,
+                QualifiedType {
+                    t: CType::Int(2, true),
+                    qualifiers: Qualifiers::empty(),
+                }
+            ))
+        );
+        assert_eq!(
+            su.get_field("y", &scope, Span::none(), &mut ec).unwrap(),
+            Some((
+                0,
+                QualifiedType {
+                    t: CType::Int(4, true),
+                    qualifiers: Qualifiers::empty(),
+                }
+            ))
+        );
+        assert_eq!(su.get_field("z", &scope, Span::none(), ec), Ok(None));
     }
 }

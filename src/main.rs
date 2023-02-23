@@ -19,6 +19,7 @@ mod string;
 mod struct_union;
 mod translation_unit;
 mod type_builder;
+mod utils;
 
 #[macro_use]
 extern crate static_assertions;

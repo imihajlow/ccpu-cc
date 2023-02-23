@@ -1,4 +1,3 @@
-
 #[derive(Clone)]
 pub struct Enum {
     values: Option<Vec<(String, i128)>>,
