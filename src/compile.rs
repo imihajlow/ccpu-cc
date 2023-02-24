@@ -64,13 +64,7 @@ pub fn compile_expression(
             let v = constant::compute_constant_expr(expr, false, scope, ec)?;
             Ok(TypedRValue::new_from_typed_value(v))
         }
-        Expression::Identifier(id) => {
-            let (t, v) = scope.get_var(&id.node.name, id.span, ec)?;
-            Ok(TypedRValue {
-                src: RValue::new_var(v),
-                t: t.clone(),
-            })
-        }
+        Expression::Identifier(id) => scope.get_rvalue(&id.node.name, id.span, ec),
         Expression::BinaryOperator(o) => binary::compile_binary_operator(*o, scope, be, ec),
         Expression::UnaryOperator(o) => unary::compile_unary_operator(*o, scope, be, ec),
         Expression::Comma(c) => compile_comma(*c, scope, be, ec),

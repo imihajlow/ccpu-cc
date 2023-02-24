@@ -11,6 +11,8 @@ use crate::{
     enums::Enum,
     error::{CompileError, CompileWarning, ErrorCollector},
     ir,
+    lvalue::{LValue, TypedLValue},
+    rvalue::{RValue, TypedRValue},
     struct_union::StructUnion,
     utils,
 };
@@ -384,22 +386,69 @@ impl NameScope {
         unreachable!();
     }
 
-    pub fn get_var(
+    pub fn get_rvalue(
         &self,
         name: &str,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<(&QualifiedType, VarLocation), ()> {
+    ) -> Result<TypedRValue, ()> {
         if let Some(val) = self.get(name) {
             match val {
-                Value::AutoVar(t, r) => Ok((t, VarLocation::Local(*r))),
-                Value::Arg(t, n) => Ok((t, VarLocation::Arg(*n))),
-                Value::StaticVar(t, id, _, _) => Ok((t, VarLocation::Global(id.clone()))),
+                Value::AutoVar(t, r) => Ok(TypedRValue {
+                    t: t.clone(),
+                    src: RValue::new_var(VarLocation::Local(*r)),
+                }),
+                Value::Arg(t, n) => Ok(TypedRValue {
+                    t: t.clone(),
+                    src: RValue::new_var(VarLocation::Arg(*n)),
+                }),
+                Value::StaticVar(t, id, _, _) => Ok(TypedRValue {
+                    t: t.clone(),
+                    src: RValue::new_var(VarLocation::Global(id.clone())),
+                }),
                 Value::Type(_) => {
                     ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
                     unreachable!();
                 }
-                Value::Object(_, _) => todo!(),
+                Value::Object(t, p) => Ok(TypedRValue {
+                    t: t.clone(),
+                    src: RValue::new_object(ir::Scalar::Var(ir::VarLocation::Frame(*p))),
+                }),
+            }
+        } else {
+            ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
+            unreachable!();
+        }
+    }
+
+    pub fn get_lvalue(
+        &self,
+        name: &str,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<TypedLValue, ()> {
+        if let Some(val) = self.get(name) {
+            match val {
+                Value::AutoVar(t, r) => Ok(TypedLValue {
+                    t: t.clone(),
+                    lv: LValue::Var(VarLocation::Local(*r)),
+                }),
+                Value::Arg(t, n) => Ok(TypedLValue {
+                    t: t.clone(),
+                    lv: LValue::Var(VarLocation::Arg(*n)),
+                }),
+                Value::StaticVar(t, id, _, _) => Ok(TypedLValue {
+                    t: t.clone(),
+                    lv: LValue::Var(VarLocation::Global(id.clone())),
+                }),
+                Value::Type(_) => {
+                    ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
+                    unreachable!();
+                }
+                Value::Object(t, p) => Ok(TypedLValue {
+                    t: t.clone(),
+                    lv: LValue::Object(ir::Scalar::Var(ir::VarLocation::Frame(*p))),
+                }),
             }
         } else {
             ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;

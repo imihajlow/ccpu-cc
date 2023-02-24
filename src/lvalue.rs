@@ -2,12 +2,11 @@ use lang_c::ast::Expression;
 use lang_c::span::{Node, Span};
 
 use crate::block_emitter::BlockEmitter;
-use crate::compile::{self, compile_expression, compile_pointer_offset, int_promote};
+use crate::compile::{compile_expression, compile_pointer_offset};
 use crate::ctype::QualifiedType;
-use crate::error::{CompileError, CompileWarning, ErrorCollector};
+use crate::error::{CompileError, ErrorCollector};
 use crate::ir::VarLocation;
 use crate::ir::{self, Scalar};
-use crate::machine;
 use crate::name_scope::NameScope;
 use crate::rvalue::{RValue, TypedRValue};
 
@@ -15,7 +14,7 @@ use crate::rvalue::{RValue, TypedRValue};
 pub enum LValue {
     Var(VarLocation),
     Indirection(Scalar),
-    // member access TODO
+    Object(Scalar),
 }
 
 #[derive(Debug, Clone)]
@@ -31,11 +30,7 @@ impl TypedLValue {
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<Self, ()> {
-        let (t, v) = scope.get_var(name, span, ec)?;
-        Ok(TypedLValue {
-            t: t.clone(),
-            lv: LValue::Var(v),
-        })
+        scope.get_lvalue(name, span, ec)
     }
 
     pub fn new_compile(
@@ -45,13 +40,7 @@ impl TypedLValue {
         ec: &mut ErrorCollector,
     ) -> Result<TypedLValue, ()> {
         match expr.node {
-            Expression::Identifier(id) => {
-                let (t, v) = scope.get_var(&id.node.name, id.span, ec)?;
-                Ok(TypedLValue {
-                    t: t.clone(),
-                    lv: LValue::Var(v),
-                })
-            }
+            Expression::Identifier(id) => scope.get_lvalue(&id.node.name, id.span, ec),
             Expression::UnaryOperator(op) => {
                 use lang_c::ast::UnaryOperator;
                 match op.node.operator.node {
@@ -138,9 +127,17 @@ impl TypedLValue {
                         t: self.t,
                     })
                 } else {
-                    unreachable!("this function is not supposed to be used for large types")
+                    assert!(!self.t.t.is_scalar());
+                    Ok(TypedRValue {
+                        src: RValue::new_object(src_addr),
+                        t: self.t,
+                    })
                 }
             }
+            LValue::Object(s) => Ok(TypedRValue {
+                src: RValue::new_object(s),
+                t: self.t,
+            }),
         }
     }
 }

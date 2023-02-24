@@ -19,7 +19,7 @@ pub enum VarLocation {
     Global(GlobalVarId),
     Local(Reg),
     Arg(usize),
-    Frame(usize),
+    Frame(u32),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]

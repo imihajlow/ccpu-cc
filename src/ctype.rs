@@ -484,7 +484,7 @@ impl CType {
             CType::Array(_, _) | CType::Pointer(_) => {
                 Some((ir::Width::new(machine::PTR_SIZE), false))
             }
-            CType::Enum(_) => todo!(),
+            CType::Enum(_) => Some((ir::Width::new(machine::INT_SIZE), true)),
             CType::StructUnion(_) => None,
             _ => None,
         }

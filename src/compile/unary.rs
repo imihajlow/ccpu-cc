@@ -248,6 +248,10 @@ fn compile_address(
                 t,
             })
         }
+        LValue::Object(addr) => Ok(TypedRValue {
+            src: RValue::Scalar(addr),
+            t,
+        }),
     }
 }
 

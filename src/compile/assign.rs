@@ -71,6 +71,7 @@ pub fn compile_assign_to_lval(
                     width,
                 }));
             }
+            LValue::Object(_) => unreachable!("arithmetic types are scalars"),
         }
         Ok(rhs_casted)
     } else if lhs_lval.t.t.is_pointer() {
@@ -117,7 +118,7 @@ pub fn compile_assign_to_lval(
                     rhs_span,
                 )?;
             }
-            CType::Enum(id) => {
+            CType::Enum(_id) => {
                 ec.record_warning(
                     CompileWarning::IncompatibleTypes(lhs_lval.t.clone(), rhs_val.t.clone()),
                     rhs_span,
@@ -141,6 +142,7 @@ pub fn compile_assign_to_lval(
                     width,
                 }));
             }
+            LValue::Object(_) => unreachable!("pointer types are scalars"),
         }
         Ok(rhs_casted)
     } else if lhs_lval.t.is_compatible_to(&rhs_val.t, true) {
