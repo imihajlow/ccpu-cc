@@ -2,7 +2,7 @@ use lang_c::span::Span;
 use std::fmt::Formatter;
 
 use crate::{
-    ctype::{CType, QualifiedType},
+    ctype::{CType, QualifiedType, StructUnionIdentifier},
     string::StringParseError,
 };
 
@@ -60,9 +60,10 @@ pub enum CompileError {
     NotAssignable,
     AssignmentToConstQualified(QualifiedType),
     SizeOfIncomplete(CType),
-    IncompleteStruct(CType),
+    IncompleteStruct(QualifiedType),
     PointersToIncompatible(QualifiedType, QualifiedType),
     NotAStruct(QualifiedType),
+    NoSuchMember(StructUnionIdentifier, String),
     // Function call errors
     NotAFunction(QualifiedType),
     TooManyArguments(usize, usize),
@@ -228,6 +229,9 @@ impl std::fmt::Display for CompileError {
             }
             CompileError::IncompleteStruct(t) => {
                 write!(f, "incomplete definition of type '{}'", t)
+            }
+            CompileError::NoSuchMember(t, s) => {
+                write!(f, "no member name '{}' in '{}'", s, t)
             }
             CompileError::PointersToIncompatible(t1, t2) => write!(
                 f,

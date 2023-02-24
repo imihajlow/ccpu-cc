@@ -9,11 +9,11 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub enum Value {
+pub enum Constant {
     Void,
     Int(i128),
-    Struct(HashMap<String, Value>),
-    Array(Vec<Value>),
+    Struct(HashMap<String, Constant>),
+    Array(Vec<Constant>),
 }
 
 /**
@@ -22,13 +22,13 @@ pub enum Value {
  * Invariant: for int types, contents of the val fits into the type.
  */
 #[derive(Clone)]
-pub struct TypedValue {
+pub struct TypedConstant {
     pub t: QualifiedType,
-    pub val: Value,
+    pub val: Constant,
 }
 
-impl TypedValue {
-    pub fn new(val: Value, t: QualifiedType) -> Self {
+impl TypedConstant {
+    pub fn new(val: Constant, t: QualifiedType) -> Self {
         Self { t, val }.clamp_to_type()
     }
 
@@ -38,7 +38,7 @@ impl TypedValue {
                 t,
                 qualifiers: Qualifiers::CONST,
             },
-            val: Value::Int(value),
+            val: Constant::Int(value),
         }
         .clamp_to_type()
     }
@@ -47,7 +47,7 @@ impl TypedValue {
         if t.t.is_scalar() {
             Self {
                 t,
-                val: Value::Int(0),
+                val: Constant::Int(0),
             }
         } else {
             todo!()
@@ -151,7 +151,7 @@ impl TypedValue {
                 t: t,
                 qualifiers: Qualifiers::CONST,
             },
-            val: Value::Int(n as i128),
+            val: Constant::Int(n as i128),
         }
         .clamp_to_type()
     }
@@ -217,7 +217,7 @@ impl TypedValue {
      */
     pub fn clamp_to_type(self) -> Self {
         match self.val {
-            Value::Int(x) => {
+            Constant::Int(x) => {
                 let clamped = match self.t.t {
                     CType::Int(1, true) => (x as i8) as i128,
                     CType::Int(1, false) => (x as u8) as i128,
@@ -239,7 +239,7 @@ impl TypedValue {
                     _ => x,
                 };
                 Self {
-                    val: Value::Int(clamped),
+                    val: Constant::Int(clamped),
                     ..self
                 }
             }
@@ -270,7 +270,7 @@ impl TypedValue {
     }
 
     pub fn unwrap_integer(&self) -> i128 {
-        if let Value::Int(x) = self.val {
+        if let Constant::Int(x) = self.val {
             x
         } else {
             panic!("not an integer")
@@ -279,15 +279,15 @@ impl TypedValue {
 
     pub fn is_zero(&self) -> bool {
         match self.val {
-            Value::Int(x) => x == 0,
+            Constant::Int(x) => x == 0,
             _ => false,
         }
     }
 
     pub fn negate(self) -> Self {
         let negated = match self.val {
-            Value::Int(x) => Self {
-                val: Value::Int(-x),
+            Constant::Int(x) => Self {
+                val: Constant::Int(-x),
                 ..self
             },
             _ => panic!(),
@@ -297,8 +297,8 @@ impl TypedValue {
 
     pub fn complement(self) -> Self {
         let comp = match self.val {
-            Value::Int(x) => Self {
-                val: Value::Int(!x),
+            Constant::Int(x) => Self {
+                val: Constant::Int(!x),
                 ..self
             },
             _ => panic!(),
@@ -308,12 +308,12 @@ impl TypedValue {
 
     pub fn boolean_not(self) -> Self {
         match self.val {
-            Value::Int(0) => Self {
-                val: Value::Int(1),
+            Constant::Int(0) => Self {
+                val: Constant::Int(1),
                 ..self
             },
-            Value::Int(_) => Self {
-                val: Value::Int(0),
+            Constant::Int(_) => Self {
+                val: Constant::Int(0),
                 ..self
             },
             _ => panic!(),

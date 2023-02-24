@@ -210,7 +210,20 @@ impl QualifiedType {
     ) -> Result<(u32, QualifiedType), ()> {
         match &self.t {
             CType::StructUnion(id) => {
-                todo!()
+                let su = scope.get_struct_union(id);
+                if !su.is_complete() {
+                    ec.record_error(CompileError::IncompleteStruct(self.clone()), span)?;
+                    unreachable!()
+                }
+                if let Some(r) = su.get_field(name, scope, span, ec)? {
+                    Ok(r)
+                } else {
+                    ec.record_error(
+                        CompileError::NoSuchMember(id.clone(), name.to_string()),
+                        span,
+                    )?;
+                    unreachable!()
+                }
             }
             _ => {
                 ec.record_error(CompileError::NotAStruct(self.clone()), span)?;
@@ -365,18 +378,18 @@ impl CType {
         }
     }
 
-    pub fn is_complete(&self) -> bool {
+    pub fn is_complete(&self, scope: &NameScope) -> bool {
         match self {
             CType::Void => false,
-            CType::Enum(_) => todo!(),
-            CType::StructUnion(_) => todo!(),
+            CType::Enum(id) => scope.get_enum(id).is_complete(),
+            CType::StructUnion(id) => scope.get_struct_union(id).is_complete(),
             _ => true,
         }
     }
 
-    pub fn dereferences_to_complete(&self) -> bool {
+    pub fn dereferences_to_complete(&self, scope: &NameScope) -> bool {
         match self {
-            CType::Pointer(t) | CType::Array(t, _) => t.t.is_complete(),
+            CType::Pointer(t) | CType::Array(t, _) => t.t.is_complete(scope),
             _ => false,
         }
     }

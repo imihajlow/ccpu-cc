@@ -19,6 +19,7 @@ pub enum VarLocation {
     Global(GlobalVarId),
     Local(Reg),
     Arg(usize),
+    Frame(usize),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -419,6 +420,7 @@ impl std::fmt::Display for VarLocation {
             VarLocation::Local(r) => write!(f, "%{}", r),
             VarLocation::Global(id) => write!(f, "{}", id),
             VarLocation::Arg(p) => write!(f, "%a{}", p),
+            VarLocation::Frame(p) => write!(f, "[F+{}]", p),
         }
     }
 }

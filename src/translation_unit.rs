@@ -3,7 +3,7 @@ use std::fmt::Formatter;
 use crate::constant::{self, compute_constant_initializer};
 use crate::error::{CompileError, CompileWarning, ErrorCollector};
 use crate::function::Function;
-use crate::initializer::Value;
+use crate::initializer::Constant;
 use crate::name_scope::{GlobalStorageClass, NameScope};
 use crate::type_builder::TypeBuilder;
 
@@ -265,7 +265,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::SLONG_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(42));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(42));
     }
 
     #[test]
@@ -278,7 +278,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UCHAR_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::empty());
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x04));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0x04));
     }
 
     #[test]
@@ -291,7 +291,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::SLONG_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x88));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0x88));
     }
 
     #[test]
@@ -304,7 +304,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::SLONG_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x02030405));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0x02030405));
     }
 
     #[test]
@@ -317,7 +317,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::SINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(22));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(22));
     }
 
     #[test]
@@ -330,7 +330,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::SINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(-2200));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(-2200));
     }
 
     #[test]
@@ -343,7 +343,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UCHAR_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xaa));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0xaa));
     }
 
     #[test]
@@ -356,7 +356,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::SLONG_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0));
     }
 
     #[test]
@@ -369,7 +369,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::ULONG_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xffffffff));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0xffffffff));
     }
 
     #[test]
@@ -382,7 +382,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::ULONG_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xffff));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0xffff));
     }
 
     #[test]
@@ -395,7 +395,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::INT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(-32768));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(-32768));
     }
 
     #[test]
@@ -408,7 +408,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::LONG_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(-32768));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(-32768));
     }
 
     #[test]
@@ -421,7 +421,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::INT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(13));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(13));
     }
 
     #[test]
@@ -434,7 +434,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UCHAR_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(1));
     }
 
     #[test]
@@ -447,7 +447,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::INT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(6));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(6));
     }
 
     #[test]
@@ -460,7 +460,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::INT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(3));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(3));
     }
 
     #[test]
@@ -473,7 +473,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::INT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(-100));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(-100));
     }
 
     #[test]
@@ -486,7 +486,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xffff));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0xffff));
     }
 
     #[test]
@@ -499,7 +499,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(20000));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(20000));
     }
 
     #[test]
@@ -512,7 +512,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(2));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(2));
     }
 
     #[test]
@@ -525,7 +525,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(2));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(2));
     }
 
     #[test]
@@ -545,7 +545,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x1f));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0x1f));
     }
 
     #[test]
@@ -558,7 +558,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xf000));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0xf000));
     }
 
     #[test]
@@ -571,7 +571,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0));
     }
 
     #[test]
@@ -584,7 +584,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(1));
     }
 
     #[test]
@@ -597,7 +597,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(1));
     }
 
     #[test]
@@ -610,7 +610,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0));
     }
 
     #[test]
@@ -623,7 +623,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(1));
     }
 
     #[test]
@@ -636,7 +636,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(1));
     }
 
     #[test]
@@ -649,7 +649,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xff));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0xff));
     }
 
     #[test]
@@ -662,7 +662,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0xe0));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0xe0));
     }
 
     #[test]
@@ -675,7 +675,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(0x1ee));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(0x1ee));
     }
 
     #[test]
@@ -688,7 +688,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(1));
     }
 
     #[test]
@@ -701,7 +701,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(1));
     }
 
     #[test]
@@ -714,7 +714,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(2));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(2));
     }
 
     #[test]
@@ -727,7 +727,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(1));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(1));
     }
 
     #[test]
@@ -748,7 +748,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::UINT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(3));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(3));
     }
 
     #[test]
@@ -775,7 +775,7 @@ mod test {
         assert_eq!(decl.0.t, ctype::INT_TYPE);
         assert_eq!(decl.0.qualifiers, Qualifiers::CONST);
         assert_eq!(decl.2, &GlobalStorageClass::Default);
-        assert_matches!(decl.3.as_ref().unwrap().val, Value::Int(65));
+        assert_matches!(decl.3.as_ref().unwrap().val, Constant::Int(65));
     }
 
     #[test]

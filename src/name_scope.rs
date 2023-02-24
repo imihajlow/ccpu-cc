@@ -14,7 +14,7 @@ use crate::{
     struct_union::StructUnion,
 };
 use crate::{
-    initializer::TypedValue,
+    initializer::TypedConstant,
     ir::{GlobalVarId, Reg, VarLocation},
 };
 
@@ -27,9 +27,10 @@ pub struct NameScope {
     last_reg: Reg,
     last_static_id: u32,
     defs: Vec<Scope>,
-    static_initializers: HashMap<GlobalVarId, TypedValue>,
+    static_initializers: HashMap<GlobalVarId, TypedConstant>,
     fixed_regs: HashSet<ir::Reg>,
     tagged_types: Vec<(Tagged, Span)>,
+    frame_size: usize,
 }
 
 #[derive(Clone)]
@@ -41,7 +42,7 @@ pub enum Value {
         QualifiedType,
         GlobalVarId,
         GlobalStorageClass,
-        Option<TypedValue>,
+        Option<TypedConstant>,
     ),
 }
 
@@ -76,6 +77,7 @@ impl NameScope {
             static_initializers: HashMap::new(),
             fixed_regs: HashSet::new(),
             tagged_types: Vec::new(),
+            frame_size: 0,
         }
     }
 
@@ -97,7 +99,7 @@ impl NameScope {
         }
         for (_key, (val, _span)) in m.default.drain() {
             if let Value::StaticVar(t, id, _, initializer) = val {
-                let initializer = initializer.unwrap_or_else(|| TypedValue::new_default(t));
+                let initializer = initializer.unwrap_or_else(|| TypedConstant::new_default(t));
                 self.static_initializers.insert(id, initializer);
             }
         }
@@ -119,6 +121,15 @@ impl NameScope {
     }
 
     /**
+     * Resets frame size to 0 and returns previous size.
+     */
+    pub fn reset_frame_size(&mut self) -> usize {
+        let r = self.frame_size;
+        self.frame_size = 0;
+        r
+    }
+
+    /**
      * Allocate a temporary variable.
      */
     pub fn alloc_temp(&mut self) -> VarLocation {
@@ -135,7 +146,7 @@ impl NameScope {
         name: &str,
         t: QualifiedType,
         storage_class: &Option<Node<StorageClassSpecifier>>,
-        initializer: Option<TypedValue>,
+        initializer: Option<TypedConstant>,
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
@@ -241,17 +252,21 @@ impl NameScope {
 
             match storage_class {
                 Some(StorageClassSpecifier::Static) => {
-                    let initializer = if let Some(tv) = initializer {
-                        Some(tv.implicit_cast(&t, span, ec)?)
+                    if t.t.is_scalar() {
+                        let initializer = if let Some(tv) = initializer {
+                            Some(tv.implicit_cast(&t, span, ec)?)
+                        } else {
+                            None
+                        };
+                        let id = self.alloc_global_var_id(name);
+                        self.insert(
+                            name,
+                            Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
+                            span,
+                        );
                     } else {
-                        None
-                    };
-                    let id = self.alloc_global_var_id(name);
-                    self.insert(
-                        name,
-                        Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
-                        span,
-                    );
+                        todo!()
+                    }
                 }
                 None
                 | Some(StorageClassSpecifier::Auto)
@@ -338,7 +353,7 @@ impl NameScope {
         name: &str,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<&TypedValue, ()> {
+    ) -> Result<&TypedConstant, ()> {
         if let Some(val) = self.get(name) {
             if val.is_var() {
                 if let Value::StaticVar(t, _, _, initializer) = val {
@@ -415,6 +430,7 @@ impl NameScope {
                 self.fixed_regs.insert(*n);
             }
             VarLocation::Arg(_) => (),
+            VarLocation::Frame(_) => (),
         }
     }
 
@@ -571,7 +587,7 @@ impl Value {
         &QualifiedType,
         &GlobalVarId,
         &GlobalStorageClass,
-        &Option<TypedValue>,
+        &Option<TypedConstant>,
     ) {
         if let Value::StaticVar(t, id, stcl, init) = self {
             (t, id, stcl, init)

@@ -3,7 +3,7 @@ use lang_c::ast::{
 };
 use lang_c::span::Span;
 use lang_c::{
-    ast::{CastExpression, Constant, Expression, Initializer},
+    ast::{CastExpression, Expression, Initializer},
     span::Node,
 };
 
@@ -12,7 +12,7 @@ use crate::string;
 use crate::{
     ctype::{self, CType, QualifiedType},
     error::{CompileError, CompileWarning, ErrorCollector},
-    initializer::{TypedValue, Value},
+    initializer::{Constant, TypedConstant},
     machine,
     type_builder::TypeBuilder,
 };
@@ -23,7 +23,7 @@ pub fn compute_constant_initializer(
     allow_var: bool,
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
-) -> Result<TypedValue, ()> {
+) -> Result<TypedConstant, ()> {
     let v = match initializer.node {
         Initializer::Expression(expr) => {
             let v = compute_constant_expr(*expr, allow_var, scope, ec)?;
@@ -31,7 +31,7 @@ pub fn compute_constant_initializer(
         }
         Initializer::List(_) => todo!(),
     };
-    Ok(TypedValue::new(v, target_type.clone()))
+    Ok(TypedConstant::new(v, target_type.clone()))
 }
 
 pub fn compute_constant_expr(
@@ -39,7 +39,7 @@ pub fn compute_constant_expr(
     allow_var: bool,
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
-) -> Result<TypedValue, ()> {
+) -> Result<TypedConstant, ()> {
     let expr = expr.node;
     match expr {
         Expression::Identifier(id) => {
@@ -51,7 +51,7 @@ pub fn compute_constant_expr(
         }
         Expression::Constant(c) => {
             match c.node {
-                Constant::Integer(i) => {
+                lang_c::ast::Constant::Integer(i) => {
                     use lang_c::ast::IntegerBase;
                     let radix = match i.base {
                         IntegerBase::Decimal => 10,
@@ -60,10 +60,14 @@ pub fn compute_constant_expr(
                         IntegerBase::Binary => 2,
                     };
                     let num = u128::from_str_radix(&i.number, radix).unwrap(); // should be already checked by lang_c
-                    Ok(TypedValue::new_from_int_literal(num, i.suffix, radix == 10))
+                    Ok(TypedConstant::new_from_int_literal(
+                        num,
+                        i.suffix,
+                        radix == 10,
+                    ))
                 }
-                Constant::Float(_) => todo!(),
-                Constant::Character(s) => match string::parse_char_literal_typed(&s) {
+                lang_c::ast::Constant::Float(_) => todo!(),
+                lang_c::ast::Constant::Character(s) => match string::parse_char_literal_typed(&s) {
                     Ok(x) => Ok(x),
                     Err(e) => {
                         ec.record_error(CompileError::CharParseError(e), c.span)?;
@@ -129,7 +133,7 @@ fn process_condition_expression_node(
     allow_var: bool,
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
-) -> Result<TypedValue, ()> {
+) -> Result<TypedConstant, ()> {
     let cond_span = node.node.condition.span;
     let else_span = node.node.else_expression.span;
     let cond_val = compute_constant_expr(*node.node.condition, allow_var, scope, ec)?;
@@ -140,7 +144,7 @@ fn process_condition_expression_node(
         unreachable!()
     }
     if then_val.t.t.is_arithmetic() && else_val.t.t.is_arithmetic() {
-        let (then_val, else_val) = TypedValue::usual_arithmetic_convert(then_val, else_val);
+        let (then_val, else_val) = TypedConstant::usual_arithmetic_convert(then_val, else_val);
         if cond_val.is_zero() {
             Ok(else_val)
         } else {
@@ -168,7 +172,7 @@ fn process_binary_operator_expression_node(
     allow_var: bool,
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
-) -> Result<TypedValue, ()> {
+) -> Result<TypedConstant, ()> {
     use lang_c::ast::BinaryOperator;
     let lhs_span = node.node.lhs.span;
     let rhs_span = node.node.rhs.span;
@@ -186,11 +190,11 @@ fn process_binary_operator_expression_node(
                     (rhs, lhs, rhs_span)
                 };
                 if lhs.t.t.is_arithmetic() {
-                    let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                    let (lhs, rhs) = TypedConstant::usual_arithmetic_convert(lhs, rhs);
                     if lhs.t.t.is_integer() {
                         let lhs_val = lhs.unwrap_integer();
                         let rhs_val = rhs.unwrap_integer();
-                        Ok(TypedValue::new_integer(lhs_val + rhs_val, lhs.t.t))
+                        Ok(TypedConstant::new_integer(lhs_val + rhs_val, lhs.t.t))
                     } else {
                         todo!()
                     }
@@ -207,11 +211,11 @@ fn process_binary_operator_expression_node(
         }
         BinaryOperator::Minus => {
             if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
-                let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                let (lhs, rhs) = TypedConstant::usual_arithmetic_convert(lhs, rhs);
                 if lhs.t.t.is_integer() {
                     let lhs_val = lhs.unwrap_integer();
                     let rhs_val = rhs.unwrap_integer();
-                    Ok(TypedValue::new_integer(lhs_val - rhs_val, lhs.t.t))
+                    Ok(TypedConstant::new_integer(lhs_val - rhs_val, lhs.t.t))
                 } else {
                     todo!()
                 }
@@ -229,11 +233,11 @@ fn process_binary_operator_expression_node(
         }
         BinaryOperator::Multiply => {
             if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
-                let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                let (lhs, rhs) = TypedConstant::usual_arithmetic_convert(lhs, rhs);
                 if lhs.t.t.is_integer() {
                     let lhs_val = lhs.unwrap_integer();
                     let rhs_val = rhs.unwrap_integer();
-                    Ok(TypedValue::new_integer(lhs_val * rhs_val, lhs.t.t))
+                    Ok(TypedConstant::new_integer(lhs_val * rhs_val, lhs.t.t))
                 } else {
                     todo!()
                 }
@@ -249,7 +253,7 @@ fn process_binary_operator_expression_node(
         }
         BinaryOperator::Divide => {
             if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
-                let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+                let (lhs, rhs) = TypedConstant::usual_arithmetic_convert(lhs, rhs);
                 if lhs.t.t.is_integer() {
                     let lhs_val = lhs.unwrap_integer();
                     let rhs_val = rhs.unwrap_integer();
@@ -257,7 +261,7 @@ fn process_binary_operator_expression_node(
                         ec.record_error(CompileError::DivisionByZero, rhs_span)?;
                         unreachable!();
                     }
-                    Ok(TypedValue::new_integer(lhs_val / rhs_val, lhs.t.t))
+                    Ok(TypedConstant::new_integer(lhs_val / rhs_val, lhs.t.t))
                 } else {
                     todo!()
                 }
@@ -294,7 +298,7 @@ fn process_binary_operator_expression_node(
                 if rhs_val < 0 {
                     ec.record_warning(CompileWarning::ShiftByNegative, rhs_span)?;
                 }
-                Ok(TypedValue::new_integer(lhs_val << rhs_val, lhs.t.t))
+                Ok(TypedConstant::new_integer(lhs_val << rhs_val, lhs.t.t))
             } else {
                 let span = if !lhs.t.t.is_integer() {
                     lhs_span
@@ -314,7 +318,7 @@ fn process_binary_operator_expression_node(
                 if rhs_val < 0 {
                     ec.record_warning(CompileWarning::ShiftByNegative, rhs_span)?;
                 }
-                Ok(TypedValue::new_integer(lhs_val >> rhs_val, lhs.t.t))
+                Ok(TypedConstant::new_integer(lhs_val >> rhs_val, lhs.t.t))
             } else {
                 let span = if !lhs.t.t.is_integer() {
                     lhs_span
@@ -327,42 +331,42 @@ fn process_binary_operator_expression_node(
         }
         BinaryOperator::Less => {
             let r = compare(lhs, rhs, false, node.span, ec)?;
-            Ok(TypedValue::new_integer(
+            Ok(TypedConstant::new_integer(
                 if r < 0 { 1 } else { 0 },
                 ctype::INT_TYPE,
             ))
         }
         BinaryOperator::Greater => {
             let r = compare(lhs, rhs, false, node.span, ec)?;
-            Ok(TypedValue::new_integer(
+            Ok(TypedConstant::new_integer(
                 if r > 0 { 1 } else { 0 },
                 ctype::INT_TYPE,
             ))
         }
         BinaryOperator::LessOrEqual => {
             let r = compare(lhs, rhs, false, node.span, ec)?;
-            Ok(TypedValue::new_integer(
+            Ok(TypedConstant::new_integer(
                 if r <= 0 { 1 } else { 0 },
                 ctype::INT_TYPE,
             ))
         }
         BinaryOperator::GreaterOrEqual => {
             let r = compare(lhs, rhs, false, node.span, ec)?;
-            Ok(TypedValue::new_integer(
+            Ok(TypedConstant::new_integer(
                 if r <= 0 { 1 } else { 0 },
                 ctype::INT_TYPE,
             ))
         }
         BinaryOperator::Equals => {
             let r = compare(lhs, rhs, true, node.span, ec)?;
-            Ok(TypedValue::new_integer(
+            Ok(TypedConstant::new_integer(
                 if r == 0 { 1 } else { 0 },
                 ctype::INT_TYPE,
             ))
         }
         BinaryOperator::NotEquals => {
             let r = compare(lhs, rhs, true, node.span, ec)?;
-            Ok(TypedValue::new_integer(
+            Ok(TypedConstant::new_integer(
                 if r != 0 { 1 } else { 0 },
                 ctype::INT_TYPE,
             ))
@@ -421,14 +425,14 @@ fn process_binary_operator_expression_node(
  * Returns -1, 0, 1
  */
 fn compare(
-    lhs: TypedValue,
-    rhs: TypedValue,
+    lhs: TypedConstant,
+    rhs: TypedConstant,
     equality: bool,
     span: Span,
     ec: &mut ErrorCollector,
 ) -> Result<isize, ()> {
     if lhs.t.t.is_arithmetic() && rhs.t.t.is_arithmetic() {
-        let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+        let (lhs, rhs) = TypedConstant::usual_arithmetic_convert(lhs, rhs);
         if lhs.t.t.is_integer() {
             let lhs = lhs.unwrap_integer();
             let rhs = rhs.unwrap_integer();
@@ -455,21 +459,21 @@ fn compare(
  */
 fn integer_op<F>(
     f: F,
-    lhs: TypedValue,
-    rhs: TypedValue,
+    lhs: TypedConstant,
+    rhs: TypedConstant,
     lhs_span: Span,
     rhs_span: Span,
     ec: &mut ErrorCollector,
-) -> Result<TypedValue, ()>
+) -> Result<TypedConstant, ()>
 where
     F: FnOnce(i128, i128, &mut ErrorCollector) -> Result<i128, ()>,
 {
     if lhs.t.t.is_integer() && rhs.t.t.is_integer() {
-        let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+        let (lhs, rhs) = TypedConstant::usual_arithmetic_convert(lhs, rhs);
         let lhs_val = lhs.unwrap_integer();
         let rhs_val = rhs.unwrap_integer();
         let r = f(lhs_val, rhs_val, ec)?;
-        Ok(TypedValue::new_integer(r, lhs.t.t))
+        Ok(TypedConstant::new_integer(r, lhs.t.t))
     } else {
         let span = if !lhs.t.t.is_integer() {
             lhs_span
@@ -486,21 +490,21 @@ where
  */
 fn logical_op<F>(
     f: F,
-    lhs: TypedValue,
-    rhs: TypedValue,
+    lhs: TypedConstant,
+    rhs: TypedConstant,
     lhs_span: Span,
     rhs_span: Span,
     ec: &mut ErrorCollector,
-) -> Result<TypedValue, ()>
+) -> Result<TypedConstant, ()>
 where
     F: FnOnce(bool, bool) -> bool,
 {
     if lhs.t.t.is_scalar() && rhs.t.t.is_scalar() {
-        let (lhs, rhs) = TypedValue::usual_arithmetic_convert(lhs, rhs);
+        let (lhs, rhs) = TypedConstant::usual_arithmetic_convert(lhs, rhs);
         let lhs_zero = lhs.is_zero();
         let rhs_zero = rhs.is_zero();
         let r = f(!lhs_zero, !rhs_zero);
-        Ok(TypedValue::new_integer(if r { 1 } else { 0 }, lhs.t.t))
+        Ok(TypedConstant::new_integer(if r { 1 } else { 0 }, lhs.t.t))
     } else {
         let span = if !lhs.t.t.is_scalar() {
             lhs_span
@@ -517,7 +521,7 @@ fn process_unary_operator_expression_node(
     allow_var: bool,
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
-) -> Result<TypedValue, ()> {
+) -> Result<TypedConstant, ()> {
     use lang_c::ast::UnaryOperator;
     let op_node = node.node.operator;
     let op = op_node.node;
@@ -569,7 +573,7 @@ fn process_cast_expression_node(
     allow_var: bool,
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
-) -> Result<TypedValue, ()> {
+) -> Result<TypedConstant, ()> {
     let mut type_builder =
         TypeBuilder::new_from_specifiers_qualifiers(c.node.type_name.node.specifiers, scope, ec)?;
     let type_builder = type_builder.stage2(c.span, ec)?;
@@ -580,18 +584,18 @@ fn process_cast_expression_node(
     };
     let value = compute_constant_expr(*c.node.expression, allow_var, scope, ec)?;
 
-    Ok(TypedValue {
+    Ok(TypedConstant {
         val: cast(value, &new_type, c.span, ec)?,
         t: new_type,
     })
 }
 
 fn cast(
-    value: TypedValue,
+    value: TypedConstant,
     new_type: &QualifiedType,
     span: Span,
     ec: &mut ErrorCollector,
-) -> Result<Value, ()> {
+) -> Result<Constant, ()> {
     if !value.t.is_explicit_castable_to(&new_type) {
         ec.record_error(
             CompileError::BadCast(format!("{}", value.t), format!("{}", new_type)),
@@ -599,7 +603,7 @@ fn cast(
         )?;
     }
     let new_v = match new_type.t {
-        CType::Void => Value::Void,
+        CType::Void => Constant::Void,
         CType::Int(new_size, new_sign) => match value.t.t {
             CType::Int(old_size, old_sign) => {
                 cast_int(old_size, old_sign, new_size, new_sign, value.val)
@@ -657,8 +661,14 @@ where
     }
 }
 
-fn cast_int(size_from: u8, sign_from: bool, size_to: u8, sign_to: bool, value: Value) -> Value {
-    if let Value::Int(value) = value {
+fn cast_int(
+    size_from: u8,
+    sign_from: bool,
+    size_to: u8,
+    sign_to: bool,
+    value: Constant,
+) -> Constant {
+    if let Constant::Int(value) = value {
         let new_val = match (size_from, sign_from) {
             (1, true) => cast_int_ff(size_to, sign_to, value as i8),
             (1, false) => cast_int_ff(size_to, sign_to, value as u8),
@@ -670,16 +680,16 @@ fn cast_int(size_from: u8, sign_from: bool, size_to: u8, sign_to: bool, value: V
             (8, false) => cast_int_ff(size_to, sign_to, value as u64),
             _ => unreachable!(),
         };
-        Value::Int(new_val)
+        Constant::Int(new_val)
     } else {
         panic!("value doesn't match type")
     }
 }
 
-fn cast_from_bool(value: Value) -> Value {
-    if let Value::Int(value) = value {
+fn cast_from_bool(value: Constant) -> Constant {
+    if let Constant::Int(value) = value {
         let new_val = if value == 0 { 0 } else { 1 };
-        Value::Int(new_val)
+        Constant::Int(new_val)
     } else {
         panic!("value doesn't match type")
     }

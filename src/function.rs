@@ -25,6 +25,7 @@ pub struct Function {
     return_type: QualifiedType,
     args: FunctionArgs,
     body: Vec<LabeledBlock>,
+    frame_size: usize,
 }
 
 impl Function {
@@ -79,6 +80,7 @@ impl Function {
             args,
             name,
             body: be.finalize(),
+            frame_size: scope.reset_frame_size(),
         })
     }
 

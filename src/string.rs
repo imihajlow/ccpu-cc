@@ -2,7 +2,7 @@ use std::fmt::Formatter;
 use std::{iter::Peekable, str::Chars};
 
 use crate::ctype;
-use crate::initializer::TypedValue;
+use crate::initializer::TypedConstant;
 
 #[derive(Debug, PartialEq)]
 pub enum StringParseError {
@@ -23,14 +23,14 @@ enum CharType {
     Char32T,
 }
 
-pub fn parse_char_literal_typed(lit: &str) -> Result<TypedValue, StringParseError> {
+pub fn parse_char_literal_typed(lit: &str) -> Result<TypedConstant, StringParseError> {
     let (val, t) = parse_char_literal(lit)?;
     let t = match t {
         CharType::Default => ctype::INT_TYPE,
         CharType::Char16T => ctype::CHAR16_TYPE,
         CharType::Char32T => ctype::CHAR32_TYPE,
     };
-    Ok(TypedValue::new_integer(val.into(), t))
+    Ok(TypedConstant::new_integer(val.into(), t))
 }
 
 fn parse_char_literal(lit: &str) -> Result<(u32, CharType), StringParseError> {

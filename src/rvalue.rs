@@ -1,5 +1,5 @@
 use crate::ctype::QualifiedType;
-use crate::initializer::TypedValue;
+use crate::initializer::TypedConstant;
 use std::fmt::Formatter;
 
 use crate::ir;
@@ -8,6 +8,7 @@ use crate::ir;
 pub enum RValue {
     Void,
     Scalar(ir::Scalar),
+    Object(ir::Scalar),
 }
 
 #[derive(Clone)]
@@ -29,6 +30,10 @@ impl RValue {
         RValue::Scalar(ir::Scalar::Var(v))
     }
 
+    pub fn new_object(l: ir::Scalar) -> Self {
+        RValue::Object(l)
+    }
+
     pub fn unwrap_scalar(self) -> ir::Scalar {
         if let RValue::Scalar(s) = self {
             s
@@ -39,14 +44,14 @@ impl RValue {
 }
 
 impl TypedRValue {
-    pub fn new_from_typed_value(tv: TypedValue) -> Self {
-        use crate::initializer::Value;
+    pub fn new_from_typed_value(tv: TypedConstant) -> Self {
+        use crate::initializer::Constant;
         match tv.val {
-            Value::Int(x) => Self {
+            Constant::Int(x) => Self {
                 src: RValue::new_const(x as u64),
                 t: tv.t,
             },
-            Value::Void => Self {
+            Constant::Void => Self {
                 src: RValue::Void,
                 t: tv.t,
             },
@@ -68,6 +73,7 @@ impl std::fmt::Display for RValue {
         match self {
             RValue::Void => f.write_str("(void)"),
             RValue::Scalar(s) => s.fmt(f),
+            RValue::Object(l) => write!(f, "obj@{}", l),
         }
     }
 }
