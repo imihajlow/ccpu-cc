@@ -62,7 +62,7 @@ pub fn compile_expression(
     match expr.node {
         Expression::Constant(_) => {
             let v = constant::compute_constant_expr(expr, false, scope, ec)?;
-            Ok(TypedRValue::new_from_typed_value(v))
+            Ok(TypedRValue::new_from_typed_constant(v))
         }
         Expression::Identifier(id) => scope.get_rvalue(&id.node.name, id.span, ec),
         Expression::BinaryOperator(o) => binary::compile_binary_operator(*o, scope, be, ec),

@@ -211,7 +211,7 @@ impl TypedConstant {
     }
 
     /**
-     * Drop extra bits which don't fit into the target type (ensure the TypedValue invariant).
+     * Drop extra bits which don't fit into the target type (ensure the TypedConstant invariant).
      *
      * TODO emit warning when data is lost
      */

@@ -574,7 +574,7 @@ fn process_cast_expression_node(
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedConstant, ()> {
-    let mut type_builder =
+    let type_builder =
         TypeBuilder::new_from_specifiers_qualifiers(c.node.type_name.node.specifiers, scope, ec)?;
     let type_builder = type_builder.stage2(c.span, ec)?;
     let new_type = if let Some(decl) = c.node.type_name.node.declarator {
@@ -591,25 +591,25 @@ fn process_cast_expression_node(
 }
 
 fn cast(
-    value: TypedConstant,
+    constant: TypedConstant,
     new_type: &QualifiedType,
     span: Span,
     ec: &mut ErrorCollector,
 ) -> Result<Constant, ()> {
-    if !value.t.is_explicit_castable_to(&new_type) {
+    if !constant.t.is_explicit_castable_to(&new_type) {
         ec.record_error(
-            CompileError::BadCast(format!("{}", value.t), format!("{}", new_type)),
+            CompileError::BadCast(format!("{}", constant.t), format!("{}", new_type)),
             span,
         )?;
     }
     let new_v = match new_type.t {
         CType::Void => Constant::Void,
-        CType::Int(new_size, new_sign) => match value.t.t {
+        CType::Int(new_size, new_sign) => match constant.t.t {
             CType::Int(old_size, old_sign) => {
-                cast_int(old_size, old_sign, new_size, new_sign, value.val)
+                cast_int(old_size, old_sign, new_size, new_sign, constant.val)
             }
-            CType::Bool => cast_from_bool(value.val),
-            CType::Pointer(_) => cast_int(machine::PTR_SIZE, false, new_size, new_sign, value.val),
+            CType::Bool => cast_from_bool(constant.val),
+            CType::Pointer(_) => cast_int(machine::PTR_SIZE, false, new_size, new_sign, constant.val),
             CType::Float(_) => todo!(),
             CType::Array(_, _) => {
                 ec.record_error(CompileError::NonConstInConstExpr, span)?;
@@ -618,12 +618,12 @@ fn cast(
             _ => unreachable!(),
         },
         CType::Float(_) => todo!(),
-        CType::Pointer(_) => match value.t.t {
+        CType::Pointer(_) => match constant.t.t {
             CType::Int(old_size, old_sign) => {
-                cast_int(old_size, old_sign, machine::PTR_SIZE, false, value.val)
+                cast_int(old_size, old_sign, machine::PTR_SIZE, false, constant.val)
             }
-            CType::Bool => cast_from_bool(value.val),
-            CType::Pointer(_) => value.val,
+            CType::Bool => cast_from_bool(constant.val),
+            CType::Pointer(_) => constant.val,
             CType::Float(_) => todo!(),
             CType::Array(_, _) => {
                 ec.record_error(CompileError::NonConstInConstExpr, span)?;

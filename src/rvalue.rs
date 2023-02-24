@@ -44,7 +44,7 @@ impl RValue {
 }
 
 impl TypedRValue {
-    pub fn new_from_typed_value(tv: TypedConstant) -> Self {
+    pub fn new_from_typed_constant(tv: TypedConstant) -> Self {
         use crate::initializer::Constant;
         match tv.val {
             Constant::Int(x) => Self {
