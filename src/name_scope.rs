@@ -12,6 +12,7 @@ use crate::{
     error::{CompileError, CompileWarning, ErrorCollector},
     ir,
     struct_union::StructUnion,
+    utils,
 };
 use crate::{
     initializer::TypedConstant,
@@ -30,7 +31,7 @@ pub struct NameScope {
     static_initializers: HashMap<GlobalVarId, TypedConstant>,
     fixed_regs: HashSet<ir::Reg>,
     tagged_types: Vec<(Tagged, Span)>,
-    frame_size: usize,
+    frame_size: u32,
 }
 
 #[derive(Clone)]
@@ -44,6 +45,7 @@ pub enum Value {
         GlobalStorageClass,
         Option<TypedConstant>,
     ),
+    Object(QualifiedType, u32),
 }
 
 #[derive(Clone)]
@@ -123,7 +125,7 @@ impl NameScope {
     /**
      * Resets frame size to 0 and returns previous size.
      */
-    pub fn reset_frame_size(&mut self) -> usize {
+    pub fn reset_frame_size(&mut self) -> u32 {
         let r = self.frame_size;
         self.frame_size = 0;
         r
@@ -272,8 +274,15 @@ impl NameScope {
                 | Some(StorageClassSpecifier::Auto)
                 | Some(StorageClassSpecifier::Register) => {
                     assert!(initializer.is_none());
-                    let id = self.alloc_reg();
-                    self.insert(name, Value::AutoVar(t, id), span);
+                    if t.t.is_scalar() {
+                        let id = self.alloc_reg();
+                        self.insert(name, Value::AutoVar(t, id), span);
+                    } else {
+                        let size = t.t.sizeof(self, span, ec)?;
+                        let align = t.t.alignof(self, span, ec)?;
+                        let offset = self.alloc_frame(size, align);
+                        self.insert(name, Value::Object(t, offset), span);
+                    }
                 }
                 Some(StorageClassSpecifier::Extern) => {
                     return ec
@@ -390,6 +399,7 @@ impl NameScope {
                     ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
                     unreachable!();
                 }
+                Value::Object(_, _) => todo!(),
             }
         } else {
             ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
@@ -454,6 +464,13 @@ impl NameScope {
         let id = self.last_static_id;
         self.last_static_id += 1;
         GlobalVarId(name.to_string(), id)
+    }
+
+    fn alloc_frame(&mut self, size: u32, align: u32) -> u32 {
+        self.frame_size = utils::align(self.frame_size, align);
+        let r = self.frame_size;
+        self.frame_size += size;
+        r
     }
 
     fn is_at_global_level(&self) -> bool {
@@ -569,6 +586,7 @@ impl Value {
             Value::AutoVar(t, _) => t,
             Value::Arg(t, _) => t,
             Value::StaticVar(t, _, _, _) => t,
+            Value::Object(t, _) => t,
         }
     }
 

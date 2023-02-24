@@ -231,8 +231,34 @@ impl StructUnion {
 #[cfg(test)]
 mod test {
     use crate::ctype::{CType, Qualifiers};
+    use crate::ir::{self, VarLocation};
+    use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
 
     use super::*;
+
+    fn compile(code: &str) -> (TranslationUnit, ErrorCollector) {
+        use lang_c::driver::{parse_preprocessed, Config, Flavor};
+        let mut cfg = Config::default();
+        cfg.flavor = Flavor::StdC11;
+        let p = parse_preprocessed(&cfg, code.to_string()).unwrap();
+        let mut ec = ErrorCollector::new();
+        let tu = TranslationUnit::translate(p.unit, &mut ec).unwrap();
+        assert_eq!(ec.get_error_count(), 0);
+        (tu, ec)
+    }
+
+    fn assert_compile_error(code: &str) {
+        use lang_c::driver::{parse_preprocessed, Config, Flavor};
+        let mut cfg = Config::default();
+        cfg.flavor = Flavor::StdC11;
+        let p = parse_preprocessed(&cfg, code.to_string()).unwrap();
+        let mut ec = ErrorCollector::new();
+        assert!(TranslationUnit::translate(p.unit, &mut ec).is_err());
+    }
+
+    fn get_first_body(tu: &TranslationUnit) -> &Vec<LabeledBlock> {
+        tu.functions.first().unwrap().get_body()
+    }
 
     #[test]
     fn test_align() {
@@ -263,7 +289,7 @@ mod test {
     }
 
     #[test]
-    fn test_sizeof() {
+    fn test_sizeof_1() {
         let mut su = StructUnion {
             members: Some(vec![
                 (
@@ -359,5 +385,21 @@ mod test {
             ))
         );
         assert_eq!(su.get_field("z", &scope, Span::none(), ec), Ok(None));
+    }
+
+    #[test]
+    fn test_sizeof_2() {
+        let (tu, ec) = compile("struct X { int x; union { char y; long long z; };}; void foo(void) { int x = sizeof(struct X); }");
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::ConstInt(16),
+                width: ir::Width::Word
+            })]
+        );
     }
 }

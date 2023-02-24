@@ -411,44 +411,70 @@ impl TypeBuilder {
                             scope,
                             ec,
                         )?;
-                        for decl in f.node.declarators {
-                            if decl.node.bit_width.is_some() {
-                                unimplemented!("bit width");
-                            }
-                            let stage2 = type_builder.stage2(decl.span, ec)?;
-                            let (name, t) = if let Some(decl) = decl.node.declarator {
-                                stage2.process_declarator_node(decl, scope, ec)?
-                            } else {
-                                (None, stage2.finalize())
-                            };
-                            if let Some(name) = name {
-                                if used_names.insert(name.to_string(), decl.span).is_some() {
-                                    ec.record_error(
-                                        CompileError::MemberRedeclaration(name),
-                                        decl.span,
-                                    )?;
-                                    unreachable!();
+                        if !f.node.declarators.is_empty() {
+                            for decl in f.node.declarators {
+                                if decl.node.bit_width.is_some() {
+                                    unimplemented!("bit width");
                                 }
-                                members.push((Some(name), t))
-                            } else {
-                                if let Some(tti) = t.t.get_anon_struct_or_union_id() {
-                                    let inner_names =
-                                        scope.get_struct_union(tti).collect_member_names(scope);
-                                    for name in inner_names.iter() {
-                                        if let Some(span) =
-                                            used_names.insert(name.to_string(), decl.span)
-                                        {
-                                            ec.record_error(
-                                                CompileError::MemberRedeclaration(name.to_string()),
-                                                span,
-                                            )?;
-                                            unreachable!();
-                                        }
-                                    }
-                                    members.push((None, t))
+                                let stage2 = type_builder.stage2(decl.span, ec)?;
+                                let (name, t) = if let Some(decl) = decl.node.declarator {
+                                    stage2.process_declarator_node(decl, scope, ec)?
                                 } else {
-                                    ec.record_warning(CompileWarning::EmptyDeclaration, decl.span)?;
+                                    (None, stage2.finalize())
+                                };
+                                if let Some(name) = name {
+                                    if used_names.insert(name.to_string(), decl.span).is_some() {
+                                        ec.record_error(
+                                            CompileError::MemberRedeclaration(name),
+                                            decl.span,
+                                        )?;
+                                        unreachable!();
+                                    }
+                                    members.push((Some(name), t))
+                                } else {
+                                    if let Some(tti) = t.t.get_anon_struct_or_union_id() {
+                                        let inner_names =
+                                            scope.get_struct_union(tti).collect_member_names(scope);
+                                        for name in inner_names.iter() {
+                                            if let Some(span) =
+                                                used_names.insert(name.to_string(), decl.span)
+                                            {
+                                                ec.record_error(
+                                                    CompileError::MemberRedeclaration(
+                                                        name.to_string(),
+                                                    ),
+                                                    span,
+                                                )?;
+                                                unreachable!();
+                                            }
+                                        }
+                                        members.push((None, t))
+                                    } else {
+                                        ec.record_warning(
+                                            CompileWarning::EmptyDeclaration,
+                                            decl.span,
+                                        )?;
+                                    }
                                 }
+                            }
+                        } else {
+                            let t = type_builder.stage2(f.span, ec)?.finalize();
+                            if let Some(tti) = t.t.get_anon_struct_or_union_id() {
+                                let inner_names =
+                                    scope.get_struct_union(tti).collect_member_names(scope);
+                                for name in inner_names.iter() {
+                                    if let Some(span) = used_names.insert(name.to_string(), f.span)
+                                    {
+                                        ec.record_error(
+                                            CompileError::MemberRedeclaration(name.to_string()),
+                                            span,
+                                        )?;
+                                        unreachable!();
+                                    }
+                                }
+                                members.push((None, t))
+                            } else {
+                                ec.record_warning(CompileWarning::EmptyDeclaration, f.span)?;
                             }
                         }
                     }

@@ -25,7 +25,7 @@ pub struct Function {
     return_type: QualifiedType,
     args: FunctionArgs,
     body: Vec<LabeledBlock>,
-    frame_size: usize,
+    frame_size: u32,
 }
 
 impl Function {
@@ -92,7 +92,7 @@ impl Function {
 
 impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        writeln!(f, "function {}", self.name)?;
+        writeln!(f, "function {}({})", self.name, self.frame_size)?;
         for (i, b) in self.body.iter().enumerate() {
             writeln!(f, "{}:\n{}", i, b)?;
         }
