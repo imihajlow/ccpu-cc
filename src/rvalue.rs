@@ -1,5 +1,6 @@
 use crate::ctype::QualifiedType;
 use crate::initializer::TypedConstant;
+use crate::object_location::ObjectLocation;
 use std::fmt::Formatter;
 
 use crate::ir;
@@ -8,7 +9,7 @@ use crate::ir;
 pub enum RValue {
     Void,
     Scalar(ir::Scalar),
-    Object(ir::Scalar),
+    Object(ObjectLocation),
 }
 
 #[derive(Clone)]
@@ -30,7 +31,7 @@ impl RValue {
         RValue::Scalar(ir::Scalar::Var(v))
     }
 
-    pub fn new_object(l: ir::Scalar) -> Self {
+    pub fn new_object(l: ObjectLocation) -> Self {
         RValue::Object(l)
     }
 

@@ -29,6 +29,7 @@ pub struct GlobalVarId(pub String, pub u32);
 pub enum Scalar {
     ConstInt(u64),
     SymbolOffset(String, u16),
+    FrameOffset(u32),
     Var(VarLocation),
 }
 
@@ -409,6 +410,7 @@ impl std::fmt::Display for Scalar {
             Scalar::ConstInt(x) => write!(f, "{}", x),
             Scalar::SymbolOffset(sym, 0) => write!(f, "[{}]", sym),
             Scalar::SymbolOffset(sym, offs) => write!(f, "[{}+0x{:x}]", sym, offs),
+            Scalar::FrameOffset(offs) => write!(f, "[F+0x{:x}]", offs),
             Scalar::Var(v) => write!(f, "{}", v),
         }
     }

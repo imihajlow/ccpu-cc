@@ -8,13 +8,14 @@ use crate::error::{CompileError, ErrorCollector};
 use crate::ir::VarLocation;
 use crate::ir::{self, Scalar};
 use crate::name_scope::NameScope;
+use crate::object_location::ObjectLocation;
 use crate::rvalue::{RValue, TypedRValue};
 
 #[derive(Debug, Clone)]
 pub enum LValue {
     Var(VarLocation),
     Indirection(Scalar),
-    Object(Scalar),
+    Object(ObjectLocation),
 }
 
 #[derive(Debug, Clone)]
@@ -128,10 +129,7 @@ impl TypedLValue {
                     })
                 } else {
                     assert!(!self.t.t.is_scalar());
-                    Ok(TypedRValue {
-                        src: RValue::new_object(src_addr),
-                        t: self.t,
-                    })
+                    todo!()
                 }
             }
             LValue::Object(s) => Ok(TypedRValue {

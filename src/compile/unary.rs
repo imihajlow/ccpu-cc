@@ -7,6 +7,7 @@ use crate::error::{CompileError, ErrorCollector};
 use crate::ir;
 use crate::lvalue::{LValue, TypedLValue};
 use crate::name_scope::NameScope;
+use crate::object_location::ObjectLocation;
 use crate::rvalue::{RValue, TypedRValue};
 
 use super::assign::compile_assign_to_lval;
@@ -248,10 +249,12 @@ fn compile_address(
                 t,
             })
         }
-        LValue::Object(addr) => Ok(TypedRValue {
-            src: RValue::Scalar(addr),
-            t,
-        }),
+        LValue::Object(loc) => {
+            let src = match loc {
+                ObjectLocation::Frame(offset) => RValue::Scalar(ir::Scalar::FrameOffset(offset)),
+            };
+            Ok(TypedRValue { src, t })
+        }
     }
 }
 

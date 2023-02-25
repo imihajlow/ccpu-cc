@@ -14,6 +14,7 @@ mod ir;
 mod lvalue;
 mod machine;
 mod name_scope;
+mod object_location;
 mod rvalue;
 mod string;
 mod struct_union;

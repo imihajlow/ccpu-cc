@@ -14,7 +14,7 @@ use crate::{
     lvalue::{LValue, TypedLValue},
     rvalue::{RValue, TypedRValue},
     struct_union::StructUnion,
-    utils,
+    utils, object_location::ObjectLocation,
 };
 use crate::{
     initializer::TypedConstant,
@@ -412,7 +412,7 @@ impl NameScope {
                 }
                 Value::Object(t, p) => Ok(TypedRValue {
                     t: t.clone(),
-                    src: RValue::new_object(ir::Scalar::Var(ir::VarLocation::Frame(*p))),
+                    src: RValue::new_object(ObjectLocation::Frame(*p)),
                 }),
             }
         } else {
@@ -447,7 +447,7 @@ impl NameScope {
                 }
                 Value::Object(t, p) => Ok(TypedLValue {
                     t: t.clone(),
-                    lv: LValue::Object(ir::Scalar::Var(ir::VarLocation::Frame(*p))),
+                    lv: LValue::Object(ObjectLocation::Frame(*p)),
                 }),
             }
         } else {
