@@ -53,9 +53,9 @@ pub fn compile_statement(
         Statement::Break => be.append_break(stat.span, ec)?,
         Statement::Continue => be.append_continue(stat.span, ec)?,
         Statement::Return(r) => be.append_return(r.map(|e| *e), stat.span, scope, ec)?,
-        Statement::Labeled(_) => todo!(),
+        Statement::Labeled(ls) => be.append_labeled_statement(ls, scope, ec)?,
         Statement::Switch(_) => todo!(),
-        Statement::Goto(_) => todo!(),
+        Statement::Goto(id) => be.append_goto(id),
         Statement::Asm(_) => unimplemented!(),
     }
     Ok(())

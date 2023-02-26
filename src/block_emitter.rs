@@ -2,8 +2,8 @@ use std::{collections::HashMap, fmt::Formatter, mem};
 
 use lang_c::{
     ast::{
-        ConditionalExpression, DoWhileStatement, Expression, ForStatement, IfStatement,
-        WhileStatement,
+        ConditionalExpression, DoWhileStatement, Expression, ForStatement, Identifier, IfStatement,
+        LabeledStatement, WhileStatement,
     },
     span::{Node, Span},
 };
@@ -660,6 +660,40 @@ impl BlockEmitter {
         }
         let orphan_block_id = self.alloc_block_id();
         self.finish_block(LabeledTail::Tail(ir::Tail::Ret), orphan_block_id);
+        Ok(())
+    }
+
+    pub fn append_labeled_statement(
+        &mut self,
+        ls: Node<LabeledStatement>,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        use lang_c::ast::Label;
+        match ls.node.label.node {
+            Label::Identifier(id) => self.append_label(id, ec)?,
+            Label::Case(_) => todo!(),
+            Label::Default => todo!(),
+            Label::CaseRange(_) => unimplemented!(),
+        }
+        compile_statement(*ls.node.statement, scope, self, ec)
+    }
+
+    pub fn append_goto(&mut self, id: Node<Identifier>) {
+        let orphan = self.alloc_block_id();
+        self.finish_block(LabeledTail::GotoLabel(id.node.name, id.span), orphan);
+    }
+
+    fn append_label(&mut self, id: Node<Identifier>, ec: &mut ErrorCollector) -> Result<(), ()> {
+        let next_block_id = self.alloc_block_id();
+        if let Some(_) = self.labels.insert(id.node.name.clone(), next_block_id) {
+            ec.record_error(CompileError::LabelRedefinition(id.node.name), id.span)?;
+            unreachable!()
+        }
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(next_block_id)),
+            next_block_id,
+        );
         Ok(())
     }
 
