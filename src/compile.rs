@@ -20,11 +20,13 @@ use crate::{
 };
 use crate::{machine, type_builder};
 
+use self::member::compile_member_expression;
 use self::sizeof::{compile_alignof, compile_sizeof_type, compile_sizeof_val};
 
 mod add;
 mod assign;
 mod binary;
+mod member;
 mod relational;
 mod shift;
 mod sizeof;
@@ -74,9 +76,9 @@ pub fn compile_expression(
         Expression::SizeOfTy(si) => compile_sizeof_type(*si, scope, ec),
         Expression::SizeOfVal(si) => compile_sizeof_val(*si, scope, be, ec),
         Expression::AlignOf(si) => compile_alignof(*si, scope, ec),
+        Expression::Member(me) => compile_member_expression(*me, scope, be, ec),
         Expression::OffsetOf(_) => todo!(),
         Expression::StringLiteral(_) => todo!(),
-        Expression::Member(_) => todo!(),
         Expression::CompoundLiteral(_) => todo!(),
         Expression::VaArg(_) => todo!(),
         Expression::GenericSelection(_) => unimplemented!(),

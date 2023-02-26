@@ -75,6 +75,14 @@ impl TypedRValue {
     pub fn unwrap_scalar_and_type(self) -> (ir::Scalar, QualifiedType) {
         (self.src.unwrap_scalar(), self.t)
     }
+
+    pub fn get_object_address(self) -> Option<ir::Scalar> {
+        match self.src {
+            RValue::Object(o) => Some(o.get_address()),
+            RValue::Void => None,
+            RValue::Scalar(_) => None,
+        }
+    }
 }
 
 impl std::fmt::Display for RValue {

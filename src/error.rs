@@ -231,7 +231,7 @@ impl std::fmt::Display for CompileError {
                 write!(f, "incomplete definition of type '{}'", t)
             }
             CompileError::NoSuchMember(t, s) => {
-                write!(f, "no member name '{}' in '{}'", s, t)
+                write!(f, "no member named '{}' in '{}'", s, t)
             }
             CompileError::PointersToIncompatible(t1, t2) => write!(
                 f,

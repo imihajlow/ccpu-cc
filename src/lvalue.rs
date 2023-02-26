@@ -1,4 +1,4 @@
-use lang_c::ast::Expression;
+use lang_c::ast::{Expression, MemberExpression, MemberOperator};
 use lang_c::span::{Node, Span};
 
 use crate::block_emitter::BlockEmitter;
@@ -7,6 +7,7 @@ use crate::ctype::QualifiedType;
 use crate::error::{CompileError, ErrorCollector};
 use crate::ir::VarLocation;
 use crate::ir::{self, Scalar};
+use crate::machine;
 use crate::name_scope::NameScope;
 use crate::object_location::ObjectLocation;
 use crate::rvalue::{RValue, TypedRValue};
@@ -98,7 +99,7 @@ impl TypedLValue {
                     }
                 }
             }
-            Expression::Member(_) => todo!(),
+            Expression::Member(me) => Self::compile_member_expression(*me, scope, be, ec),
             Expression::GenericSelection(_) => unimplemented!(),
             _ => {
                 ec.record_error(CompileError::NotAssignable, expr.span)?;
@@ -146,6 +147,40 @@ impl TypedLValue {
             LValue::Var(_) => None,
             LValue::Indirection(p) => Some(p),
             LValue::Object(l) => Some(l.get_address()),
+        }
+    }
+
+    fn compile_member_expression(
+        expr: Node<MemberExpression>,
+        scope: &mut NameScope,
+        be: &mut BlockEmitter,
+        ec: &mut ErrorCollector,
+    ) -> Result<Self, ()> {
+        let id = expr.node.identifier.node.name;
+        let id_span = expr.node.identifier.span;
+        match expr.node.operator.node {
+            MemberOperator::Direct => {
+                let lhs = TypedLValue::new_compile(*expr.node.expression, scope, be, ec)?;
+                let (field_offset, mut field_type) = lhs.t.get_field(&id, scope, id_span, ec)?;
+                field_type.qualifiers |= lhs.t.qualifiers;
+                let obj_addr = lhs.get_object_address().unwrap();
+                let target = scope.alloc_temp();
+                be.append_operation(ir::Op::Add(ir::BinaryOp {
+                    dst: target.clone(),
+                    width: ir::Width::new(machine::PTR_SIZE),
+                    sign: false,
+                    lhs: obj_addr,
+                    rhs: ir::Scalar::ConstInt(field_offset as u64),
+                }));
+                Ok(TypedLValue {
+                    t: field_type,
+                    lv: LValue::Indirection(ir::Scalar::Var(target)),
+                })
+            }
+            MemberOperator::Indirect => {
+                let lhs = compile_expression(*expr.node.expression, scope, be, ec)?;
+                todo!()
+            }
         }
     }
 }

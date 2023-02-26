@@ -351,13 +351,13 @@ impl std::fmt::Display for ShiftOp {
 
 impl std::fmt::Display for StoreOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{} {}, {}", self.width, self.dst_addr, self.src)
+        write!(f, "{} [{}], {}", self.width, self.dst_addr, self.src)
     }
 }
 
 impl std::fmt::Display for LoadOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{} {}, {}", self.width, self.dst, self.src_addr)
+        write!(f, "{} {}, [{}]", self.width, self.dst, self.src_addr)
     }
 }
 
