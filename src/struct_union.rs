@@ -4,7 +4,7 @@ use lang_c::span::Span;
 
 use crate::ctype::QualifiedType;
 use crate::ctype::StructUnionKind;
-use crate::error::{CompileError, ErrorCollector};
+use crate::error::ErrorCollector;
 use crate::name_scope::NameScope;
 use crate::utils;
 

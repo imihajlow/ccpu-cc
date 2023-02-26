@@ -7,7 +7,6 @@ use crate::ctype::QualifiedType;
 use crate::error::{CompileError, ErrorCollector};
 use crate::ir::VarLocation;
 use crate::ir::{self, Scalar};
-use crate::machine;
 use crate::name_scope::NameScope;
 use crate::object_location::ObjectLocation;
 use crate::rvalue::{RValue, TypedRValue};

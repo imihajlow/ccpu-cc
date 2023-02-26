@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ctype::{
-        CType, EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind,
+        EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind,
     },
     enums::Enum,
     error::{CompileError, CompileWarning, ErrorCollector},

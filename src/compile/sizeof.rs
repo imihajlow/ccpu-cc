@@ -1,16 +1,14 @@
 use lang_c::ast::{AlignOf, SizeOfTy, SizeOfVal};
-use lang_c::span::Span;
-use lang_c::{ast::Expression, span::Node};
+use lang_c::span::Node;
 
 use crate::block_emitter::BlockEmitter;
 use crate::ctype::{self, QualifiedType, Qualifiers};
-use crate::error::{CompileError, ErrorCollector};
-use crate::ir;
+use crate::error::ErrorCollector;
 use crate::name_scope::NameScope;
 use crate::rvalue::{RValue, TypedRValue};
 use crate::type_builder::TypeBuilder;
 
-use super::{compile_expression, compile_pointer_offset, usual_arithmetic_convert};
+use super::compile_expression;
 
 pub fn compile_sizeof_val(
     si: Node<SizeOfVal>,

@@ -1,9 +1,8 @@
 use std::fmt::Formatter;
 
 use crate::constant::{self, compute_constant_initializer};
-use crate::error::{CompileError, CompileWarning, ErrorCollector};
+use crate::error::{CompileWarning, ErrorCollector};
 use crate::function::Function;
-use crate::initializer::Constant;
 use crate::name_scope::{GlobalStorageClass, NameScope};
 use crate::type_builder::TypeBuilder;
 
@@ -153,6 +152,8 @@ mod test {
     use std::assert_matches::assert_matches;
 
     use crate::ctype::{self, CType, FunctionArgs, QualifiedType, Qualifiers};
+    use crate::error::CompileError;
+    use crate::initializer::Constant;
 
     use super::*;
 

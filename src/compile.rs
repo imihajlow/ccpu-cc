@@ -52,7 +52,11 @@ pub fn compile_statement(
         Statement::DoWhile(whiles) => be.append_do_while(whiles, scope, ec)?,
         Statement::Break => be.append_break(stat.span, ec)?,
         Statement::Continue => be.append_continue(stat.span, ec)?,
-        _ => todo!(),
+        Statement::Return(_) => todo!(),
+        Statement::Labeled(_) => todo!(),
+        Statement::Switch(_) => todo!(),
+        Statement::Goto(_) => todo!(),
+        Statement::Asm(_) => unimplemented!(),
     }
     Ok(())
 }
@@ -171,10 +175,10 @@ pub fn cast(
     src: TypedRValue,
     target_type: &CType,
     copy_if_same_type: bool,
-    span: Span,
+    _span: Span,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
-    ec: &mut ErrorCollector,
+    _ec: &mut ErrorCollector,
 ) -> Result<TypedRValue, ()> {
     assert!(target_type.is_scalar());
     assert!(src.t.t.is_scalar());

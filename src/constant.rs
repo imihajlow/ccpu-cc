@@ -427,7 +427,7 @@ fn process_binary_operator_expression_node(
 fn compare(
     lhs: TypedConstant,
     rhs: TypedConstant,
-    equality: bool,
+    _equality: bool,
     span: Span,
     ec: &mut ErrorCollector,
 ) -> Result<isize, ()> {
