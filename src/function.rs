@@ -67,7 +67,7 @@ impl Function {
                 StorageClassSpecifier::Static => GlobalStorageClass::Static,
             },
         };
-        scope.start_function(&args);
+        scope.start_function(&args, &return_type);
         let mut be = BlockEmitter::new();
         compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
         scope.pop_and_collect_initializers();

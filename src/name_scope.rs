@@ -5,9 +5,7 @@ use lang_c::{
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ctype::{
-        EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind,
-    },
+    ctype::{EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind},
     enums::Enum,
     error::{CompileError, CompileWarning, ErrorCollector},
     ir,
@@ -35,6 +33,7 @@ pub struct NameScope {
     fixed_regs: HashSet<ir::Reg>,
     tagged_types: Vec<(Tagged, Span)>,
     frame_size: u32,
+    return_type: Option<QualifiedType>,
 }
 
 #[derive(Clone)]
@@ -83,6 +82,7 @@ impl NameScope {
             fixed_regs: HashSet::new(),
             tagged_types: Vec::new(),
             frame_size: 0,
+            return_type: None,
         }
     }
 
@@ -111,9 +111,9 @@ impl NameScope {
     }
 
     /**
-     * Push scope and declare function arguments.
+     * Push scope, declare function arguments and save return type.
      */
-    pub fn start_function(&mut self, args: &FunctionArgs) {
+    pub fn start_function(&mut self, args: &FunctionArgs, return_type: &QualifiedType) {
         let mut defs = HashMap::new();
         if let FunctionArgs::List(l) = args {
             for (i, (t, name, span)) in l.iter().enumerate() {
@@ -123,6 +123,7 @@ impl NameScope {
             }
         }
         self.defs.push(Scope::new_with_defs(defs));
+        self.return_type = Some(return_type.clone());
     }
 
     /**
@@ -139,6 +140,13 @@ impl NameScope {
      */
     pub fn alloc_temp(&mut self) -> VarLocation {
         VarLocation::Local(self.alloc_reg())
+    }
+
+    /**
+     * Get return type of current function.
+     */
+    pub fn get_return_type(&self) -> QualifiedType {
+        self.return_type.as_ref().unwrap().clone()
     }
 
     /**
@@ -491,6 +499,7 @@ impl NameScope {
             }
             VarLocation::Arg(_) => (),
             VarLocation::Frame(_) => (),
+            VarLocation::Return => (),
         }
     }
 

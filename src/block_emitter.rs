@@ -609,6 +609,43 @@ impl BlockEmitter {
         Ok(())
     }
 
+    pub fn append_return(
+        &mut self,
+        expr: Option<Node<Expression>>,
+        span: Span,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        let return_type = scope.get_return_type();
+        if let Some(expr) = expr {
+            if return_type.t.is_void() {
+                return ec.record_error(CompileError::UnexpectedRetrurnValue, span);
+            }
+            let val = compile_expression(expr, scope, self, ec)?;
+            if return_type.t.is_scalar() {
+                let casted = cast(val, &return_type.t, false, span, scope, self, ec)?;
+                let (src, src_type) = casted.unwrap_scalar_and_type();
+                let width = src_type.t.get_scalar_width().unwrap();
+                self.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: ir::VarLocation::Return,
+                    src,
+                    width,
+                }))
+            } else if return_type.t.is_object() {
+                todo!()
+            } else {
+                unreachable!()
+            }
+        } else {
+            if !return_type.t.is_void() {
+                return ec.record_error(CompileError::NoReturnValue, span);
+            }
+        }
+        let orphan_block_id = self.alloc_block_id();
+        self.finish_block(LabeledTail::Tail(ir::Tail::Ret), orphan_block_id);
+        Ok(())
+    }
+
     fn finish_block(&mut self, tail: LabeledTail, next_block: usize) {
         let current_ops = mem::replace(&mut self.current_ops, Vec::new());
         self.blocks.insert(

@@ -71,6 +71,8 @@ pub enum CompileError {
     // Control flow errors
     InvalidBreak,
     InvalidContinue,
+    NoReturnValue,
+    UnexpectedRetrurnValue,
 }
 
 pub enum CompileWarning {
@@ -266,6 +268,10 @@ impl std::fmt::Display for CompileError {
             }
             CompileError::InvalidContinue => {
                 f.write_str("'continue' statement not in loop statement")
+            }
+            CompileError::NoReturnValue => f.write_str("non-void function should return a value"),
+            CompileError::UnexpectedRetrurnValue => {
+                f.write_str("void function should not return a value")
             }
         }
     }

@@ -52,7 +52,7 @@ pub fn compile_statement(
         Statement::DoWhile(whiles) => be.append_do_while(whiles, scope, ec)?,
         Statement::Break => be.append_break(stat.span, ec)?,
         Statement::Continue => be.append_continue(stat.span, ec)?,
-        Statement::Return(_) => todo!(),
+        Statement::Return(r) => be.append_return(r.map(|e| *e), stat.span, scope, ec)?,
         Statement::Labeled(_) => todo!(),
         Statement::Switch(_) => todo!(),
         Statement::Goto(_) => todo!(),
