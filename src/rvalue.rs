@@ -50,6 +50,14 @@ impl RValue {
             panic!("not an object")
         }
     }
+
+    pub fn get_object_address(self) -> Option<ir::Scalar> {
+        match self {
+            RValue::Object(o) => Some(o.get_address()),
+            RValue::Void => None,
+            RValue::Scalar(_) => None,
+        }
+    }
 }
 
 impl TypedRValue {
@@ -77,11 +85,7 @@ impl TypedRValue {
     }
 
     pub fn get_object_address(self) -> Option<ir::Scalar> {
-        match self.src {
-            RValue::Object(o) => Some(o.get_address()),
-            RValue::Void => None,
-            RValue::Scalar(_) => None,
-        }
+        self.src.get_object_address()
     }
 }
 

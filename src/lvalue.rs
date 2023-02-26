@@ -179,7 +179,28 @@ impl TypedLValue {
             }
             MemberOperator::Indirect => {
                 let lhs = compile_expression(*expr.node.expression, scope, be, ec)?;
-                todo!()
+                let obj_type = match lhs.t.dereference() {
+                    Ok(t) => t,
+                    Err(t) => {
+                        ec.record_error(CompileError::BadIndirection(t), expr.span)?;
+                        unreachable!();
+                    }
+                };
+                let src_addr = lhs.src.unwrap_scalar();
+                let (field_offset, mut field_type) = obj_type.get_field(&id, scope, id_span, ec)?;
+                field_type.qualifiers |= obj_type.qualifiers;
+                let addr_var = scope.alloc_temp();
+                be.append_operation(ir::Op::Add(ir::BinaryOp {
+                    dst: addr_var.clone(),
+                    lhs: src_addr,
+                    rhs: ir::Scalar::ConstInt(field_offset as u64),
+                    width: ir::Width::PTR_WIDTH,
+                    sign: false,
+                }));
+                Ok(TypedLValue {
+                    t: field_type,
+                    lv: LValue::Indirection(ir::Scalar::Var(addr_var)),
+                })
             }
         }
     }
@@ -293,6 +314,113 @@ mod test {
                     dst_addr: ir::Scalar::Var(VarLocation::Local(5)),
                     src: ir::Scalar::Var(VarLocation::Local(2)),
                     width: ir::Width::Word
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lvalue_member_1() {
+        let (tu, ec) =
+            compile("struct X { long a; int b; }; void foo(void) { struct X x; int y; x.b = y; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(1),
+                    width: ir::Width::PTR_WIDTH,
+                    sign: false,
+                    lhs: ir::Scalar::FrameOffset(0),
+                    rhs: ir::Scalar::ConstInt(4)
+                }),
+                ir::Op::Store(ir::StoreOp {
+                    src: ir::Scalar::Var(VarLocation::Local(0)),
+                    dst_addr: ir::Scalar::Var(VarLocation::Local(1)),
+                    width: ir::Width::Word,
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lvalue_member_2() {
+        let (tu, ec) = compile(
+            "struct X { long a; int b; }; void foo(void) { struct X *x; int y; x->b = y; }",
+        );
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(2),
+                    width: ir::Width::PTR_WIDTH,
+                    sign: false,
+                    lhs: ir::Scalar::Var(VarLocation::Local(0)),
+                    rhs: ir::Scalar::ConstInt(4)
+                }),
+                ir::Op::Store(ir::StoreOp {
+                    src: ir::Scalar::Var(VarLocation::Local(1)),
+                    dst_addr: ir::Scalar::Var(VarLocation::Local(2)),
+                    width: ir::Width::Word,
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lvalue_member_3() {
+        let (tu, ec) = compile("struct X { long a; }; struct Y { int i; struct X x; }; void foo(void) { struct X x; struct Y y; y.x = x; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(0),
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Scalar::FrameOffset(4),
+                    rhs: ir::Scalar::ConstInt(4)
+                }),
+                ir::Op::Memcpy(ir::MemcpyOp {
+                    src_addr: ir::Scalar::FrameOffset(0),
+                    dst_addr: ir::Scalar::Var(VarLocation::Local(0)),
+                    len: 4
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lvalue_member_4() {
+        let (tu, ec) = compile("struct X { long a; }; struct Y { int i; struct X x; }; void foo(void) { struct X x; struct Y *y; y->x = x; }");
+        ec.print_issues();
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![
+                ir::Op::Add(ir::BinaryOp {
+                    dst: VarLocation::Local(1),
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Scalar::Var(VarLocation::Local(0)),
+                    rhs: ir::Scalar::ConstInt(4)
+                }),
+                ir::Op::Memcpy(ir::MemcpyOp {
+                    src_addr: ir::Scalar::FrameOffset(0),
+                    dst_addr: ir::Scalar::Var(VarLocation::Local(1)),
+                    len: 4
                 })
             ]
         );
