@@ -68,7 +68,9 @@ pub enum CompileError {
     NotAFunction(QualifiedType),
     TooManyArguments(usize, usize),
     TooFewArguments(usize, usize),
-    // Local definition errors
+    // Control flow errors
+    InvalidBreak,
+    InvalidContinue,
 }
 
 pub enum CompileWarning {
@@ -259,6 +261,12 @@ impl std::fmt::Display for CompileError {
                 "too few arguments to function call, expected {}, have {}",
                 expected, got
             ),
+            CompileError::InvalidBreak => {
+                f.write_str("'break' statement not in loop or switch statement")
+            }
+            CompileError::InvalidContinue => {
+                f.write_str("'continue' statement not in loop statement")
+            }
         }
     }
 }

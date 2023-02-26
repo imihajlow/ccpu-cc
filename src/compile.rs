@@ -50,6 +50,8 @@ pub fn compile_statement(
         Statement::While(whiles) => be.append_while(whiles, scope, ec)?,
         Statement::For(fors) => be.append_for(fors, scope, ec)?,
         Statement::DoWhile(whiles) => be.append_do_while(whiles, scope, ec)?,
+        Statement::Break => be.append_break(stat.span, ec)?,
+        Statement::Continue => be.append_continue(stat.span, ec)?,
         _ => todo!(),
     }
     Ok(())

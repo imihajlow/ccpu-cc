@@ -5,7 +5,7 @@ use lang_c::{
         ConditionalExpression, DoWhileStatement, Expression, ForStatement, IfStatement,
         WhileStatement,
     },
-    span::Node,
+    span::{Node, Span},
 };
 
 use crate::{
@@ -36,6 +36,8 @@ pub struct BlockEmitter {
     current_id: usize,
     blocks: HashMap<usize, LabeledBlock>,
     current_ops: Vec<ir::Op>,
+    breaks: Vec<usize>,
+    continues: Vec<usize>,
 }
 
 impl BlockEmitter {
@@ -45,6 +47,8 @@ impl BlockEmitter {
             current_id: 0,
             blocks: HashMap::new(),
             current_ops: Vec::new(),
+            breaks: Vec::new(),
+            continues: Vec::new(),
         }
     }
 
@@ -450,7 +454,11 @@ impl BlockEmitter {
         );
 
         scope.push();
+        self.set_break(continue_block_id);
+        self.set_continue(condition_block_id);
         compile_statement(*whiles.node.statement, scope, self, ec)?;
+        self.pop_continue();
+        self.pop_break();
         scope.pop_and_collect_initializers();
 
         self.finish_block(
@@ -477,7 +485,11 @@ impl BlockEmitter {
         );
 
         scope.push();
+        self.set_break(continue_block_id);
+        self.set_continue(condition_block_id);
         compile_statement(*whiles.node.statement, scope, self, ec)?;
+        self.pop_continue();
+        self.pop_break();
         scope.pop_and_collect_initializers();
 
         self.finish_block(
@@ -550,8 +562,12 @@ impl BlockEmitter {
         }
 
         scope.push();
+        self.set_break(continue_block_id);
+        self.set_continue(condition_block_id);
         compile_statement(*fors.node.statement, scope, self, ec)?;
         scope.pop_and_collect_initializers();
+        self.pop_continue();
+        self.pop_break();
         if let Some(step) = fors.node.step {
             compile_expression(*step, scope, self, ec)?;
         }
@@ -562,6 +578,34 @@ impl BlockEmitter {
         );
 
         scope.pop_and_collect_initializers();
+        Ok(())
+    }
+
+    pub fn append_break(&mut self, span: Span, ec: &mut ErrorCollector) -> Result<(), ()> {
+        let break_block_id = if let Some(id) = self.breaks.last() {
+            *id
+        } else {
+            return ec.record_error(CompileError::InvalidBreak, span);
+        };
+        let orphan_block = self.alloc_block_id();
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(break_block_id)),
+            orphan_block,
+        );
+        Ok(())
+    }
+
+    pub fn append_continue(&mut self, span: Span, ec: &mut ErrorCollector) -> Result<(), ()> {
+        let continue_block_id = if let Some(id) = self.continues.last() {
+            *id
+        } else {
+            return ec.record_error(CompileError::InvalidBreak, span);
+        };
+        let orphan_block = self.alloc_block_id();
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(continue_block_id)),
+            orphan_block,
+        );
         Ok(())
     }
 
@@ -582,6 +626,22 @@ impl BlockEmitter {
         let r = self.next_id;
         self.next_id += 1;
         r
+    }
+
+    fn set_break(&mut self, block_id: usize) {
+        self.breaks.push(block_id);
+    }
+
+    fn set_continue(&mut self, block_id: usize) {
+        self.continues.push(block_id);
+    }
+
+    fn pop_break(&mut self) {
+        self.breaks.pop().expect("break stack underflow");
+    }
+
+    fn pop_continue(&mut self) {
+        self.continues.pop().expect("continue stack underflow");
     }
 }
 
