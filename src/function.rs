@@ -1,8 +1,8 @@
 use std::fmt::Formatter;
 
 use crate::{
-    block_emitter::{BlockEmitter, LabeledBlock},
-    compile,
+    block_emitter::BlockEmitter,
+    compile, ir,
     name_scope::{GlobalStorageClass, NameScope},
 };
 use lang_c::{
@@ -24,7 +24,7 @@ pub struct Function {
     storage_class: GlobalStorageClass,
     return_type: QualifiedType,
     args: FunctionArgs,
-    body: Vec<LabeledBlock>,
+    body: Vec<ir::GenericBlock<ir::Tail>>,
     frame_size: u32,
 }
 
@@ -79,13 +79,13 @@ impl Function {
             return_type,
             args,
             name,
-            body: be.finalize(),
+            body: be.finalize(ec)?,
             frame_size: scope.reset_frame_size(),
         })
     }
 
     #[cfg(test)]
-    pub fn get_body(&self) -> &Vec<LabeledBlock> {
+    pub fn get_body(&self) -> &Vec<ir::GenericBlock<ir::Tail>> {
         &self.body
     }
 }

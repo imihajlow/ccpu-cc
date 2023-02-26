@@ -107,7 +107,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::ir::{self, VarLocation};
-    use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
+    use crate::translation_unit::TranslationUnit;
 
     use super::*;
 
@@ -122,7 +122,7 @@ mod test {
         (tu, ec)
     }
 
-    fn get_first_body(tu: &TranslationUnit) -> &Vec<LabeledBlock> {
+    fn get_first_body(tu: &TranslationUnit) -> &Vec<ir::Block> {
         tu.functions.first().unwrap().get_body()
     }
 

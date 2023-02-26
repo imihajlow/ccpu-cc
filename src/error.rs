@@ -73,6 +73,7 @@ pub enum CompileError {
     InvalidContinue,
     NoReturnValue,
     UnexpectedRetrurnValue,
+    UndeclaredLabel(String),
 }
 
 pub enum CompileWarning {
@@ -273,6 +274,7 @@ impl std::fmt::Display for CompileError {
             CompileError::UnexpectedRetrurnValue => {
                 f.write_str("void function should not return a value")
             }
+            CompileError::UndeclaredLabel(l) => write!(f, "use of undeclared label '{}'", l),
         }
     }
 }

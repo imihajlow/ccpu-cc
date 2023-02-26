@@ -21,15 +21,6 @@ use crate::{
     rvalue::{RValue, TypedRValue},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LabeledTail {
-    // TODO remove pub
-    Tail(ir::Tail),
-    GotoLabel(String),
-}
-
-pub type LabeledBlock = ir::GenericBlock<LabeledTail>; // TODO remove pub
-
 #[derive(Clone)]
 pub struct BlockEmitter {
     next_id: usize,
@@ -38,7 +29,16 @@ pub struct BlockEmitter {
     current_ops: Vec<ir::Op>,
     breaks: Vec<usize>,
     continues: Vec<usize>,
+    labels: HashMap<String, usize>,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+enum LabeledTail {
+    Tail(ir::Tail),
+    GotoLabel(String, Span),
+}
+
+type LabeledBlock = ir::GenericBlock<LabeledTail>;
 
 impl BlockEmitter {
     pub fn new() -> Self {
@@ -49,10 +49,11 @@ impl BlockEmitter {
             current_ops: Vec::new(),
             breaks: Vec::new(),
             continues: Vec::new(),
+            labels: HashMap::new(),
         }
     }
 
-    pub fn finalize(self) -> Vec<LabeledBlock> {
+    pub fn finalize(self, ec: &mut ErrorCollector) -> Result<Vec<ir::GenericBlock<ir::Tail>>, ()> {
         let mut blocks = self.blocks;
         blocks.insert(
             self.current_id,
@@ -64,9 +65,25 @@ impl BlockEmitter {
         );
         let mut result = Vec::new();
         for i in 0..self.next_id {
-            result.push(blocks.remove(&i).unwrap());
+            let block = blocks.remove(&i).unwrap();
+            let tail = match block.tail {
+                LabeledTail::Tail(t) => t,
+                LabeledTail::GotoLabel(label, span) => {
+                    if let Some(id) = self.labels.get(&label) {
+                        ir::Tail::Jump(*id)
+                    } else {
+                        ec.record_error(CompileError::UndeclaredLabel(label), span)?;
+                        unreachable!();
+                    }
+                }
+            };
+            result.push(ir::GenericBlock {
+                phi: block.phi,
+                ops: block.ops,
+                tail,
+            });
         }
-        result
+        Ok(result)
     }
 
     pub fn append_operation(&mut self, op: ir::Op) {
@@ -686,7 +703,7 @@ impl std::fmt::Display for LabeledTail {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             LabeledTail::Tail(t) => write!(f, "{}", t),
-            LabeledTail::GotoLabel(l) => write!(f, "jmp {}", l),
+            LabeledTail::GotoLabel(l, _) => write!(f, "jmp {}", l),
         }
     }
 }
@@ -694,7 +711,7 @@ impl std::fmt::Display for LabeledTail {
 #[cfg(test)]
 mod test {
     use crate::ir::{self, VarLocation};
-    use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
+    use crate::translation_unit::TranslationUnit;
 
     use super::*;
 
@@ -709,7 +726,7 @@ mod test {
         (tu, ec)
     }
 
-    fn get_first_body(tu: &TranslationUnit) -> &Vec<LabeledBlock> {
+    fn get_first_body(tu: &TranslationUnit) -> &Vec<ir::Block> {
         tu.functions.first().unwrap().get_body()
     }
 
@@ -730,7 +747,7 @@ mod test {
         );
         assert_eq!(
             body[0].tail,
-            LabeledTail::Tail(ir::Tail::Cond(ir::Scalar::Var(VarLocation::Local(3)), 1, 2))
+            ir::Tail::Cond(ir::Scalar::Var(VarLocation::Local(3)), 1, 2)
         );
         assert_eq!(
             body[1].ops,
@@ -740,7 +757,7 @@ mod test {
                 width: ir::Width::Word
             })]
         );
-        assert_eq!(body[1].tail, LabeledTail::Tail(ir::Tail::Jump(3)));
+        assert_eq!(body[1].tail, ir::Tail::Jump(3));
         assert_eq!(
             body[2].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
@@ -749,7 +766,7 @@ mod test {
                 width: ir::Width::Word
             })]
         );
-        assert_eq!(body[2].tail, LabeledTail::Tail(ir::Tail::Jump(3)));
+        assert_eq!(body[2].tail, ir::Tail::Jump(3));
         assert_eq!(
             body[3].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {

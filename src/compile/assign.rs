@@ -179,7 +179,7 @@ pub fn compile_assign_to_lval(
 #[cfg(test)]
 mod test {
     use crate::ir::{self, VarLocation};
-    use crate::{block_emitter::LabeledBlock, translation_unit::TranslationUnit};
+    use crate::translation_unit::TranslationUnit;
 
     use super::*;
 
@@ -203,7 +203,7 @@ mod test {
         assert!(TranslationUnit::translate(p.unit, &mut ec).is_err());
     }
 
-    fn get_first_body(tu: &TranslationUnit) -> &Vec<LabeledBlock> {
+    fn get_first_body(tu: &TranslationUnit) -> &Vec<ir::Block> {
         tu.functions.first().unwrap().get_body()
     }
 
