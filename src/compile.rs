@@ -308,7 +308,7 @@ fn compile_block(
     Ok(())
 }
 
-fn compile_declaration(
+pub fn compile_declaration(
     decl: Node<Declaration>,
     scope: &mut NameScope,
     be: &mut BlockEmitter,

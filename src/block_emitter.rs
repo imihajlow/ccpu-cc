@@ -10,8 +10,10 @@ use lang_c::{
 
 use crate::{
     compile::{
-        self, cast, compile_expression, compile_statement, convert_to_bool, integer_promote,
+        self, cast, compile_declaration, compile_expression, compile_statement, convert_to_bool,
+        integer_promote,
     },
+    constant::check_static_assert,
     ctype::{self, QualifiedType, Qualifiers},
     error::{CompileError, ErrorCollector},
     ir,
@@ -425,7 +427,38 @@ impl BlockEmitter {
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        todo!()
+        let condition_block_id = self.alloc_block_id();
+        let body_block_id = self.alloc_block_id();
+        let continue_block_id = self.alloc_block_id();
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
+            condition_block_id,
+        );
+
+        let cond_span = whiles.node.expression.span;
+        let cond = compile_expression(*whiles.node.expression, scope, self, ec)?;
+        let cond_bool = convert_to_bool(cond, cond_span, scope, self, ec)?;
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Cond(
+                cond_bool.unwrap_scalar(),
+                body_block_id,
+                continue_block_id,
+            )),
+            body_block_id,
+        );
+
+        scope.push();
+        compile_statement(*whiles.node.statement, scope, self, ec)?;
+        scope.pop_and_collect_initializers();
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
+            continue_block_id,
+        );
+
+        Ok(())
     }
 
     pub fn append_do_while(
@@ -434,7 +467,37 @@ impl BlockEmitter {
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        todo!()
+        let body_block_id = self.alloc_block_id();
+        let condition_block_id = self.alloc_block_id();
+        let continue_block_id = self.alloc_block_id();
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(body_block_id)),
+            body_block_id,
+        );
+
+        scope.push();
+        compile_statement(*whiles.node.statement, scope, self, ec)?;
+        scope.pop_and_collect_initializers();
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
+            condition_block_id,
+        );
+
+        let cond_span = whiles.node.expression.span;
+        let cond = compile_expression(*whiles.node.expression, scope, self, ec)?;
+        let cond_bool = convert_to_bool(cond, cond_span, scope, self, ec)?;
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Cond(
+                cond_bool.unwrap_scalar(),
+                body_block_id,
+                continue_block_id,
+            )),
+            continue_block_id,
+        );
+        Ok(())
     }
 
     pub fn append_for(
@@ -443,7 +506,63 @@ impl BlockEmitter {
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        todo!()
+        use lang_c::ast::ForInitializer;
+        let body_block_id = self.alloc_block_id();
+        let condition_block_id = if fors.node.condition.is_some() {
+            self.alloc_block_id()
+        } else {
+            body_block_id
+        };
+        let continue_block_id = self.alloc_block_id();
+
+        scope.push();
+        match fors.node.initializer.node {
+            ForInitializer::Empty => (),
+            ForInitializer::Expression(e) => {
+                compile_expression(*e, scope, self, ec)?;
+            }
+            ForInitializer::Declaration(decl) => {
+                compile_declaration(decl, scope, self, ec)?;
+            }
+            ForInitializer::StaticAssert(sa) => {
+                check_static_assert(sa, scope, ec)?;
+            }
+        }
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
+            condition_block_id,
+        );
+
+        if let Some(cond) = fors.node.condition {
+            let cond_span = cond.span;
+            let cond = compile_expression(*cond, scope, self, ec)?;
+            let cond_bool = convert_to_bool(cond, cond_span, scope, self, ec)?;
+
+            self.finish_block(
+                LabeledTail::Tail(ir::Tail::Cond(
+                    cond_bool.unwrap_scalar(),
+                    body_block_id,
+                    continue_block_id,
+                )),
+                body_block_id,
+            );
+        }
+
+        scope.push();
+        compile_statement(*fors.node.statement, scope, self, ec)?;
+        scope.pop_and_collect_initializers();
+        if let Some(step) = fors.node.step {
+            compile_expression(*step, scope, self, ec)?;
+        }
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
+            continue_block_id,
+        );
+
+        scope.pop_and_collect_initializers();
+        Ok(())
     }
 
     fn finish_block(&mut self, tail: LabeledTail, next_block: usize) {
