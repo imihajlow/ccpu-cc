@@ -251,7 +251,7 @@ fn compile_address(
         }
         LValue::Object(loc) => {
             let src = match loc {
-                ObjectLocation::Frame(offset) => RValue::Scalar(ir::Scalar::FrameOffset(offset)),
+                ObjectLocation::PointedBy(p) => RValue::Scalar(p),
             };
             Ok(TypedRValue { src, t })
         }
@@ -283,7 +283,14 @@ fn compile_deref(
                     t: pointee,
                 })
             } else {
-                todo!()
+                if pointee.t.is_object() {
+                    Ok(TypedRValue {
+                        src: RValue::Object(ObjectLocation::PointedBy(operand_scalar)),
+                        t: pointee,
+                    })
+                } else {
+                    todo!()
+                }
             }
         }
         Err(t) => {

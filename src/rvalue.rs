@@ -42,6 +42,14 @@ impl RValue {
             panic!("not a scalar rvalue")
         }
     }
+
+    pub fn unwrap_object_location(self) -> ObjectLocation {
+        if let RValue::Object(l) = self {
+            l
+        } else {
+            panic!("not an object")
+        }
+    }
 }
 
 impl TypedRValue {

@@ -56,6 +56,7 @@ pub enum Op {
     Load(LoadOp),
     Call(CallOp),
     LoadAddr(LoadAddrOp),
+    Memcpy(MemcpyOp),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,6 +148,13 @@ pub struct CallOp {
 pub struct LoadAddrOp {
     pub dst: VarLocation,
     pub src: VarLocation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemcpyOp {
+    pub dst_addr: Scalar,
+    pub src_addr: Scalar,
+    pub len: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,6 +272,7 @@ impl std::fmt::Display for Op {
             Self::Load(op) => write!(f, "ld{}", op),
             Self::Call(op) => write!(f, "call{}", op),
             Self::LoadAddr(op) => write!(f, "addr{}", op),
+            Self::Memcpy(op) => write!(f, "memcpy{}", op),
         }
     }
 }
@@ -393,6 +402,12 @@ impl std::fmt::Display for LoadAddrOp {
     }
 }
 
+impl std::fmt::Display for MemcpyOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, " [{}], [{}], {}", self.dst_addr, self.src_addr, self.len)
+    }
+}
+
 impl std::fmt::Display for Width {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
@@ -408,9 +423,9 @@ impl std::fmt::Display for Scalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             Scalar::ConstInt(x) => write!(f, "{}", x),
-            Scalar::SymbolOffset(sym, 0) => write!(f, "[{}]", sym),
-            Scalar::SymbolOffset(sym, offs) => write!(f, "[{}+0x{:x}]", sym, offs),
-            Scalar::FrameOffset(offs) => write!(f, "[F+0x{:x}]", offs),
+            Scalar::SymbolOffset(sym, 0) => write!(f, "{}", sym),
+            Scalar::SymbolOffset(sym, offs) => write!(f, "{}+0x{:x}", sym, offs),
+            Scalar::FrameOffset(offs) => write!(f, "F+0x{:x}", offs),
             Scalar::Var(v) => write!(f, "{}", v),
         }
     }
@@ -422,7 +437,7 @@ impl std::fmt::Display for VarLocation {
             VarLocation::Local(r) => write!(f, "%{}", r),
             VarLocation::Global(id) => write!(f, "{}", id),
             VarLocation::Arg(p) => write!(f, "%a{}", p),
-            VarLocation::Frame(p) => write!(f, "[F+{}]", p),
+            VarLocation::Frame(p) => write!(f, "[F+0x{:x}]", p),
         }
     }
 }

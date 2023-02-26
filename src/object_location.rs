@@ -1,14 +1,24 @@
 use std::fmt::Formatter;
 
+use crate::ir;
+
 #[derive(Debug, Clone)]
 pub enum ObjectLocation {
-    Frame(u32),
+    PointedBy(ir::Scalar),
+}
+
+impl ObjectLocation {
+    pub fn get_address(self) -> ir::Scalar {
+        match self {
+            ObjectLocation::PointedBy(p) => p,
+        }
+    }
 }
 
 impl std::fmt::Display for ObjectLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            ObjectLocation::Frame(offset) => write!(f, "[F+0x{:x}]", offset),
+            ObjectLocation::PointedBy(p) => write!(f, "*{}", p),
         }
     }
 }

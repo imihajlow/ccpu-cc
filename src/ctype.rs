@@ -342,6 +342,14 @@ impl CType {
         }
     }
 
+    pub fn is_object(&self) -> bool {
+        if let CType::StructUnion(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_pointer(&self) -> bool {
         if let CType::Pointer(_) = self {
             true
@@ -497,7 +505,8 @@ impl CType {
             CType::Array(_, _) | CType::Pointer(_) => Some(ir::Width::new(machine::PTR_SIZE)),
             CType::Enum(_) => Some(ir::Width::new(machine::INT_SIZE)),
             CType::StructUnion(_) => None,
-            _ => None,
+            CType::Function { .. } => None,
+            CType::Void => None,
         }
     }
 

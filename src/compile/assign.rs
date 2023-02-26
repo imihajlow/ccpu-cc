@@ -4,7 +4,8 @@ use lang_c::{ast::Expression, span::Node};
 use crate::ctype::CType;
 use crate::error::CompileError;
 use crate::lvalue::TypedLValue;
-use crate::rvalue::TypedRValue;
+use crate::object_location::ObjectLocation;
+use crate::rvalue::{RValue, TypedRValue};
 use crate::{
     block_emitter::BlockEmitter,
     error::{CompileWarning, ErrorCollector},
@@ -146,9 +147,26 @@ pub fn compile_assign_to_lval(
         }
         Ok(rhs_casted)
     } else if lhs_lval.t.is_compatible_to(&rhs_val.t, true) {
-        // the left operand has an atomic, qualified, or unqualified version of a structure or union type
-        // compatible with the type of the right;
-        todo!("{}", rhs_val.t)
+        if lhs_lval.t.t.is_object() {
+            // the left operand has an atomic, qualified, or unqualified version of a structure or union type
+            // compatible with the type of the right;
+            let t = lhs_lval.t.clone();
+            let len = rhs_val.t.t.sizeof(scope, rhs_span, ec)?;
+            let dst_addr = lhs_lval.get_object_address().unwrap();
+            let src_addr = rhs_val.src.unwrap_object_location().get_address();
+            be.append_operation(ir::Op::Memcpy(ir::MemcpyOp {
+                dst_addr: dst_addr.clone(),
+                src_addr,
+                len,
+            }));
+            Ok(TypedRValue {
+                t,
+                src: RValue::new_object(ObjectLocation::PointedBy(dst_addr)),
+            })
+        } else {
+            ec.record_error(CompileError::NotAssignable, rhs_span)?;
+            unreachable!();
+        }
     } else {
         ec.record_error(
             CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t),
@@ -378,5 +396,32 @@ mod test {
     #[test]
     fn test_assign_12() {
         assert_compile_error("void foo(void) { int *x; float y; x = y; }");
+    }
+
+    #[test]
+    fn test_assign_13() {
+        assert_compile_error("struct X { int y; }; void foo(void) { struct X x; int y; x = y; }");
+    }
+
+    #[test]
+    fn test_assign_14() {
+        assert_compile_error("struct X { int y; }; struct Y { int x; }; void foo(void) { struct X x; struct Y y; x = y; }");
+    }
+
+    #[test]
+    fn test_assign_15() {
+        let (tu, ec) =
+            compile("struct X { int x; long long y; }; void foo(void) { struct X x, y; x = y; }");
+        assert_eq!(ec.get_warning_count(), 0);
+        let body = get_first_body(&tu);
+        assert_eq!(body.len(), 1);
+        assert_eq!(
+            body[0].ops,
+            vec![ir::Op::Memcpy(ir::MemcpyOp {
+                dst_addr: ir::Scalar::FrameOffset(0),
+                src_addr: ir::Scalar::FrameOffset(16),
+                len: 16
+            })]
+        );
     }
 }

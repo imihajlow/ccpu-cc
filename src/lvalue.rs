@@ -47,12 +47,14 @@ impl TypedLValue {
                 match op.node.operator.node {
                     UnaryOperator::Indirection => {
                         let e = compile_expression(*op.node.operand, scope, be, ec)?;
-                        let (e_scalar, e_type) = e.unwrap_scalar_and_type();
-                        match e_type.dereference() {
-                            Ok(t) => Ok(TypedLValue {
-                                t,
-                                lv: LValue::Indirection(e_scalar),
-                            }),
+                        match e.t.dereference() {
+                            Ok(t) => {
+                                let e_scalar = e.src.unwrap_scalar();
+                                Ok(TypedLValue {
+                                    t,
+                                    lv: LValue::Indirection(e_scalar),
+                                })
+                            }
                             Err(t) => {
                                 ec.record_error(CompileError::BadIndirection(t), expr.span)?;
                                 unreachable!();
@@ -136,6 +138,14 @@ impl TypedLValue {
                 src: RValue::new_object(s),
                 t: self.t,
             }),
+        }
+    }
+
+    pub fn get_object_address(self) -> Option<Scalar> {
+        match self.lv {
+            LValue::Var(_) => None,
+            LValue::Indirection(p) => Some(p),
+            LValue::Object(l) => Some(l.get_address()),
         }
     }
 }

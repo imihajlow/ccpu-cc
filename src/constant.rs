@@ -609,7 +609,9 @@ fn cast(
                 cast_int(old_size, old_sign, new_size, new_sign, constant.val)
             }
             CType::Bool => cast_from_bool(constant.val),
-            CType::Pointer(_) => cast_int(machine::PTR_SIZE, false, new_size, new_sign, constant.val),
+            CType::Pointer(_) => {
+                cast_int(machine::PTR_SIZE, false, new_size, new_sign, constant.val)
+            }
             CType::Float(_) => todo!(),
             CType::Array(_, _) => {
                 ec.record_error(CompileError::NonConstInConstExpr, span)?;
