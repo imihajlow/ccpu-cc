@@ -35,10 +35,15 @@ impl StructUnion {
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<u32, ()> {
-        match self.kind {
-            StructUnionKind::Struct => self.alignof_struct(scope, span, ec),
-            StructUnionKind::Union => self.alignof_union(scope, span, ec),
+        let members = self
+            .members
+            .as_ref()
+            .expect("complete types only at this point");
+        let mut align = 1;
+        for (_, t) in members {
+            align = num::integer::lcm(align, t.t.alignof(scope, span, ec)?);
         }
+        Ok(align)
     }
 
     pub fn sizeof(
@@ -100,39 +105,6 @@ impl StructUnion {
             }
         }
         result
-    }
-
-    fn alignof_struct(
-        &self,
-        scope: &NameScope,
-        span: Span,
-        ec: &mut ErrorCollector,
-    ) -> Result<u32, ()> {
-        let members = self
-            .members
-            .as_ref()
-            .expect("complete types only at this point");
-        members
-            .first()
-            .map(|(_, t)| t.t.alignof(scope, span, ec))
-            .unwrap_or(Ok(0))
-    }
-
-    fn alignof_union(
-        &self,
-        scope: &NameScope,
-        span: Span,
-        ec: &mut ErrorCollector,
-    ) -> Result<u32, ()> {
-        let members = self
-            .members
-            .as_ref()
-            .expect("complete types only at this point");
-        let mut align = 1;
-        for (_, t) in members {
-            align = num::integer::lcm(align, t.t.alignof(scope, span, ec)?);
-        }
-        Ok(align)
     }
 
     fn sizeof_struct(
@@ -283,7 +255,7 @@ mod test {
         };
         let mut ec = &mut ErrorCollector::new();
         let scope = NameScope::new();
-        assert_eq!(su.alignof(&scope, Span::none(), &mut ec), Ok(2)); // struct { int x; long y; };
+        assert_eq!(su.alignof(&scope, Span::none(), &mut ec), Ok(4)); // struct { int x; long y; };
         su.kind = StructUnionKind::Union;
         assert_eq!(su.alignof(&scope, Span::none(), &mut ec), Ok(4)); // union { int x; long y; };
     }
