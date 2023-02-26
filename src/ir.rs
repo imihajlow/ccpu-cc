@@ -197,6 +197,8 @@ impl Width {
     }
 
     pub const INT_WIDTH: Self = Self::new(machine::INT_SIZE);
+    pub const PTR_WIDTH: Self = Self::new(machine::PTR_SIZE);
+    pub const BOOL_WIDTH: Self = Self::new(machine::BOOL_SIZE);
 }
 
 impl From<Width> for u8 {

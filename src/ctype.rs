@@ -488,11 +488,9 @@ impl CType {
     pub fn get_width_sign(&self) -> Option<(ir::Width, bool)> {
         match self {
             CType::Int(size, sign) => Some((ir::Width::new(*size), *sign)),
-            CType::Bool => Some((ir::Width::new(machine::BOOL_SIZE), false)),
-            CType::Array(_, _) | CType::Pointer(_) => {
-                Some((ir::Width::new(machine::PTR_SIZE), false))
-            }
-            CType::Enum(_) => Some((ir::Width::new(machine::INT_SIZE), true)),
+            CType::Bool => Some((ir::Width::BOOL_WIDTH, false)),
+            CType::Array(_, _) | CType::Pointer(_) => Some((ir::Width::PTR_WIDTH, false)),
+            CType::Enum(_) => Some((ir::Width::INT_WIDTH, true)),
             CType::StructUnion(_) => None,
             _ => None,
         }
@@ -501,9 +499,9 @@ impl CType {
     pub fn get_scalar_width(&self) -> Option<ir::Width> {
         match self {
             CType::Int(size, _) | CType::Float(size) => Some(ir::Width::new(*size)),
-            CType::Bool => Some(ir::Width::new(machine::BOOL_SIZE)),
-            CType::Array(_, _) | CType::Pointer(_) => Some(ir::Width::new(machine::PTR_SIZE)),
-            CType::Enum(_) => Some(ir::Width::new(machine::INT_SIZE)),
+            CType::Bool => Some(ir::Width::BOOL_WIDTH),
+            CType::Array(_, _) | CType::Pointer(_) => Some(ir::Width::PTR_WIDTH),
+            CType::Enum(_) => Some(ir::Width::INT_WIDTH),
             CType::StructUnion(_) => None,
             CType::Function { .. } => None,
             CType::Void => None,

@@ -167,7 +167,7 @@ impl TypedLValue {
                 let target = scope.alloc_temp();
                 be.append_operation(ir::Op::Add(ir::BinaryOp {
                     dst: target.clone(),
-                    width: ir::Width::new(machine::PTR_SIZE),
+                    width: ir::Width::PTR_WIDTH,
                     sign: false,
                     lhs: obj_addr,
                     rhs: ir::Scalar::ConstInt(field_offset as u64),
