@@ -190,6 +190,9 @@ impl NameScope {
                 Ok(class) => class,
                 Err(_) => return ec.record_error(CompileError::WrongStorageClass, span),
             };
+            if !t.t.is_complete(self) {
+                return ec.record_error(CompileError::IncompleteType(t), span);
+            }
             let initializer = if let Some(tv) = initializer {
                 Some(tv.implicit_cast(&t, span, ec)?)
             } else {
@@ -263,6 +266,10 @@ impl NameScope {
                 return ec.record_error(CompileError::VarRedefinition(name.to_string()), span);
             }
 
+            if !t.t.is_complete(self) {
+                return ec.record_error(CompileError::IncompleteType(t), span);
+            }
+
             match storage_class {
                 Some(StorageClassSpecifier::Static) => {
                     if t.t.is_scalar() {
@@ -285,14 +292,16 @@ impl NameScope {
                 | Some(StorageClassSpecifier::Auto)
                 | Some(StorageClassSpecifier::Register) => {
                     assert!(initializer.is_none());
-                    if t.t.is_scalar() {
+                    if t.t.is_scalar() && !t.t.is_array() {
                         let id = self.alloc_reg();
                         self.insert(name, Value::AutoVar(t, id), span);
-                    } else {
+                    } else if t.t.is_object() || t.t.is_array() {
                         let size = t.t.sizeof(self, span, ec)?;
                         let align = t.t.alignof(self, span, ec)?;
                         let offset = self.alloc_frame(size, align);
                         self.insert(name, Value::Object(t, offset), span);
+                    } else {
+                        unreachable!()
                     }
                 }
                 Some(StorageClassSpecifier::Extern) => {

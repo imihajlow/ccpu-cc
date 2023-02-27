@@ -61,6 +61,7 @@ pub enum CompileError {
     AssignmentToConstQualified(QualifiedType),
     SizeOfIncomplete(CType),
     IncompleteStruct(QualifiedType),
+    IncompleteType(QualifiedType),
     PointersToIncompatible(QualifiedType, QualifiedType),
     NotAStruct(QualifiedType),
     NoSuchMember(StructUnionIdentifier, String),
@@ -239,6 +240,9 @@ impl std::fmt::Display for CompileError {
             }
             CompileError::IncompleteStruct(t) => {
                 write!(f, "incomplete definition of type '{}'", t)
+            }
+            CompileError::IncompleteType(t) => {
+                write!(f, "use of incomplete type '{}'", t)
             }
             CompileError::NoSuchMember(t, s) => {
                 write!(f, "no member named '{}' in '{}'", s, t)

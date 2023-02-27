@@ -307,7 +307,7 @@ mod test {
             body[0].ops,
             vec![ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(1)),
+                src: ir::Scalar::FrameOffset(0),
                 width: ir::Width::Word
             })]
         );

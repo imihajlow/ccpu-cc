@@ -282,7 +282,7 @@ pub fn compile_pointer_offset(
         sign,
     }));
     let op = if !subtract { ir::Op::Add } else { ir::Op::Sub };
-    let (ptr_scalar, ptr_type) = ptr.unwrap_scalar_and_type();
+    let (ptr_scalar, ptr_type) = ptr.get_pointer_value_and_type().unwrap();
     be.append_operation(op(ir::BinaryOp {
         dst: target_var.clone(),
         lhs: ptr_scalar,

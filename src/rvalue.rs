@@ -58,6 +58,14 @@ impl RValue {
             RValue::Scalar(_) => None,
         }
     }
+
+    pub fn get_pointer_value(self) -> Option<ir::Scalar> {
+        match self {
+            RValue::Void => None,
+            RValue::Scalar(s) => Some(s),
+            RValue::Object(o) => Some(o.get_address())
+        }
+    }
 }
 
 impl TypedRValue {
@@ -77,11 +85,23 @@ impl TypedRValue {
     }
 
     pub fn unwrap_scalar(self) -> ir::Scalar {
-        self.src.unwrap_scalar()
+        if !self.t.t.is_array() {
+            self.src.unwrap_scalar()
+        } else {
+            self.src.get_pointer_value().unwrap()
+        }
     }
 
     pub fn unwrap_scalar_and_type(self) -> (ir::Scalar, QualifiedType) {
-        (self.src.unwrap_scalar(), self.t)
+        if !self.t.t.is_array() {
+            (self.src.unwrap_scalar(), self.t)
+        } else {
+            (self.src.get_pointer_value().unwrap(), self.t)
+        }
+    }
+
+    pub fn get_pointer_value_and_type(self) -> Option<(ir::Scalar, QualifiedType)> {
+        self.src.get_pointer_value().map(|val| (val, self.t))
     }
 
     pub fn get_object_address(self) -> Option<ir::Scalar> {
