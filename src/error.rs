@@ -75,6 +75,10 @@ pub enum CompileError {
     UnexpectedRetrurnValue,
     UndeclaredLabel(String),
     LabelRedefinition(String),
+    UnexpectedCase,
+    UnexpectedDefault,
+    DuplicateCase(i128),
+    DuplicateDefault,
 }
 
 pub enum CompileWarning {
@@ -277,6 +281,12 @@ impl std::fmt::Display for CompileError {
             }
             CompileError::UndeclaredLabel(l) => write!(f, "use of undeclared label '{}'", l),
             CompileError::LabelRedefinition(l) => write!(f, "redefinition of label '{}'", l),
+            CompileError::UnexpectedCase => write!(f, "'case' statement not in switch statement"),
+            CompileError::UnexpectedDefault => {
+                write!(f, "'default' statement not in switch statement")
+            }
+            CompileError::DuplicateCase(x) => write!(f, "duplicate case value '{}'", x),
+            CompileError::DuplicateDefault => write!(f, "multiple default labels in one switch"),
         }
     }
 }

@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Formatter, mem};
 use lang_c::{
     ast::{
         ConditionalExpression, DoWhileStatement, Expression, ForStatement, Identifier, IfStatement,
-        LabeledStatement, WhileStatement,
+        LabeledStatement, SwitchStatement, WhileStatement,
     },
     span::{Node, Span},
 };
@@ -13,7 +13,7 @@ use crate::{
         self, cast, compile_declaration, compile_expression, compile_statement, convert_to_bool,
         integer_promote,
     },
-    constant::check_static_assert,
+    constant::{check_static_assert, compute_constant_expr},
     ctype::{self, QualifiedType, Qualifiers},
     error::{CompileError, ErrorCollector},
     ir,
@@ -29,6 +29,7 @@ pub struct BlockEmitter {
     current_ops: Vec<ir::Op>,
     breaks: Vec<usize>,
     continues: Vec<usize>,
+    switches: Vec<SwitchRecord>,
     labels: HashMap<String, usize>,
 }
 
@@ -40,6 +41,15 @@ enum LabeledTail {
 
 type LabeledBlock = ir::GenericBlock<LabeledTail>;
 
+#[derive(Clone)]
+struct SwitchRecord {
+    block: usize,
+    src: ir::Scalar,
+    t: QualifiedType,
+    cases: HashMap<u64, usize>,
+    default: Option<usize>,
+}
+
 impl BlockEmitter {
     pub fn new() -> Self {
         Self {
@@ -50,6 +60,7 @@ impl BlockEmitter {
             breaks: Vec::new(),
             continues: Vec::new(),
             labels: HashMap::new(),
+            switches: Vec::new(),
         }
     }
 
@@ -672,8 +683,8 @@ impl BlockEmitter {
         use lang_c::ast::Label;
         match ls.node.label.node {
             Label::Identifier(id) => self.append_label(id, ec)?,
-            Label::Case(_) => todo!(),
-            Label::Default => todo!(),
+            Label::Case(e) => self.append_case(*e, ls.span, scope, ec)?,
+            Label::Default => self.append_default(ls.span, ec)?,
             Label::CaseRange(_) => unimplemented!(),
         }
         compile_statement(*ls.node.statement, scope, self, ec)
@@ -682,6 +693,59 @@ impl BlockEmitter {
     pub fn append_goto(&mut self, id: Node<Identifier>) {
         let orphan = self.alloc_block_id();
         self.finish_block(LabeledTail::GotoLabel(id.node.name, id.span), orphan);
+    }
+
+    pub fn append_switch(
+        &mut self,
+        sw: Node<SwitchStatement>,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        let switch_body_block = self.alloc_block_id();
+        let continue_block = self.alloc_block_id();
+
+        let sw_expr_span = sw.node.expression.span;
+        let sw_expr = compile_expression(*sw.node.expression, scope, self, ec)?;
+        if !sw_expr.t.t.is_integer() {
+            return ec.record_error(CompileError::IntegerTypeRequired, sw_expr_span);
+        }
+        let sw_expr = integer_promote((sw_expr, sw_expr_span), scope, self, ec)?;
+        let (src, t) = sw_expr.unwrap_scalar_and_type();
+
+        self.switches.push(SwitchRecord {
+            src,
+            t: t,
+            block: self.current_id,
+            cases: HashMap::new(),
+            default: None,
+        });
+        self.breaks.push(continue_block);
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(continue_block)), // tail is to be replaced
+            switch_body_block,
+        );
+
+        compile_statement(*sw.node.statement, scope, self, ec)?;
+
+        self.breaks.pop().unwrap();
+        let sr = self.switches.pop().unwrap();
+
+        let block = self.blocks.get_mut(&sr.block).unwrap();
+
+        let tail = ir::Tail::Switch(
+            sr.src,
+            sr.t.t.get_scalar_width().unwrap(),
+            sr.cases.into_iter().collect(),
+            sr.default.unwrap_or(continue_block),
+        );
+        block.tail = LabeledTail::Tail(tail);
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(continue_block)),
+            continue_block,
+        );
+        Ok(())
     }
 
     fn append_label(&mut self, id: Node<Identifier>, ec: &mut ErrorCollector) -> Result<(), ()> {
@@ -693,6 +757,55 @@ impl BlockEmitter {
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Jump(next_block_id)),
             next_block_id,
+        );
+        Ok(())
+    }
+
+    fn append_case(
+        &mut self,
+        expr: Node<Expression>,
+        span: Span,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        let new_block_id = self.alloc_block_id();
+        let c_span = expr.span;
+        let c = compute_constant_expr(expr, true, scope, ec)?;
+        if !c.t.t.is_integer() {
+            return ec.record_error(CompileError::IntegerTypeRequired, c_span);
+        }
+        let sr = if let Some(sr) = self.switches.last_mut() {
+            sr
+        } else {
+            return ec.record_error(CompileError::UnexpectedCase, span);
+        };
+        let c = c.implicit_cast(&sr.t, span, ec)?.unwrap_integer();
+
+        if sr.cases.insert(c as u64, new_block_id).is_some() {
+            return ec.record_error(CompileError::DuplicateCase(c), span);
+        }
+
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(new_block_id)),
+            new_block_id,
+        );
+        Ok(())
+    }
+
+    fn append_default(&mut self, span: Span, ec: &mut ErrorCollector) -> Result<(), ()> {
+        let new_block_id = self.alloc_block_id();
+        let sr = if let Some(sr) = self.switches.last_mut() {
+            sr
+        } else {
+            return ec.record_error(CompileError::UnexpectedDefault, span);
+        };
+        if sr.default.is_some() {
+            return ec.record_error(CompileError::DuplicateDefault, span);
+        }
+        sr.default = Some(new_block_id);
+        self.finish_block(
+            LabeledTail::Tail(ir::Tail::Jump(new_block_id)),
+            new_block_id,
         );
         Ok(())
     }

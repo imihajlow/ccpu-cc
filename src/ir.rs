@@ -163,6 +163,7 @@ pub enum Tail {
     Jump(BlockNumber),
     Cond(Scalar, BlockNumber, BlockNumber),
     Ret,
+    Switch(Scalar, Width, Vec<(u64, BlockNumber)>, BlockNumber),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -458,6 +459,13 @@ impl std::fmt::Display for Tail {
             Tail::Jump(n) => write!(f, "jmp {}", n),
             Tail::Cond(c, t, e) => write!(f, "if {} then goto {} else goto {}", c, *t, *e),
             Tail::Ret => write!(f, "ret"),
+            Tail::Switch(val, width, cases, default) => {
+                write!(f, "switch{} {} ", width, val)?;
+                for (val, block) in cases {
+                    write!(f, "{}: {}, ", val, block)?;
+                }
+                write!(f, "default: {}", default)
+            }
         }
     }
 }
