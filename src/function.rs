@@ -4,7 +4,6 @@ use crate::{
     block_emitter::BlockEmitter,
     compile, ir,
     name_scope::{GlobalStorageClass, NameScope},
-    opt::blocks::merge_chains,
 };
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},

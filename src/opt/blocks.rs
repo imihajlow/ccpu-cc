@@ -9,6 +9,7 @@ use crate::ir;
  * The first argument of the return tuple indicates if any changes have been made.
  */
 pub fn drop_orphan_blocks(blocks: Vec<ir::Block>) -> (bool, Vec<ir::Block>) {
+    assert!(!blocks.is_empty());
     let mut visited = vec![false; blocks.len()];
     visit_blocks(0, &blocks, &mut visited);
     if visited.iter().all(|x| *x) {
@@ -65,7 +66,9 @@ pub fn simplify_jumps(blocks: &mut Vec<ir::Block>) -> bool {
  * Returns true if any changes have been made.
  */
 pub fn merge_chains(blocks: &mut Vec<ir::Block>) -> bool {
+    assert!(!blocks.is_empty());
     let mut ref_counts = vec![0; blocks.len()];
+    ref_counts[0] = 1;
     for block in blocks.iter() {
         match &block.tail {
             ir::Tail::Jump(n) => ref_counts[*n] += 1,
@@ -90,12 +93,21 @@ pub fn merge_chains(blocks: &mut Vec<ir::Block>) -> bool {
         });
     }
     let mut result = false;
-    for i in 0..blocks.len() {
-        if let Some(n) = merge_with[i] {
-            result = true;
-            let mut ops = mem::replace(&mut blocks[n].ops, Vec::new());
-            blocks[i].ops.append(&mut ops);
-            blocks[i].tail = blocks[n].tail.clone();
+    let mut done = false;
+    while !done {
+        done = true;
+        for i in 0..blocks.len() {
+            if let Some(n) = merge_with[i] {
+                if merge_with[n].is_none() {
+                    result = true;
+                    let mut ops = mem::replace(&mut blocks[n].ops, Vec::new());
+                    blocks[i].ops.append(&mut ops);
+                    blocks[i].tail = blocks[n].tail.clone();
+                    merge_with[i] = None;
+                } else {
+                    done = false;
+                }
+            }
         }
     }
     result
