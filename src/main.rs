@@ -22,6 +22,9 @@ mod translation_unit;
 mod type_builder;
 mod utils;
 
+#[cfg(test)]
+mod test;
+
 #[macro_use]
 extern crate static_assertions;
 

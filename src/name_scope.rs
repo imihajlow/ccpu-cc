@@ -757,35 +757,3 @@ fn match_storage_classes(
         (_, Default) => Some(Default),
     }
 }
-
-#[cfg(test)]
-mod test {
-    use crate::translation_unit::TranslationUnit;
-
-    use super::*;
-
-    fn compile(code: &str) -> (TranslationUnit, ErrorCollector) {
-        use lang_c::driver::{parse_preprocessed, Config, Flavor};
-        let mut cfg = Config::default();
-        cfg.flavor = Flavor::StdC11;
-        let p = parse_preprocessed(&cfg, code.to_string()).unwrap();
-        let mut ec = ErrorCollector::new();
-        let tu = TranslationUnit::translate(p.unit, &mut ec).unwrap();
-        assert_eq!(ec.get_error_count(), 0);
-        (tu, ec)
-    }
-
-    fn get_first_body(tu: &TranslationUnit) -> &Vec<ir::Block> {
-        tu.functions[0].get_body()
-    }
-
-    #[test]
-    fn test_struct_1() {
-        let (tu, ec) =
-            compile("struct X { int x; }; void foo(void) { struct X x; struct X *p = &x; }");
-        ec.print_issues();
-        assert_eq!(ec.get_warning_count(), 0);
-        let body = get_first_body(&tu);
-        assert_eq!(body.len(), 1);
-    }
-}
