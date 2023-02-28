@@ -52,7 +52,7 @@ impl TranslationUnit {
 
     pub fn optimize(&mut self) {
         for f in self.functions.iter_mut() {
-            f.drop_orphan_blocks();
+            f.optimize();
         }
     }
 

@@ -4,6 +4,7 @@ use crate::{
     block_emitter::BlockEmitter,
     compile, ir,
     name_scope::{GlobalStorageClass, NameScope},
+    opt::blocks::merge_chains,
 };
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
@@ -88,11 +89,16 @@ impl Function {
         self.frame_size
     }
 
-    pub fn drop_orphan_blocks(&mut self) -> bool {
-        replace_with::replace_with_or_abort_and_return(
-            &mut self.body,
-            crate::opt::blocks::drop_orphan_blocks,
-        )
+    pub fn optimize(&mut self) {
+        use crate::opt::blocks::*;
+        let mut modified = true;
+        while modified {
+            modified = false;
+            modified |=
+                replace_with::replace_with_or_abort_and_return(&mut self.body, drop_orphan_blocks);
+            modified |= simplify_jumps(&mut self.body);
+            modified |= merge_chains(&mut self.body);
+        }
     }
 
     #[cfg(test)]

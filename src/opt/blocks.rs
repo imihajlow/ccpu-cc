@@ -1,3 +1,7 @@
+use std::mem;
+
+use replace_with::replace_with_or_abort;
+
 use crate::ir;
 
 /**
@@ -26,6 +30,75 @@ pub fn drop_orphan_blocks(blocks: Vec<ir::Block>) -> (bool, Vec<ir::Block>) {
         }
     }
     (true, result)
+}
+
+/**
+ * If all branches of a conditional jump or a switch lead to the same block id, replace that tail with an unconditional jump.
+ *
+ * Returns true if any changes have been made.
+ */
+pub fn simplify_jumps(blocks: &mut Vec<ir::Block>) -> bool {
+    let mut result = false;
+    for block in blocks.iter_mut() {
+        replace_with_or_abort(&mut block.tail, |tail| match tail {
+            ir::Tail::Cond(_, t, e) if t == e => {
+                result = true;
+                ir::Tail::Jump(t)
+            }
+            ir::Tail::Switch(s, w, cases, default) => {
+                if cases.iter().all(|(_, id)| *id == default) {
+                    result = true;
+                    ir::Tail::Jump(default)
+                } else {
+                    ir::Tail::Switch(s, w, cases, default)
+                }
+            }
+            ir::Tail::Cond(_, _, _) | ir::Tail::Jump(_) | ir::Tail::Ret => tail,
+        });
+    }
+    result
+}
+
+/**
+ * If a block is preceeded excatly by one block in the chain, merge those two blocks into one.
+ *
+ * Returns true if any changes have been made.
+ */
+pub fn merge_chains(blocks: &mut Vec<ir::Block>) -> bool {
+    let mut ref_counts = vec![0; blocks.len()];
+    for block in blocks.iter() {
+        match &block.tail {
+            ir::Tail::Jump(n) => ref_counts[*n] += 1,
+            ir::Tail::Cond(_, then_id, else_id) => {
+                ref_counts[*then_id] += 1;
+                ref_counts[*else_id] += 1;
+            }
+            ir::Tail::Switch(_, _, cases, default) => {
+                for (_, id) in cases {
+                    ref_counts[*id] += 1;
+                }
+                ref_counts[*default] += 1;
+            }
+            ir::Tail::Ret => (),
+        }
+    }
+    let mut merge_with = Vec::with_capacity(blocks.len());
+    for block in blocks.iter() {
+        merge_with.push(match &block.tail {
+            ir::Tail::Jump(n) if ref_counts[*n] == 1 => Some(*n),
+            _ => None,
+        });
+    }
+    let mut result = false;
+    for i in 0..blocks.len() {
+        if let Some(n) = merge_with[i] {
+            result = true;
+            let mut ops = mem::replace(&mut blocks[n].ops, Vec::new());
+            blocks[i].ops.append(&mut ops);
+            blocks[i].tail = blocks[n].tail.clone();
+        }
+    }
+    result
 }
 
 fn visit_blocks(index: usize, blocks: &Vec<ir::Block>, visited: &mut Vec<bool>) {
