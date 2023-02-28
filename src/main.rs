@@ -15,6 +15,7 @@ mod lvalue;
 mod machine;
 mod name_scope;
 mod object_location;
+mod opt;
 mod rvalue;
 mod string;
 mod struct_union;
@@ -37,19 +38,25 @@ fn main() {
     let p = parse_preprocessed(
         &cfg,
         "
-        void foo(void) {
-            int x,y,z;
-            x = y || z;
-        }
+int send(int a)
+{
+    if (a) {
+        return a + 1;
+    } else {
+        return a - 1;
+    }
+}
     "
         .to_string(),
     )
     .unwrap();
-    println!("{:#?}", p);
+    // println!("{:#?}", p);
     let mut ec = ErrorCollector::new();
     let tu = TranslationUnit::translate(p.unit, &mut ec);
     ec.print_issues();
-    if let Ok(tu) = tu {
+    if let Ok(mut tu) = tu {
+        println!("<{}>", tu);
+        tu.optimize();
         println!("<{}>", tu);
     }
 }

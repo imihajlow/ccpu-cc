@@ -77,4 +77,3 @@ pub fn compile_alignof(
         },
     })
 }
-

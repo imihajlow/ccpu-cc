@@ -24,7 +24,7 @@ pub struct Function {
     storage_class: GlobalStorageClass,
     return_type: QualifiedType,
     args: FunctionArgs,
-    body: Vec<ir::GenericBlock<ir::Tail>>,
+    body: Vec<ir::Block>,
     frame_size: u32,
 }
 
@@ -86,6 +86,13 @@ impl Function {
 
     pub fn get_frame_size(&self) -> u32 {
         self.frame_size
+    }
+
+    pub fn drop_orphan_blocks(&mut self) -> bool {
+        replace_with::replace_with_or_abort_and_return(
+            &mut self.body,
+            crate::opt::blocks::drop_orphan_blocks,
+        )
     }
 
     #[cfg(test)]

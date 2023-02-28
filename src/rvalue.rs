@@ -63,7 +63,7 @@ impl RValue {
         match self {
             RValue::Void => None,
             RValue::Scalar(s) => Some(s),
-            RValue::Object(o) => Some(o.get_address())
+            RValue::Object(o) => Some(o.get_address()),
         }
     }
 }

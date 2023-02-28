@@ -58,6 +58,8 @@ pub enum Op {
     Call(CallOp),
     LoadAddr(LoadAddrOp),
     Memcpy(MemcpyOp),
+    #[cfg(test)]
+    Dummy(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -277,6 +279,8 @@ impl std::fmt::Display for Op {
             Self::Call(op) => write!(f, "call{}", op),
             Self::LoadAddr(op) => write!(f, "addr{}", op),
             Self::Memcpy(op) => write!(f, "memcpy{}", op),
+            #[cfg(test)]
+            Self::Dummy(n) => write!(f, "dummy {}", n),
         }
     }
 }

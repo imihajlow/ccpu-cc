@@ -3,7 +3,6 @@ use crate::ir::VarLocation;
 
 use super::util::*;
 
-
 #[test]
 fn test_struct_1() {
     let (tu, ec) = compile("struct X { int x; }; void foo(void) { struct X x; struct X *p = &x; }");
@@ -31,13 +30,11 @@ fn test_array_2() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![
-            ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::ConstInt(15 * 2),
-                width: ir::Width::Word
-            })
-        ]
+        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
+            dst: VarLocation::Local(0),
+            src: ir::Scalar::ConstInt(15 * 2),
+            width: ir::Width::Word
+        })]
     );
 }
 
@@ -50,13 +47,11 @@ fn test_array_3() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![
-            ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::FrameOffset(0),
-                width: ir::Width::Word
-            })
-        ]
+        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
+            dst: VarLocation::Local(0),
+            src: ir::Scalar::FrameOffset(0),
+            width: ir::Width::Word
+        })]
     );
 }
 
@@ -69,13 +64,11 @@ fn test_array_4() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![
-            ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::FrameOffset(0),
-                width: ir::Width::Word
-            })
-        ]
+        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
+            dst: VarLocation::Local(0),
+            src: ir::Scalar::FrameOffset(0),
+            width: ir::Width::Word
+        })]
     );
 }
 

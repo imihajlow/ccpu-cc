@@ -50,6 +50,12 @@ impl TranslationUnit {
         }
     }
 
+    pub fn optimize(&mut self) {
+        for f in self.functions.iter_mut() {
+            f.drop_orphan_blocks();
+        }
+    }
+
     fn add_declaration(&mut self, n: Node<Declaration>, ec: &mut ErrorCollector) -> Result<(), ()> {
         let decl = n.node;
         let (mut type_builder, storage_class, _extra) =
