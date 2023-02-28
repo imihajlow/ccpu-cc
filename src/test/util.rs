@@ -1,4 +1,5 @@
 use crate::error::ErrorCollector;
+use crate::function::Function;
 use crate::ir;
 use crate::translation_unit::TranslationUnit;
 
@@ -23,9 +24,12 @@ pub fn assert_compile_error(code: &str) {
 }
 
 pub fn get_first_body(tu: &TranslationUnit) -> &Vec<ir::Block> {
-    tu.functions.first().unwrap().get_body()
+    get_first_function(tu).get_body()
 }
 
+pub fn get_first_function(tu: &TranslationUnit) -> &Function {
+    tu.functions.first().unwrap()
+}
 
 pub fn translate(code: &str) -> (Result<TranslationUnit, ()>, ErrorCollector) {
     use lang_c::driver::{parse_preprocessed, Config, Flavor};

@@ -84,6 +84,10 @@ impl Function {
         })
     }
 
+    pub fn get_frame_size(&self) -> u32 {
+        self.frame_size
+    }
+
     #[cfg(test)]
     pub fn get_body(&self) -> &Vec<ir::GenericBlock<ir::Tail>> {
         &self.body
