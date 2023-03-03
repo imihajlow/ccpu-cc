@@ -211,6 +211,34 @@ impl Op {
         }
     }
 
+    pub fn is_read_from_register(&self, reg: Reg) -> bool {
+        match self {
+            Op::Copy(op) => op.is_read_from_register(reg),
+            Op::Bool(op) => op.is_read_from_register(reg),
+            Op::BoolInv(op) => op.is_read_from_register(reg),
+            Op::Add(op) => op.is_read_from_register(reg),
+            Op::Sub(op) => op.is_read_from_register(reg),
+            Op::Mul(op) => op.is_read_from_register(reg),
+            Op::Div(op) => op.is_read_from_register(reg),
+            Op::Mod(op) => op.is_read_from_register(reg),
+            Op::BAnd(op) => op.is_read_from_register(reg),
+            Op::BOr(op) => op.is_read_from_register(reg),
+            Op::BXor(op) => op.is_read_from_register(reg),
+            Op::LShift(op) => op.is_read_from_register(reg),
+            Op::RShift(op) => op.is_read_from_register(reg),
+            Op::Neg(op) => op.is_read_from_register(reg),
+            Op::Not(op) => op.is_read_from_register(reg),
+            Op::Compare(op) => op.is_read_from_register(reg),
+            Op::Conv(op) => op.is_read_from_register(reg),
+            Op::Store(op) => op.is_read_from_register(reg),
+            Op::Load(_) => false,
+            Op::Call(op) => op.is_read_from_register(reg),
+            Op::Memcpy(op) => op.is_read_from_register(reg),
+            #[cfg(test)]
+            Op::Dummy(_) => false,
+        }
+    }
+
     pub fn is_memory_read(&self) -> bool {
         match self {
             Op::Copy(_) => false,
@@ -238,11 +266,43 @@ impl Op {
             Op::Dummy(_) => false,
         }
     }
+
+    pub fn is_memory_write(&self) -> bool {
+        match self {
+            Op::Copy(_) => false,
+            Op::Bool(_) => false,
+            Op::BoolInv(_) => false,
+            Op::Add(_) => false,
+            Op::Sub(_) => false,
+            Op::Mul(_) => false,
+            Op::Div(_) => false,
+            Op::Mod(_) => false,
+            Op::BAnd(_) => false,
+            Op::BOr(_) => false,
+            Op::BXor(_) => false,
+            Op::LShift(_) => false,
+            Op::RShift(_) => false,
+            Op::Neg(_) => false,
+            Op::Not(_) => false,
+            Op::Compare(_) => false,
+            Op::Conv(_) => false,
+            Op::Store(_) => true,
+            Op::Load(_) => false,
+            Op::Call(_) => true,
+            Op::Memcpy(_) => true,
+            #[cfg(test)]
+            Op::Dummy(_) => false,
+        }
+    }
 }
 
 impl CompareOp {
     fn is_write_to_register(&self, reg: Reg) -> bool {
         self.dst.is_reg(reg)
+    }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
     }
 }
 
@@ -250,11 +310,19 @@ impl UnaryUnsignedOp {
     fn is_write_to_register(&self, reg: Reg) -> bool {
         self.dst.is_reg(reg)
     }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.src.is_reg(reg)
+    }
 }
 
 impl BinaryOp {
     fn is_write_to_register(&self, reg: Reg) -> bool {
         self.dst.is_reg(reg)
+    }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
     }
 }
 
@@ -262,11 +330,19 @@ impl BinaryUnsignedOp {
     fn is_write_to_register(&self, reg: Reg) -> bool {
         self.dst.is_reg(reg)
     }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
+    }
 }
 
 impl ShiftOp {
     fn is_write_to_register(&self, reg: Reg) -> bool {
         self.dst.is_reg(reg)
+    }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
     }
 }
 
@@ -274,9 +350,17 @@ impl ConvOp {
     fn is_write_to_register(&self, reg: Reg) -> bool {
         self.dst.is_reg(reg)
     }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.src.is_reg(reg)
+    }
 }
 
-impl StoreOp {}
+impl StoreOp {
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.src.is_reg(reg)
+    }
+}
 
 impl LoadOp {
     fn is_write_to_register(&self, reg: Reg) -> bool {
@@ -291,6 +375,24 @@ impl CallOp {
             .map(|(dst, _)| dst.is_reg(reg))
             .unwrap_or(false)
     }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        if self.addr.is_reg(reg) {
+            return true;
+        }
+        for (a, _) in &self.args {
+            if a.is_reg(reg) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl MemcpyOp {
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.src_addr.is_reg(reg) || self.dst_addr.is_reg(reg)
+    }
 }
 
 impl VarLocation {
@@ -302,6 +404,17 @@ impl VarLocation {
         }
     }
 }
+
+impl Scalar {
+    fn is_reg(&self, reg: Reg) -> bool {
+        if let Scalar::Var(x) = self {
+            x.is_reg(reg)
+        } else {
+            false
+        }
+    }
+}
+
 impl Width {
     pub const fn new(w: u8) -> Self {
         match w {

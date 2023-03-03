@@ -1,3 +1,5 @@
+use std::assert_matches::assert_matches;
+
 use crate::ir;
 use crate::name_scope::FunctionFrame;
 
@@ -7,7 +9,7 @@ use crate::name_scope::FunctionFrame;
 pub fn insert_flush_instructions(body: &mut Vec<ir::Block>, frame: &FunctionFrame) {
     for (fixed_reg, address_reg, width) in frame.fixed_regs_iter() {
         let mut states = vec![FlushState::Unknown; body.len()];
-        insert_stores(
+        insert_mem_ops(
             0,
             FlushState::Clean,
             body,
@@ -23,15 +25,16 @@ pub fn insert_flush_instructions(body: &mut Vec<ir::Block>, frame: &FunctionFram
 enum FlushState {
     Unknown,
     Clean,
-    Dirty,
+    RegDirty,
+    MemDirty,
 }
 
 /**
- * Insert store instructions for given fixed reg starting from given block number.
+ * Insert load and store instructions for given fixed reg starting from given block number.
  */
-fn insert_stores(
+fn insert_mem_ops(
     block_number: usize,
-    state: FlushState,
+    mut state: FlushState,
     body: &mut Vec<ir::Block>,
     states: &mut Vec<FlushState>,
     fixed_reg: ir::Reg,
@@ -40,62 +43,58 @@ fn insert_stores(
 ) {
     assert_eq!(body.len(), states.len());
     assert_ne!(state, FlushState::Unknown);
+    assert_eq!(states[block_number], FlushState::Unknown);
 
-    if state == states[block_number] {
-        // This block has already been visited, all necessary store instructions have been added.
-        return;
-    }
-    let stop_on_write = match states[block_number] {
-        FlushState::Dirty => {
-            // This block has already been visited as Dirty, now state is Clean, no new instructions can be added.
-            return;
-        }
-        FlushState::Clean => {
-            // This block has already been visited as Clean, but now state is Dirty.
-            // New instructions are possible, but we have to stop after first write to the variable.
-            true
-        }
-        FlushState::Unknown => {
-            // This block has never been visited.
-            false
-        }
-    };
     states[block_number] = state;
-    let mut dirty = match state {
-        FlushState::Clean => false,
-        FlushState::Dirty => true,
-        FlushState::Unknown => unreachable!(),
-    };
+
     let mut i = 0;
     {
         let ops = &mut body[block_number].ops;
         while i != ops.len() {
-            if dirty && ops[i].is_memory_read() {
-                ops.insert(
-                    i,
-                    ir::Op::Store(ir::StoreOp {
-                        dst_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
-                        src: ir::Scalar::Var(ir::VarLocation::Local(fixed_reg)),
-                        width,
-                    }),
-                );
-                i += 1;
-                dirty = false;
-            }
-            if ops[i].is_write_to_register(fixed_reg) {
-                if stop_on_write {
-                    return;
+            match state {
+                FlushState::Clean => {
+                    if ops[i].is_write_to_register(fixed_reg) && ops[i].is_memory_write() {
+                        assert_matches!(ops[i], ir::Op::Call(_));
+                        state = FlushState::RegDirty;
+                    } else if ops[i].is_write_to_register(fixed_reg) {
+                        state = FlushState::RegDirty;
+                    } else if ops[i].is_memory_write() {
+                        state = FlushState::MemDirty;
+                    }
                 }
-                dirty = true;
+                FlushState::RegDirty => {
+                    if ops[i].is_memory_read() | ops[i].is_memory_write() {
+                        ops.insert(
+                            i,
+                            ir::Op::Store(ir::StoreOp {
+                                dst_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
+                                src: ir::Scalar::Var(ir::VarLocation::Local(fixed_reg)),
+                                width,
+                            }),
+                        );
+                        state = FlushState::Clean;
+                    }
+                }
+                FlushState::MemDirty => {
+                    if ops[i].is_read_from_register(fixed_reg) {
+                        ops.insert(
+                            i,
+                            ir::Op::Load(ir::LoadOp {
+                                src_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
+                                dst: ir::VarLocation::Local(fixed_reg),
+                                width,
+                            }),
+                        );
+                        state = FlushState::Clean;
+                    } else if ops[i].is_write_to_register(fixed_reg) {
+                        state = FlushState::RegDirty;
+                    }
+                }
+                FlushState::Unknown => unreachable!(),
             }
             i += 1;
         }
     }
-    let state = if dirty {
-        FlushState::Dirty
-    } else {
-        FlushState::Clean
-    };
     let mut to_visit = Vec::new();
     match &body[block_number].tail {
         ir::Tail::Ret => (),
@@ -111,7 +110,37 @@ fn insert_stores(
             to_visit.push(*default);
         }
     };
+    let mut extra_load = false;
+    let mut extra_store = false;
+    for n in &to_visit {
+        if states[*n] != FlushState::Unknown && states[*n] != state {
+            if state == FlushState::RegDirty {
+                extra_store = true;
+            }
+            if state == FlushState::MemDirty {
+                extra_load = true;
+            }
+        }
+    }
+    if extra_store {
+        body[block_number].ops.push(ir::Op::Store(ir::StoreOp {
+            dst_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
+            src: ir::Scalar::Var(ir::VarLocation::Local(fixed_reg)),
+            width,
+        }));
+        state = FlushState::Clean;
+    }
+    if extra_load {
+        body[block_number].ops.push(ir::Op::Load(ir::LoadOp {
+            src_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
+            dst: ir::VarLocation::Local(fixed_reg),
+            width,
+        }));
+        state = FlushState::Clean;
+    }
     for n in to_visit {
-        insert_stores(n, state, body, states, fixed_reg, address_reg, width);
+        if states[n] == FlushState::Unknown {
+            insert_mem_ops(n, state, body, states, fixed_reg, address_reg, width);
+        }
     }
 }
