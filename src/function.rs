@@ -2,7 +2,7 @@ use std::fmt::Formatter;
 
 use crate::{
     block_emitter::BlockEmitter,
-    compile, ir,
+    compile, flush, ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
 };
 use lang_c::{
@@ -73,6 +73,8 @@ impl Function {
         compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
         let frame = scope.end_function();
         prepend_address_regs_initialization(&mut be, &frame);
+        let mut body = be.finalize(ec)?;
+        flush::insert_flush_instructions(&mut body, &frame);
         Ok(Self {
             is_inline: extra.is_inline,
             is_noreturn: extra.is_noreturn,
@@ -82,7 +84,7 @@ impl Function {
             return_type,
             args,
             name,
-            body: be.finalize(ec)?,
+            body,
             frame,
         })
     }

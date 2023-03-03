@@ -55,7 +55,7 @@ pub enum Value {
 #[derive(Clone)]
 pub struct FunctionFrame {
     frame_size: u32,
-    fixed_regs: HashMap<ir::Reg, ir::Reg>, // reg -> address reg
+    fixed_regs: HashMap<ir::Reg, (ir::Reg, ir::Width)>, // reg -> address reg
     address_regs: Vec<(ir::Reg, u32)>,
     return_type: QualifiedType,
 }
@@ -521,11 +521,14 @@ impl NameScope {
     /**
      * Fix a variable in memory. Return its address.
      */
-    pub fn fix_in_memory(&mut self, var: &VarLocation) -> ir::Scalar {
+    pub fn fix_in_memory(&mut self, var: &VarLocation, width: ir::Width) -> ir::Scalar {
         match var {
             VarLocation::Global(id) => ir::Scalar::SymbolOffset(id.clone(), 0),
             VarLocation::Local(n) => {
-                if let Some(reg) = self.function_frame.as_ref().unwrap().fixed_regs.get(n) {
+                if let Some((reg, old_width)) =
+                    self.function_frame.as_ref().unwrap().fixed_regs.get(n)
+                {
+                    assert_eq!(width, *old_width);
                     ir::Scalar::Var(ir::VarLocation::Local(*reg))
                 } else {
                     let offset = self.alloc_frame(8, 8); // TODO const?
@@ -534,7 +537,7 @@ impl NameScope {
                         .as_mut()
                         .unwrap()
                         .fixed_regs
-                        .insert(*n, address_reg);
+                        .insert(*n, (address_reg, width));
                     self.function_frame
                         .as_mut()
                         .unwrap()
@@ -721,7 +724,7 @@ impl FunctionFrame {
         if let VarLocation::Local(n) = var {
             self.fixed_regs
                 .get(n)
-                .map(|reg| ir::VarLocation::Local(*reg))
+                .map(|(reg, _)| ir::VarLocation::Local(*reg))
         } else {
             None
         }
@@ -733,8 +736,14 @@ impl FunctionFrame {
             .map(|(reg, offset)| (*offset, ir::VarLocation::Local(*reg)))
     }
 
+    pub fn fixed_regs_iter(&self) -> impl Iterator<Item = (ir::Reg, ir::Reg, ir::Width)> + '_ {
+        self.fixed_regs
+            .iter()
+            .map(|(fixed_reg, (address_reg, width))| (*fixed_reg, *address_reg, *width))
+    }
+
     #[cfg(test)]
-    pub fn get_fixed_regs(&self) -> &HashMap<ir::Reg, ir::Reg> {
+    pub fn get_fixed_regs(&self) -> &HashMap<ir::Reg, (ir::Reg, ir::Width)> {
         &self.fixed_regs
     }
 

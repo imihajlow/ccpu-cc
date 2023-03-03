@@ -182,6 +182,126 @@ pub struct Function {
     pub blocks: Vec<Block>,
 }
 
+impl Op {
+    pub fn is_write_to_register(&self, reg: Reg) -> bool {
+        match self {
+            Op::Copy(op) => op.is_write_to_register(reg),
+            Op::Bool(op) => op.is_write_to_register(reg),
+            Op::BoolInv(op) => op.is_write_to_register(reg),
+            Op::Add(op) => op.is_write_to_register(reg),
+            Op::Sub(op) => op.is_write_to_register(reg),
+            Op::Mul(op) => op.is_write_to_register(reg),
+            Op::Div(op) => op.is_write_to_register(reg),
+            Op::Mod(op) => op.is_write_to_register(reg),
+            Op::BAnd(op) => op.is_write_to_register(reg),
+            Op::BOr(op) => op.is_write_to_register(reg),
+            Op::BXor(op) => op.is_write_to_register(reg),
+            Op::LShift(op) => op.is_write_to_register(reg),
+            Op::RShift(op) => op.is_write_to_register(reg),
+            Op::Neg(op) => op.is_write_to_register(reg),
+            Op::Not(op) => op.is_write_to_register(reg),
+            Op::Compare(op) => op.is_write_to_register(reg),
+            Op::Conv(op) => op.is_write_to_register(reg),
+            Op::Store(_) => false,
+            Op::Load(op) => op.is_write_to_register(reg),
+            Op::Call(op) => op.is_write_to_register(reg),
+            Op::Memcpy(_) => false,
+            #[cfg(test)]
+            Op::Dummy(_) => false,
+        }
+    }
+
+    pub fn is_memory_read(&self) -> bool {
+        match self {
+            Op::Copy(_) => false,
+            Op::Bool(_) => false,
+            Op::BoolInv(_) => false,
+            Op::Add(_) => false,
+            Op::Sub(_) => false,
+            Op::Mul(_) => false,
+            Op::Div(_) => false,
+            Op::Mod(_) => false,
+            Op::BAnd(_) => false,
+            Op::BOr(_) => false,
+            Op::BXor(_) => false,
+            Op::LShift(_) => false,
+            Op::RShift(_) => false,
+            Op::Neg(_) => false,
+            Op::Not(_) => false,
+            Op::Compare(_) => false,
+            Op::Conv(_) => false,
+            Op::Store(_) => false,
+            Op::Load(_) => true,
+            Op::Call(_) => true,
+            Op::Memcpy(_) => true,
+            #[cfg(test)]
+            Op::Dummy(_) => false,
+        }
+    }
+}
+
+impl CompareOp {
+    fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.dst.is_reg(reg)
+    }
+}
+
+impl UnaryUnsignedOp {
+    fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.dst.is_reg(reg)
+    }
+}
+
+impl BinaryOp {
+    fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.dst.is_reg(reg)
+    }
+}
+
+impl BinaryUnsignedOp {
+    fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.dst.is_reg(reg)
+    }
+}
+
+impl ShiftOp {
+    fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.dst.is_reg(reg)
+    }
+}
+
+impl ConvOp {
+    fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.dst.is_reg(reg)
+    }
+}
+
+impl StoreOp {}
+
+impl LoadOp {
+    fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.dst.is_reg(reg)
+    }
+}
+
+impl CallOp {
+    fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.dst
+            .as_ref()
+            .map(|(dst, _)| dst.is_reg(reg))
+            .unwrap_or(false)
+    }
+}
+
+impl VarLocation {
+    fn is_reg(&self, reg: Reg) -> bool {
+        if let VarLocation::Local(x) = self {
+            *x == reg
+        } else {
+            false
+        }
+    }
+}
 impl Width {
     pub const fn new(w: u8) -> Self {
         match w {

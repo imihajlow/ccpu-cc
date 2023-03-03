@@ -238,7 +238,7 @@ fn compile_address(
             t,
         }),
         LValue::Var(v) => {
-            let addr = scope.fix_in_memory(&v);
+            let addr = scope.fix_in_memory(&v, operand.t.t.get_scalar_width().unwrap());
             Ok(TypedRValue {
                 src: RValue::Scalar(addr),
                 t,
