@@ -2,7 +2,7 @@ use lang_c::{
     ast::StorageClassSpecifier,
     span::{Node, Span},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     ctype::{EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind},
@@ -23,6 +23,10 @@ use crate::{
 /**
  * Keep track of symbols across the whole translation unit.
  * Manages values of symbols and builds the export and import lists.
+ *
+ * If an address of a local variable is needed, it's "fixed in memory".
+ * Each fixed variable is allocated on the function frame alongside with bigger objects.
+ * Addresses of fixed variables are stored in address variables for faster access in case of software stack.
  */
 #[derive(Clone)]
 pub struct NameScope {
@@ -30,10 +34,8 @@ pub struct NameScope {
     last_static_id: u32,
     defs: Vec<Scope>,
     static_initializers: HashMap<GlobalVarId, TypedConstant>,
-    fixed_regs: HashSet<ir::Reg>,
     tagged_types: Vec<(Tagged, Span)>,
-    frame_size: u32,
-    return_type: Option<QualifiedType>,
+    function_frame: Option<FunctionFrame>,
 }
 
 #[derive(Clone)]
@@ -48,6 +50,13 @@ pub enum Value {
         Option<TypedConstant>,
     ),
     Object(QualifiedType, u32),
+}
+
+#[derive(Clone)]
+pub struct FunctionFrame {
+    frame_size: u32,
+    fixed_regs: HashMap<ir::Reg, (u32, ir::VarLocation)>, // reg -> (function frame offset, address reg)
+    return_type: QualifiedType,
 }
 
 #[derive(Clone)]
@@ -79,10 +88,8 @@ impl NameScope {
             last_static_id: 0,
             defs: vec![Scope::new()],
             static_initializers: HashMap::new(),
-            fixed_regs: HashSet::new(),
             tagged_types: Vec::new(),
-            frame_size: 0,
-            return_type: None,
+            function_frame: None,
         }
     }
 
@@ -123,16 +130,16 @@ impl NameScope {
             }
         }
         self.defs.push(Scope::new_with_defs(defs));
-        self.return_type = Some(return_type.clone());
+        assert!(self.function_frame.is_none());
+        self.function_frame = Some(FunctionFrame::new(return_type));
     }
 
     /**
-     * Resets frame size to 0 and returns previous size.
+     * End a function.
      */
-    pub fn reset_frame_size(&mut self) -> u32 {
-        let r = self.frame_size;
-        self.frame_size = 0;
-        r
+    pub fn end_function(&mut self) -> FunctionFrame {
+        self.pop_and_collect_initializers();
+        self.function_frame.take().unwrap()
     }
 
     /**
@@ -146,7 +153,7 @@ impl NameScope {
      * Get return type of current function.
      */
     pub fn get_return_type(&self) -> QualifiedType {
-        self.return_type.as_ref().unwrap().clone()
+        self.function_frame.as_ref().unwrap().return_type.clone()
     }
 
     /**
@@ -500,21 +507,30 @@ impl NameScope {
         }
     }
 
-    pub fn fix_in_memory(&mut self, var: &VarLocation) {
+    /**
+     * Fix a variable in memory. Return its address.
+     */
+    pub fn fix_in_memory(&mut self, var: &VarLocation) -> ir::Scalar {
         match var {
-            VarLocation::Global(_) => (),
+            VarLocation::Global(id) => ir::Scalar::SymbolOffset(id.clone(), 0),
             VarLocation::Local(n) => {
-                self.fixed_regs.insert(*n);
+                if let Some((_, loc)) = self.function_frame.as_ref().unwrap().fixed_regs.get(n) {
+                    ir::Scalar::Var(loc.clone())
+                } else {
+                    let offset = self.alloc_frame(8, 8); // TODO const?
+                    let address_reg = self.alloc_temp();
+                    self.function_frame
+                        .as_mut()
+                        .unwrap()
+                        .fixed_regs
+                        .insert(*n, (offset, address_reg.clone()));
+                    ir::Scalar::Var(address_reg)
+                }
             }
-            VarLocation::Arg(_) => (),
-            VarLocation::Frame(_) => (),
-            VarLocation::Return => (),
+            VarLocation::Arg(_) => todo!("address of an argument"),
+            VarLocation::Frame(_) => todo!(),
+            VarLocation::Return => unreachable!("address of a return value"),
         }
-    }
-
-    #[cfg(test)]
-    pub fn get_fixed_regs(&self) -> &HashSet<ir::Reg> {
-        &self.fixed_regs
     }
 
     fn get_tagged_type(&self, id: usize) -> &Tagged {
@@ -535,10 +551,7 @@ impl NameScope {
     }
 
     fn alloc_frame(&mut self, size: u32, align: u32) -> u32 {
-        self.frame_size = utils::align(self.frame_size, align);
-        let r = self.frame_size;
-        self.frame_size += size;
-        r
+        self.function_frame.as_mut().unwrap().alloc(size, align)
     }
 
     fn is_at_global_level(&self) -> bool {
@@ -680,6 +693,52 @@ impl Value {
         } else {
             panic!("Not a static var")
         }
+    }
+}
+
+impl FunctionFrame {
+    pub fn get_size(&self) -> u32 {
+        self.frame_size
+    }
+
+    pub fn get_fixed_reg_offset(&self, var: &VarLocation) -> Option<u32> {
+        if let VarLocation::Local(n) = var {
+            self.fixed_regs.get(n).map(|(offset, _)| *offset)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_fixed_reg_addr_var(&self, var: &VarLocation) -> Option<VarLocation> {
+        if let VarLocation::Local(n) = var {
+            self.fixed_regs.get(n).map(|(_, var)| var.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn address_regs_iter(&self) -> impl Iterator<Item = (u32, &ir::VarLocation)> {
+        self.fixed_regs.iter().map(|(_, (offset, var))| (*offset, var))
+    }
+
+    #[cfg(test)]
+    pub fn get_fixed_regs(&self) -> &HashMap<ir::Reg, (u32, VarLocation)> {
+        &self.fixed_regs
+    }
+
+    fn new(return_type: &QualifiedType) -> Self {
+        FunctionFrame {
+            frame_size: 0,
+            fixed_regs: HashMap::new(),
+            return_type: return_type.clone(),
+        }
+    }
+
+    fn alloc(&mut self, size: u32, align: u32) -> u32 {
+        self.frame_size = utils::align(self.frame_size, align);
+        let r = self.frame_size;
+        self.frame_size += size;
+        r
     }
 }
 

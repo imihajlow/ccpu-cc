@@ -252,17 +252,21 @@ fn test_addr_1() {
     let (tu, ec) = compile("void foo(void) { int *x, y; x = &y; }");
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
+    let fun = get_first_function(&tu);
     let body = get_first_body(&tu);
     assert_eq!(body.len(), 1);
-    let fixed_regs = tu.scope.get_fixed_regs();
+    let fixed_regs = fun.get_frame().get_fixed_regs();
     assert_eq!(fixed_regs.len(), 1);
-    assert!(fixed_regs.contains(&1));
+    assert!(fixed_regs.contains_key(&1));
     assert_eq!(
         body[0].ops,
         vec![
-            ir::Op::LoadAddr(ir::LoadAddrOp {
+            ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
-                src: VarLocation::Local(1),
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
@@ -278,9 +282,10 @@ fn test_addr_2() {
     let (tu, ec) = compile("void foo(void) { int *x, *y; x = &*y; }");
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
+    let fun = get_first_function(&tu);
     let body = get_first_body(&tu);
     assert_eq!(body.len(), 1);
-    let fixed_regs = tu.scope.get_fixed_regs();
+    let fixed_regs = fun.get_frame().get_fixed_regs();
     assert_eq!(fixed_regs.len(), 0);
     assert_eq!(
         body[0].ops,
@@ -297,9 +302,10 @@ fn test_deref_1() {
     let (tu, ec) = compile("void foo(void) { int x, *y; x = *y; }");
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
+    let fun = get_first_function(&tu);
     let body = get_first_body(&tu);
     assert_eq!(body.len(), 1);
-    let fixed_regs = tu.scope.get_fixed_regs();
+    let fixed_regs = fun.get_frame().get_fixed_regs();
     assert_eq!(fixed_regs.len(), 0);
     assert_eq!(
         body[0].ops,

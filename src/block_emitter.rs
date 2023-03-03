@@ -101,6 +101,19 @@ impl BlockEmitter {
         self.current_ops.push(op);
     }
 
+    /**
+     * Prepend a Vec of operations to the beginning of the first block
+     */
+    pub fn prepend_operations(&mut self, mut op: Vec<ir::Op>) {
+        let first_block_ops = if self.current_id == 0 {
+            &mut self.current_ops
+        } else {
+            &mut self.blocks.get_mut(&0).unwrap().ops
+        };
+        op.append(first_block_ops);
+        *first_block_ops = op;
+    }
+
     pub fn append_if(
         &mut self,
         ifs: Node<IfStatement>,

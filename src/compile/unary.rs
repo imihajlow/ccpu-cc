@@ -238,14 +238,9 @@ fn compile_address(
             t,
         }),
         LValue::Var(v) => {
-            scope.fix_in_memory(&v);
-            let dst = scope.alloc_temp();
-            be.append_operation(ir::Op::LoadAddr(ir::LoadAddrOp {
-                dst: dst.clone(),
-                src: v,
-            }));
+            let addr = scope.fix_in_memory(&v);
             Ok(TypedRValue {
-                src: RValue::new_var(dst),
+                src: RValue::Scalar(addr),
                 t,
             })
         }

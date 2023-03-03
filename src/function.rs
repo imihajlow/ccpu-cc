@@ -3,7 +3,7 @@ use std::fmt::Formatter;
 use crate::{
     block_emitter::BlockEmitter,
     compile, ir,
-    name_scope::{GlobalStorageClass, NameScope},
+    name_scope::{GlobalStorageClass, NameScope, FunctionFrame},
 };
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
@@ -20,12 +20,13 @@ pub struct Function {
     is_inline: bool,
     is_noreturn: bool,
     is_vararg: bool,
+    is_reentrant: bool,
     name: String,
     storage_class: GlobalStorageClass,
     return_type: QualifiedType,
     args: FunctionArgs,
     body: Vec<ir::Block>,
-    frame_size: u32,
+    frame: FunctionFrame,
 }
 
 impl Function {
@@ -70,22 +71,28 @@ impl Function {
         scope.start_function(&args, &return_type);
         let mut be = BlockEmitter::new();
         compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
-        scope.pop_and_collect_initializers();
+        let frame = scope.end_function();
+        prepend_address_regs_initialization(&mut be, &frame);
         Ok(Self {
             is_inline: extra.is_inline,
             is_noreturn: extra.is_noreturn,
+            is_reentrant: false,
             storage_class,
             is_vararg,
             return_type,
             args,
             name,
             body: be.finalize(ec)?,
-            frame_size: scope.reset_frame_size(),
+            frame,
         })
     }
 
+    pub fn set_reentrant(&mut self, reentrant: bool) {
+        self.is_reentrant = reentrant;
+    }
+
     pub fn get_frame_size(&self) -> u32 {
-        self.frame_size
+        self.frame.get_size()
     }
 
     pub fn optimize(&mut self) {
@@ -104,11 +111,31 @@ impl Function {
     pub fn get_body(&self) -> &Vec<ir::GenericBlock<ir::Tail>> {
         &self.body
     }
+
+    #[cfg(test)]
+    pub fn get_frame(&self) -> &FunctionFrame {
+        &self.frame
+    }
 }
+
+fn prepend_address_regs_initialization(be: &mut BlockEmitter, frame: &FunctionFrame) {
+    let mut ops = Vec::new();
+    for (offset, var) in frame.address_regs_iter() {
+        ops.push(ir::Op::Add(ir::BinaryOp {
+            dst: var.clone(),
+            lhs: ir::Scalar::FramePointer,
+            rhs: ir::Scalar::ConstInt(offset as u64),
+            width: ir::Width::PTR_WIDTH,
+            sign: false,
+        }));
+    }
+    be.prepend_operations(ops);
+}
+
 
 impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        writeln!(f, "function {}({})", self.name, self.frame_size)?;
+        writeln!(f, "function {}({})", self.name, self.get_frame_size())?;
         for (i, b) in self.body.iter().enumerate() {
             writeln!(f, "{}:\n{}", i, b)?;
         }

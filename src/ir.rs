@@ -29,8 +29,9 @@ pub struct GlobalVarId(pub String, pub u32);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scalar {
     ConstInt(u64),
-    SymbolOffset(String, u16),
+    SymbolOffset(GlobalVarId, u16),
     FrameOffset(u32),
+    FramePointer,
     Var(VarLocation),
 }
 
@@ -56,7 +57,7 @@ pub enum Op {
     Store(StoreOp),
     Load(LoadOp),
     Call(CallOp),
-    LoadAddr(LoadAddrOp),
+    // LoadAddr(LoadAddrOp),
     Memcpy(MemcpyOp),
     #[cfg(test)]
     Dummy(usize),
@@ -147,11 +148,11 @@ pub struct CallOp {
     pub args: Vec<(Scalar, Width)>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LoadAddrOp {
-    pub dst: VarLocation,
-    pub src: VarLocation,
-}
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub struct LoadAddrOp {
+//     pub dst: VarLocation,
+//     pub src: VarLocation,
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemcpyOp {
@@ -277,7 +278,7 @@ impl std::fmt::Display for Op {
             Self::Store(op) => write!(f, "st{}", op),
             Self::Load(op) => write!(f, "ld{}", op),
             Self::Call(op) => write!(f, "call{}", op),
-            Self::LoadAddr(op) => write!(f, "addr{}", op),
+            // Self::LoadAddr(op) => write!(f, "addr{}", op),
             Self::Memcpy(op) => write!(f, "memcpy{}", op),
             #[cfg(test)]
             Self::Dummy(n) => write!(f, "dummy {}", n),
@@ -404,11 +405,11 @@ impl std::fmt::Display for ConvOp {
     }
 }
 
-impl std::fmt::Display for LoadAddrOp {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, " {}, {}", self.dst, self.src)
-    }
-}
+// impl std::fmt::Display for LoadAddrOp {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+//         write!(f, " {}, {}", self.dst, self.src)
+//     }
+// }
 
 impl std::fmt::Display for MemcpyOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -435,6 +436,7 @@ impl std::fmt::Display for Scalar {
             Scalar::SymbolOffset(sym, offs) => write!(f, "{}+0x{:x}", sym, offs),
             Scalar::FrameOffset(offs) => write!(f, "F+0x{:x}", offs),
             Scalar::Var(v) => write!(f, "{}", v),
+            Scalar::FramePointer => write!(f, "F"),
         }
     }
 }
