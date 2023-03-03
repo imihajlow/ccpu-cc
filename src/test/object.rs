@@ -30,11 +30,20 @@ fn test_array_2() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::ConstInt(15 * 2),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(0),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0)
+            }),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::ConstInt(15 * 2),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -47,11 +56,20 @@ fn test_array_3() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::FrameOffset(0),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(0),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0)
+            }),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(0)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -64,11 +82,20 @@ fn test_array_4() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::FrameOffset(0),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(0),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0)
+            }),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(0)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -82,23 +109,30 @@ fn test_array_5() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(0),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0)
+            }),
             ir::Op::Mul(ir::BinaryOp {
-                dst: VarLocation::Local(1),
+                dst: VarLocation::Local(2),
                 lhs: ir::Scalar::ConstInt(1),
                 rhs: ir::Scalar::ConstInt(2),
                 width: ir::Width::Word,
                 sign: true,
             }),
             ir::Op::Add(ir::BinaryOp {
-                dst: VarLocation::Local(2),
-                lhs: ir::Scalar::FrameOffset(0),
-                rhs: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                lhs: ir::Scalar::Var(VarLocation::Local(0)),
+                rhs: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word,
                 sign: false,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]
@@ -115,23 +149,30 @@ fn test_array_6() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(0),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0)
+            }),
             ir::Op::Mul(ir::BinaryOp {
-                dst: VarLocation::Local(1),
+                dst: VarLocation::Local(2),
                 lhs: ir::Scalar::ConstInt(1),
                 rhs: ir::Scalar::ConstInt(15 * 2),
                 width: ir::Width::Word,
                 sign: true,
             }),
             ir::Op::Add(ir::BinaryOp {
-                dst: VarLocation::Local(2),
-                lhs: ir::Scalar::FrameOffset(0),
-                rhs: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                lhs: ir::Scalar::Var(VarLocation::Local(0)),
+                rhs: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word,
                 sign: false,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]

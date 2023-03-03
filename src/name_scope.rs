@@ -49,13 +49,14 @@ pub enum Value {
         GlobalStorageClass,
         Option<TypedConstant>,
     ),
-    Object(QualifiedType, u32),
+    Object(QualifiedType, ir::Scalar),
 }
 
 #[derive(Clone)]
 pub struct FunctionFrame {
     frame_size: u32,
-    fixed_regs: HashMap<ir::Reg, (u32, ir::VarLocation)>, // reg -> (function frame offset, address reg)
+    fixed_regs: HashMap<ir::Reg, ir::Reg>, // reg -> address reg
+    address_regs: Vec<(ir::Reg, u32)>,
     return_type: QualifiedType,
 }
 
@@ -306,7 +307,17 @@ impl NameScope {
                         let size = t.t.sizeof(self, span, ec)?;
                         let align = t.t.alignof(self, span, ec)?;
                         let offset = self.alloc_frame(size, align);
-                        self.insert(name, Value::Object(t, offset), span);
+                        let address_reg = self.alloc_reg();
+                        self.function_frame
+                            .as_mut()
+                            .unwrap()
+                            .address_regs
+                            .push((address_reg, offset));
+                        self.insert(
+                            name,
+                            Value::Object(t, ir::Scalar::Var(ir::VarLocation::Local(address_reg))),
+                            span,
+                        );
                     } else {
                         unreachable!()
                     }
@@ -437,7 +448,7 @@ impl NameScope {
                 }
                 Value::Object(t, p) => Ok(TypedRValue {
                     t: t.clone(),
-                    src: RValue::new_object(ObjectLocation::PointedBy(ir::Scalar::FrameOffset(*p))),
+                    src: RValue::new_object(ObjectLocation::PointedBy(p.clone())),
                 }),
             }
         } else {
@@ -472,7 +483,7 @@ impl NameScope {
                 }
                 Value::Object(t, p) => Ok(TypedLValue {
                     t: t.clone(),
-                    lv: LValue::Object(ObjectLocation::PointedBy(ir::Scalar::FrameOffset(*p))),
+                    lv: LValue::Object(ObjectLocation::PointedBy(p.clone())),
                 }),
             }
         } else {
@@ -514,17 +525,22 @@ impl NameScope {
         match var {
             VarLocation::Global(id) => ir::Scalar::SymbolOffset(id.clone(), 0),
             VarLocation::Local(n) => {
-                if let Some((_, loc)) = self.function_frame.as_ref().unwrap().fixed_regs.get(n) {
-                    ir::Scalar::Var(loc.clone())
+                if let Some(reg) = self.function_frame.as_ref().unwrap().fixed_regs.get(n) {
+                    ir::Scalar::Var(ir::VarLocation::Local(*reg))
                 } else {
                     let offset = self.alloc_frame(8, 8); // TODO const?
-                    let address_reg = self.alloc_temp();
+                    let address_reg = self.alloc_reg();
                     self.function_frame
                         .as_mut()
                         .unwrap()
                         .fixed_regs
-                        .insert(*n, (offset, address_reg.clone()));
-                    ir::Scalar::Var(address_reg)
+                        .insert(*n, address_reg);
+                    self.function_frame
+                        .as_mut()
+                        .unwrap()
+                        .address_regs
+                        .push((address_reg, offset));
+                    ir::Scalar::Var(ir::VarLocation::Local(address_reg))
                 }
             }
             VarLocation::Arg(_) => todo!("address of an argument"),
@@ -701,28 +717,24 @@ impl FunctionFrame {
         self.frame_size
     }
 
-    pub fn get_fixed_reg_offset(&self, var: &VarLocation) -> Option<u32> {
-        if let VarLocation::Local(n) = var {
-            self.fixed_regs.get(n).map(|(offset, _)| *offset)
-        } else {
-            None
-        }
-    }
-
     pub fn get_fixed_reg_addr_var(&self, var: &VarLocation) -> Option<VarLocation> {
         if let VarLocation::Local(n) = var {
-            self.fixed_regs.get(n).map(|(_, var)| var.clone())
+            self.fixed_regs
+                .get(n)
+                .map(|reg| ir::VarLocation::Local(*reg))
         } else {
             None
         }
     }
 
-    pub fn address_regs_iter(&self) -> impl Iterator<Item = (u32, &ir::VarLocation)> {
-        self.fixed_regs.iter().map(|(_, (offset, var))| (*offset, var))
+    pub fn address_regs_iter(&self) -> impl Iterator<Item = (u32, ir::VarLocation)> + '_ {
+        self.address_regs
+            .iter()
+            .map(|(reg, offset)| (*offset, ir::VarLocation::Local(*reg)))
     }
 
     #[cfg(test)]
-    pub fn get_fixed_regs(&self) -> &HashMap<ir::Reg, (u32, VarLocation)> {
+    pub fn get_fixed_regs(&self) -> &HashMap<ir::Reg, ir::Reg> {
         &self.fixed_regs
     }
 
@@ -730,6 +742,7 @@ impl FunctionFrame {
         FunctionFrame {
             frame_size: 0,
             fixed_regs: HashMap::new(),
+            address_regs: Vec::new(),
             return_type: return_type.clone(),
         }
     }

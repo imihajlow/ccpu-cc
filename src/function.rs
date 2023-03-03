@@ -3,7 +3,7 @@ use std::fmt::Formatter;
 use crate::{
     block_emitter::BlockEmitter,
     compile, ir,
-    name_scope::{GlobalStorageClass, NameScope, FunctionFrame},
+    name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
 };
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
@@ -131,7 +131,6 @@ fn prepend_address_regs_initialization(be: &mut BlockEmitter, frame: &FunctionFr
     }
     be.prepend_operations(ops);
 }
-
 
 impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {

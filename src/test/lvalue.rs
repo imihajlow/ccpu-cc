@@ -105,15 +105,22 @@ fn test_lvalue_member_1() {
         body[0].ops,
         vec![
             ir::Op::Add(ir::BinaryOp {
-                dst: VarLocation::Local(1),
+                dst: VarLocation::Local(0),
                 width: ir::Width::PTR_WIDTH,
                 sign: false,
-                lhs: ir::Scalar::FrameOffset(0),
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0)
+            }),
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(2),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::Var(VarLocation::Local(0)),
                 rhs: ir::Scalar::ConstInt(4)
             }),
             ir::Op::Store(ir::StoreOp {
-                src: ir::Scalar::Var(VarLocation::Local(0)),
-                dst_addr: ir::Scalar::Var(VarLocation::Local(1)),
+                dst_addr: ir::Scalar::Var(VarLocation::Local(2)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
                 width: ir::Width::Word,
             })
         ]
@@ -159,14 +166,28 @@ fn test_lvalue_member_3() {
         vec![
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(0),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0)
+            }),
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(1),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(4)
+            }),
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(2),
                 width: ir::Width::Word,
                 sign: false,
-                lhs: ir::Scalar::FrameOffset(4),
+                lhs: ir::Scalar::Var(VarLocation::Local(1)),
                 rhs: ir::Scalar::ConstInt(4)
             }),
             ir::Op::Memcpy(ir::MemcpyOp {
-                src_addr: ir::Scalar::FrameOffset(0),
-                dst_addr: ir::Scalar::Var(VarLocation::Local(0)),
+                dst_addr: ir::Scalar::Var(VarLocation::Local(2)),
+                src_addr: ir::Scalar::Var(VarLocation::Local(0)),
                 len: 4
             })
         ]
@@ -184,15 +205,22 @@ fn test_lvalue_member_4() {
         body[0].ops,
         vec![
             ir::Op::Add(ir::BinaryOp {
-                dst: VarLocation::Local(1),
+                dst: VarLocation::Local(0),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+                lhs: ir::Scalar::FramePointer,
+                rhs: ir::Scalar::ConstInt(0)
+            }),
+            ir::Op::Add(ir::BinaryOp {
+                dst: VarLocation::Local(2),
                 width: ir::Width::Word,
                 sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(0)),
+                lhs: ir::Scalar::Var(VarLocation::Local(1)),
                 rhs: ir::Scalar::ConstInt(4)
             }),
             ir::Op::Memcpy(ir::MemcpyOp {
-                src_addr: ir::Scalar::FrameOffset(0),
-                dst_addr: ir::Scalar::Var(VarLocation::Local(1)),
+                src_addr: ir::Scalar::Var(VarLocation::Local(0)),
+                dst_addr: ir::Scalar::Var(VarLocation::Local(2)),
                 len: 4
             })
         ]
