@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
 
+#[derive(Clone)]
 pub struct ObjectGraph<T>
 where
     T: Eq + Hash + Clone,
@@ -45,6 +46,29 @@ impl<T: Eq + Hash + Clone> ObjectGraph<T> {
             let n_from = self.obj_to_node[from];
             let n_to = self.obj_to_node[to];
             self.g.has_edge(n_from, n_to)
+        }
+    }
+
+    pub fn get_node_count(&self) -> usize {
+        self.g.get_node_count()
+    }
+
+    pub fn get_node_index(&self, node: &T) -> Option<usize> {
+        self.obj_to_node.get(node).copied()
+    }
+
+    pub fn get_object(&self, index: usize) -> Option<&T> {
+        self.node_to_obj.get(index)
+    }
+
+    pub fn get_edges_from_index(&self, index: usize) -> impl Iterator<Item = usize> + '_ {
+        self.g.edges[index].iter().copied()
+    }
+
+    pub fn transposed(self) -> Self {
+        Self {
+            g: self.g.transposed(),
+            ..self
         }
     }
 
@@ -114,6 +138,7 @@ impl<T: Eq + Hash + Clone + fmt::Display> fmt::Display for ObjectGraph<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct Graph {
     edges: Vec<Vec<usize>>,
 }
@@ -150,6 +175,17 @@ impl Graph {
 
     pub fn has_edge(&self, from: usize, to: usize) -> bool {
         self.edges[from].contains(&to)
+    }
+
+    pub fn transposed(self) -> Graph {
+        let mut r = Graph::new();
+        r.edges.resize(self.edges.len(), Vec::new());
+        for (from, tos) in self.edges.into_iter().enumerate() {
+            for to in tos {
+                r.add_edge(to, from);
+            }
+        }
+        r
     }
 
     /// Find strongly connected components.

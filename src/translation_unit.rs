@@ -56,6 +56,12 @@ impl TranslationUnit {
         }
     }
 
+    pub fn enforce_ssa(&mut self) {
+        for f in self.functions.iter_mut() {
+            f.enforce_ssa(&mut self.scope);
+        }
+    }
+
     fn add_declaration(&mut self, n: Node<Declaration>, ec: &mut ErrorCollector) -> Result<(), ()> {
         let decl = n.node;
         let (mut type_builder, storage_class, _extra) =

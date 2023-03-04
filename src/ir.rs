@@ -1,4 +1,4 @@
-use std::fmt::Formatter;
+use std::{collections::HashSet, fmt::Formatter};
 
 use crate::machine;
 
@@ -202,7 +202,7 @@ impl Op {
             Op::Not(op) => op.is_write_to_register(reg),
             Op::Compare(op) => op.is_write_to_register(reg),
             Op::Conv(op) => op.is_write_to_register(reg),
-            Op::Store(_) => false,
+            Op::Store(op) => op.is_write_to_register(reg),
             Op::Load(op) => op.is_write_to_register(reg),
             Op::Call(op) => op.is_write_to_register(reg),
             Op::Memcpy(_) => false,
@@ -231,7 +231,7 @@ impl Op {
             Op::Compare(op) => op.is_read_from_register(reg),
             Op::Conv(op) => op.is_read_from_register(reg),
             Op::Store(op) => op.is_read_from_register(reg),
-            Op::Load(_) => false,
+            Op::Load(op) => op.is_read_from_register(reg),
             Op::Call(op) => op.is_read_from_register(reg),
             Op::Memcpy(op) => op.is_read_from_register(reg),
             #[cfg(test)]
@@ -294,6 +294,72 @@ impl Op {
             Op::Dummy(_) => false,
         }
     }
+
+    pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
+        match self {
+            Op::Copy(op) => op.collect_read_regs(set),
+            Op::Bool(op) => op.collect_read_regs(set),
+            Op::BoolInv(op) => op.collect_read_regs(set),
+            Op::Add(op) => op.collect_read_regs(set),
+            Op::Sub(op) => op.collect_read_regs(set),
+            Op::Mul(op) => op.collect_read_regs(set),
+            Op::Div(op) => op.collect_read_regs(set),
+            Op::Mod(op) => op.collect_read_regs(set),
+            Op::BAnd(op) => op.collect_read_regs(set),
+            Op::BOr(op) => op.collect_read_regs(set),
+            Op::BXor(op) => op.collect_read_regs(set),
+            Op::LShift(op) => op.collect_read_regs(set),
+            Op::RShift(op) => op.collect_read_regs(set),
+            Op::Neg(op) => op.collect_read_regs(set),
+            Op::Not(op) => op.collect_read_regs(set),
+            Op::Compare(op) => op.collect_read_regs(set),
+            Op::Conv(op) => op.collect_read_regs(set),
+            Op::Store(op) => op.collect_read_regs(set),
+            Op::Load(op) => op.collect_read_regs(set),
+            Op::Call(op) => op.collect_read_regs(set),
+            Op::Memcpy(op) => op.collect_read_regs(set),
+            #[cfg(test)]
+            Op::Dummy(_) => (),
+        }
+    }
+
+    pub fn collect_set_regs(&self, set: &mut HashSet<Reg>) {
+        match self {
+            Op::Copy(op) => op.collect_set_regs(set),
+            Op::Bool(op) => op.collect_set_regs(set),
+            Op::BoolInv(op) => op.collect_set_regs(set),
+            Op::Add(op) => op.collect_set_regs(set),
+            Op::Sub(op) => op.collect_set_regs(set),
+            Op::Mul(op) => op.collect_set_regs(set),
+            Op::Div(op) => op.collect_set_regs(set),
+            Op::Mod(op) => op.collect_set_regs(set),
+            Op::BAnd(op) => op.collect_set_regs(set),
+            Op::BOr(op) => op.collect_set_regs(set),
+            Op::BXor(op) => op.collect_set_regs(set),
+            Op::LShift(op) => op.collect_set_regs(set),
+            Op::RShift(op) => op.collect_set_regs(set),
+            Op::Neg(op) => op.collect_set_regs(set),
+            Op::Not(op) => op.collect_set_regs(set),
+            Op::Compare(op) => op.collect_set_regs(set),
+            Op::Conv(op) => op.collect_set_regs(set),
+            Op::Store(op) => op.collect_set_regs(set),
+            Op::Load(op) => op.collect_set_regs(set),
+            Op::Call(op) => op.collect_set_regs(set),
+            Op::Memcpy(op) => op.collect_set_regs(set),
+            #[cfg(test)]
+            Op::Dummy(_) => (),
+        }
+    }
+}
+
+impl Tail {
+    pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
+        match self {
+            Tail::Jump(_) | Tail::Ret => (),
+            Tail::Cond(c, _, _) => c.collect_regs(set),
+            Tail::Switch(c, _, _, _) => c.collect_regs(set),
+        }
+    }
 }
 
 impl CompareOp {
@@ -303,6 +369,15 @@ impl CompareOp {
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
         self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
+    }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.lhs.collect_regs(regs);
+        self.rhs.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
     }
 }
 
@@ -314,6 +389,14 @@ impl UnaryUnsignedOp {
     fn is_read_from_register(&self, reg: Reg) -> bool {
         self.src.is_reg(reg)
     }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.src.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
+    }
 }
 
 impl BinaryOp {
@@ -323,6 +406,15 @@ impl BinaryOp {
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
         self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
+    }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.lhs.collect_regs(regs);
+        self.rhs.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
     }
 }
 
@@ -334,6 +426,15 @@ impl BinaryUnsignedOp {
     fn is_read_from_register(&self, reg: Reg) -> bool {
         self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
     }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.lhs.collect_regs(regs);
+        self.rhs.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
+    }
 }
 
 impl ShiftOp {
@@ -343,6 +444,15 @@ impl ShiftOp {
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
         self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
+    }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.lhs.collect_regs(regs);
+        self.rhs.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
     }
 }
 
@@ -354,17 +464,47 @@ impl ConvOp {
     fn is_read_from_register(&self, reg: Reg) -> bool {
         self.src.is_reg(reg)
     }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.src.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
+    }
 }
 
 impl StoreOp {
     fn is_read_from_register(&self, reg: Reg) -> bool {
-        self.src.is_reg(reg)
+        self.src.is_reg(reg) || self.dst_addr.is_reg(reg)
     }
+
+    fn is_write_to_register(&self, _reg: Reg) -> bool {
+        false
+    }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.src.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, _regs: &mut HashSet<Reg>) {}
 }
 
 impl LoadOp {
     fn is_write_to_register(&self, reg: Reg) -> bool {
         self.dst.is_reg(reg)
+    }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.src_addr.is_reg(reg)
+    }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.src_addr.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
     }
 }
 
@@ -387,12 +527,29 @@ impl CallOp {
         }
         false
     }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        for (a, _) in &self.args {
+            a.collect_regs(regs);
+        }
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.as_ref().map(|(dst, _)| dst.collect_regs(regs));
+    }
 }
 
 impl MemcpyOp {
     fn is_read_from_register(&self, reg: Reg) -> bool {
         self.src_addr.is_reg(reg) || self.dst_addr.is_reg(reg)
     }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.src_addr.collect_regs(regs);
+        self.dst_addr.collect_regs(regs);
+    }
+
+    fn collect_set_regs(&self, _regs: &mut HashSet<Reg>) {}
 }
 
 impl VarLocation {
@@ -403,6 +560,12 @@ impl VarLocation {
             false
         }
     }
+
+    fn collect_regs(&self, regs: &mut HashSet<Reg>) {
+        if let VarLocation::Local(n) = self {
+            regs.insert(*n);
+        }
+    }
 }
 
 impl Scalar {
@@ -411,6 +574,12 @@ impl Scalar {
             x.is_reg(reg)
         } else {
             false
+        }
+    }
+
+    fn collect_regs(&self, regs: &mut HashSet<Reg>) {
+        if let Scalar::Var(x) = self {
+            x.collect_regs(regs);
         }
     }
 }

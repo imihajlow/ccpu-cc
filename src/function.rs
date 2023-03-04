@@ -2,8 +2,11 @@ use std::fmt::Formatter;
 
 use crate::{
     block_emitter::BlockEmitter,
-    compile, flush, ir,
+    compile, flush,
+    graph::ObjectGraph,
+    ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
+    ssa,
 };
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
@@ -107,6 +110,10 @@ impl Function {
             modified |= simplify_jumps(&mut self.body);
             modified |= merge_chains(&mut self.body);
         }
+    }
+
+    pub fn enforce_ssa(&mut self, scope: &mut NameScope) {
+        ssa::enforce_ssa(&mut self.body, scope)
     }
 
     #[cfg(test)]

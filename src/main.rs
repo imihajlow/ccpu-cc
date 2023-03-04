@@ -19,6 +19,7 @@ mod name_scope;
 mod object_location;
 mod opt;
 mod rvalue;
+mod ssa;
 mod string;
 mod struct_union;
 mod translation_unit;
@@ -58,6 +59,7 @@ int send(int a)
     ec.print_issues();
     if let Ok(mut tu) = tu {
         println!("<{}>", tu);
+        tu.enforce_ssa();
         tu.optimize();
         println!("<{}>", tu);
     }
