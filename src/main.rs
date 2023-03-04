@@ -10,6 +10,7 @@ mod enums;
 mod error;
 mod flush;
 mod function;
+mod graph;
 mod initializer;
 mod ir;
 mod lvalue;
