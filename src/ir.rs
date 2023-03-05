@@ -190,31 +190,35 @@ pub struct Function {
 
 impl Op {
     pub fn is_write_to_register(&self, reg: Reg) -> bool {
+        self.get_dst_reg() == Some(reg)
+    }
+
+    pub fn get_dst_reg(&self) -> Option<Reg> {
         match self {
-            Op::Undefined(target) => *target == reg,
-            Op::Copy(op) => op.is_write_to_register(reg),
-            Op::Bool(op) => op.is_write_to_register(reg),
-            Op::BoolInv(op) => op.is_write_to_register(reg),
-            Op::Add(op) => op.is_write_to_register(reg),
-            Op::Sub(op) => op.is_write_to_register(reg),
-            Op::Mul(op) => op.is_write_to_register(reg),
-            Op::Div(op) => op.is_write_to_register(reg),
-            Op::Mod(op) => op.is_write_to_register(reg),
-            Op::BAnd(op) => op.is_write_to_register(reg),
-            Op::BOr(op) => op.is_write_to_register(reg),
-            Op::BXor(op) => op.is_write_to_register(reg),
-            Op::LShift(op) => op.is_write_to_register(reg),
-            Op::RShift(op) => op.is_write_to_register(reg),
-            Op::Neg(op) => op.is_write_to_register(reg),
-            Op::Not(op) => op.is_write_to_register(reg),
-            Op::Compare(op) => op.is_write_to_register(reg),
-            Op::Conv(op) => op.is_write_to_register(reg),
-            Op::Store(op) => op.is_write_to_register(reg),
-            Op::Load(op) => op.is_write_to_register(reg),
-            Op::Call(op) => op.is_write_to_register(reg),
-            Op::Memcpy(_) => false,
+            Op::Undefined(target) => Some(*target),
+            Op::Copy(op) => op.get_dst_reg(),
+            Op::Bool(op) => op.get_dst_reg(),
+            Op::BoolInv(op) => op.get_dst_reg(),
+            Op::Add(op) => op.get_dst_reg(),
+            Op::Sub(op) => op.get_dst_reg(),
+            Op::Mul(op) => op.get_dst_reg(),
+            Op::Div(op) => op.get_dst_reg(),
+            Op::Mod(op) => op.get_dst_reg(),
+            Op::BAnd(op) => op.get_dst_reg(),
+            Op::BOr(op) => op.get_dst_reg(),
+            Op::BXor(op) => op.get_dst_reg(),
+            Op::LShift(op) => op.get_dst_reg(),
+            Op::RShift(op) => op.get_dst_reg(),
+            Op::Neg(op) => op.get_dst_reg(),
+            Op::Not(op) => op.get_dst_reg(),
+            Op::Compare(op) => op.get_dst_reg(),
+            Op::Conv(op) => op.get_dst_reg(),
+            Op::Store(op) => op.get_dst_reg(),
+            Op::Load(op) => op.get_dst_reg(),
+            Op::Call(op) => op.get_dst_reg(),
+            Op::Memcpy(_) => None,
             #[cfg(test)]
-            Op::Dummy(_) => false,
+            Op::Dummy(_) => None,
         }
     }
 
@@ -500,6 +504,14 @@ impl Phi {
         result
     }
 
+    pub fn delete_dsts_from_set(&mut self, set: &HashSet<Reg>) {
+        let old_srcs = mem::replace(&mut self.srcs, HashMap::new());
+        self.srcs = old_srcs
+            .into_iter()
+            .filter(|(dst, _)| !set.contains(dst))
+            .collect();
+    }
+
     pub fn remap_regs(&mut self, map: &HashMap<Reg, Reg>) {
         replace_with_or_abort(&mut self.srcs, |srcs| {
             srcs.into_iter()
@@ -514,11 +526,25 @@ impl Phi {
                 .collect()
         });
     }
+
+    pub fn collect_set_regs(&self, set: &mut HashSet<Reg>) {
+        for (dst, _) in self.srcs.iter() {
+            set.insert(*dst);
+        }
+    }
+
+    pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
+        for (_, src) in self.srcs.iter() {
+            for (_, reg) in src {
+                set.insert(*reg);
+            }
+        }
+    }
 }
 
 impl CompareOp {
-    fn is_write_to_register(&self, reg: Reg) -> bool {
-        self.dst.is_reg(reg)
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
@@ -542,8 +568,8 @@ impl CompareOp {
 }
 
 impl UnaryUnsignedOp {
-    fn is_write_to_register(&self, reg: Reg) -> bool {
-        self.dst.is_reg(reg)
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
@@ -565,8 +591,8 @@ impl UnaryUnsignedOp {
 }
 
 impl BinaryOp {
-    fn is_write_to_register(&self, reg: Reg) -> bool {
-        self.dst.is_reg(reg)
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
@@ -590,8 +616,8 @@ impl BinaryOp {
 }
 
 impl BinaryUnsignedOp {
-    fn is_write_to_register(&self, reg: Reg) -> bool {
-        self.dst.is_reg(reg)
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
@@ -615,8 +641,8 @@ impl BinaryUnsignedOp {
 }
 
 impl ShiftOp {
-    fn is_write_to_register(&self, reg: Reg) -> bool {
-        self.dst.is_reg(reg)
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
@@ -640,8 +666,8 @@ impl ShiftOp {
 }
 
 impl ConvOp {
-    fn is_write_to_register(&self, reg: Reg) -> bool {
-        self.dst.is_reg(reg)
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
@@ -667,8 +693,8 @@ impl StoreOp {
         self.src.is_reg(reg) || self.dst_addr.is_reg(reg)
     }
 
-    fn is_write_to_register(&self, _reg: Reg) -> bool {
-        false
+    fn get_dst_reg(&self) -> Option<Reg> {
+        None
     }
 
     fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
@@ -684,8 +710,8 @@ impl StoreOp {
 }
 
 impl LoadOp {
-    fn is_write_to_register(&self, reg: Reg) -> bool {
-        self.dst.is_reg(reg)
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
@@ -707,11 +733,8 @@ impl LoadOp {
 }
 
 impl CallOp {
-    fn is_write_to_register(&self, reg: Reg) -> bool {
-        self.dst
-            .as_ref()
-            .map(|(dst, _)| dst.is_reg(reg))
-            .unwrap_or(false)
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.as_ref().map(|(dst, _)| dst.get_reg()).flatten()
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
@@ -770,6 +793,14 @@ impl VarLocation {
             x
         } else {
             panic!("not a register");
+        }
+    }
+
+    pub fn get_reg(&self) -> Option<Reg> {
+        if let VarLocation::Local(x) = self {
+            Some(*x)
+        } else {
+            None
         }
     }
 

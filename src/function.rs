@@ -6,6 +6,7 @@ use crate::{
     graph::ObjectGraph,
     ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
+    opt::ssa::delete_unused_regs,
     ssa,
 };
 use lang_c::{
@@ -109,6 +110,7 @@ impl Function {
                 replace_with::replace_with_or_abort_and_return(&mut self.body, drop_orphan_blocks);
             modified |= simplify_jumps(&mut self.body);
             modified |= merge_chains(&mut self.body);
+            modified |= delete_unused_regs(&mut self.body);
         }
     }
 

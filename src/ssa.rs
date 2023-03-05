@@ -90,7 +90,7 @@ fn find_live_regs(blocks: &Vec<ir::Block>) -> Vec<HashSet<ir::Reg>> {
     for group in topo_order.iter().rev() {
         let node_index = scc.get_node_index(&group).unwrap();
         for block_id in group {
-            collect_defined_regs(&blocks[*block_id], &mut defined_regs[node_index]);
+            collect_set_regs(&blocks[*block_id], &mut defined_regs[node_index]);
         }
         for connected in scc.get_edges_from_index(node_index) {
             defined_regs[connected] = defined_regs[connected]
@@ -142,10 +142,8 @@ fn collect_read_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
     block.tail.collect_read_regs(refs);
 }
 
-fn collect_defined_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
+fn collect_set_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
     for op in &block.ops {
         op.collect_set_regs(refs);
-        op.collect_read_regs(refs); // undefined variables
     }
-    block.tail.collect_read_regs(refs); // undefined variables
 }
