@@ -135,6 +135,7 @@ fn update_phi(
         block.phi.add_binding(dst_reg, src_reg, src_index);
     }
 }
+
 fn collect_read_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
     for op in &block.ops {
         op.collect_read_regs(refs);

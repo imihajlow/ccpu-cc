@@ -170,7 +170,7 @@ pub enum Tail {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
-    srcs: HashMap<Reg, Vec<(BlockNumber, Reg)>>,
+    srcs: HashMap<Reg, Vec<(BlockNumber, Scalar)>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -457,9 +457,10 @@ impl Phi {
 
     pub fn add_binding(&mut self, dst: &Reg, src: &Reg, block: usize) {
         if let Some(l) = self.srcs.get_mut(dst) {
-            l.push((block, *src));
+            l.push((block, Scalar::Var(VarLocation::Local(*src))));
         } else {
-            self.srcs.insert(*dst, vec![(block, *src)]);
+            self.srcs
+                .insert(*dst, vec![(block, Scalar::Var(VarLocation::Local(*src)))]);
         }
     }
 
@@ -483,27 +484,6 @@ impl Phi {
         self.srcs.is_empty()
     }
 
-    /**
-     * Delete bindings which have only a single source.
-     *
-     * Return Vec of (dst, src).
-     */
-    pub fn delete_trivial_bindings(&mut self) -> Vec<(Reg, Reg)> {
-        let old_srcs = mem::replace(&mut self.srcs, HashMap::new());
-        let mut new_srcs = HashMap::new();
-        let mut result = Vec::new();
-        for (dst, srcs) in old_srcs.into_iter() {
-            assert_ne!(srcs.len(), 0);
-            if srcs.len() == 1 {
-                result.push((dst, srcs.first().unwrap().1));
-            } else {
-                new_srcs.insert(dst, srcs);
-            }
-        }
-        self.srcs = new_srcs;
-        result
-    }
-
     pub fn delete_dsts_from_set(&mut self, set: &HashSet<Reg>) {
         let old_srcs = mem::replace(&mut self.srcs, HashMap::new());
         self.srcs = old_srcs
@@ -515,13 +495,11 @@ impl Phi {
     pub fn remap_regs(&mut self, map: &HashMap<Reg, Reg>) {
         replace_with_or_abort(&mut self.srcs, |srcs| {
             srcs.into_iter()
-                .map(|(dst, srcs)| {
-                    (
-                        map.get(&dst).copied().unwrap_or(dst),
-                        srcs.into_iter()
-                            .map(|(block, reg)| (block, map.get(&reg).copied().unwrap_or(reg)))
-                            .collect(),
-                    )
+                .map(|(dst, mut srcs)| {
+                    for (_, value) in srcs.iter_mut() {
+                        value.remap_reg(map);
+                    }
+                    (map.get(&dst).copied().unwrap_or(dst), srcs)
                 })
                 .collect()
         });
@@ -535,8 +513,8 @@ impl Phi {
 
     pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
         for (_, src) in self.srcs.iter() {
-            for (_, reg) in src {
-                set.insert(*reg);
+            for (_, val) in src {
+                val.collect_regs(set);
             }
         }
     }
@@ -930,7 +908,7 @@ impl std::fmt::Display for Phi {
             write!(f, "%{} = ", dst)?;
             for s in srcs
                 .iter()
-                .map(|(n, r)| format!("{} -> %{}", n, r))
+                .map(|(n, r)| format!("{} -> {}", n, r))
                 .intersperse(", ".to_string())
             {
                 f.write_str(&s)?;

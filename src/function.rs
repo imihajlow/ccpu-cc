@@ -2,9 +2,7 @@ use std::fmt::Formatter;
 
 use crate::{
     block_emitter::BlockEmitter,
-    compile, flush,
-    graph::ObjectGraph,
-    ir,
+    compile, flush, ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
     opt::ssa::delete_unused_regs,
     ssa,
@@ -117,7 +115,6 @@ impl Function {
     pub fn enforce_ssa(&mut self, scope: &mut NameScope) {
         ssa::enforce_ssa(&mut self.body, scope);
         println!("{}", self);
-        // ssa::delete_trivial_phi(&mut self.body);
     }
 
     #[cfg(test)]
