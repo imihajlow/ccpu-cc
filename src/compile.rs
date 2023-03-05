@@ -354,6 +354,12 @@ pub fn compile_declaration(
             scope.declare(&name, t, &stclass, None, init_declarator.span, ec)?;
             if let Some(initializer) = init_declarator.node.initializer {
                 compile_initializer(initializer, &name, init_declarator.span, scope, be, ec)?;
+            } else {
+                let lvalue = scope.get_lvalue(&name, init_declarator.span, ec)?;
+                if let Some(var) = lvalue.get_var() {
+                    let reg = var.unwrap_reg();
+                    be.append_operation(ir::Op::Undefined(reg));
+                }
             }
         };
     }

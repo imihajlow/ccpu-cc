@@ -20,6 +20,7 @@ fn test_member_1() {
                 lhs: ir::Scalar::FramePointer,
                 rhs: ir::Scalar::ConstInt(0)
             }),
+            ir::Op::Undefined(1),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 width: ir::Width::PTR_WIDTH,
@@ -52,6 +53,8 @@ fn test_member_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 width: ir::Width::PTR_WIDTH,
@@ -130,6 +133,7 @@ fn test_member_4() {
                 lhs: ir::Scalar::FramePointer,
                 rhs: ir::Scalar::ConstInt(0)
             }),
+            ir::Op::Undefined(1),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 width: ir::Width::PTR_WIDTH,

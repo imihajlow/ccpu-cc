@@ -12,6 +12,9 @@ fn test_shift_1() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::LShift(ir::ShiftOp {
                 dst: VarLocation::Local(3),
                 lhs_width: ir::Width::Dword,
@@ -38,6 +41,8 @@ fn test_shift_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::RShift(ir::ShiftOp {
                 dst: VarLocation::Local(2),
                 lhs_width: ir::Width::Dword,

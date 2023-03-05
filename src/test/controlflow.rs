@@ -11,11 +11,16 @@ fn test_ternary_1() {
     assert_eq!(body.len(), 4);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Bool(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(3),
-            src: ir::Scalar::Var(VarLocation::Local(0)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
+            ir::Op::Bool(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(3),
+                src: ir::Scalar::Var(VarLocation::Local(0)),
+                width: ir::Width::Word
+            })
+        ]
     );
     assert_eq!(
         body[0].tail,

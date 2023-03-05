@@ -10,11 +10,14 @@ fn test_assign_1() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::ConstInt(15),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::ConstInt(15),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -27,6 +30,7 @@ fn test_assign_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
             ir::Op::Conv(ir::ConvOp {
                 dst: VarLocation::Local(1),
                 dst_sign: false,
@@ -52,11 +56,14 @@ fn test_assign_3() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Store(ir::StoreOp {
-            dst_addr: ir::Scalar::Var(VarLocation::Local(0)),
-            src: ir::Scalar::ConstInt(15),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Store(ir::StoreOp {
+                dst_addr: ir::Scalar::Var(VarLocation::Local(0)),
+                src: ir::Scalar::ConstInt(15),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -68,11 +75,14 @@ fn test_assign_4() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::ConstInt(15),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::ConstInt(15),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -84,11 +94,15 @@ fn test_assign_5() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -108,6 +122,7 @@ fn test_assign_6() {
                 lhs: ir::Scalar::FramePointer,
                 rhs: ir::Scalar::ConstInt(0)
             }),
+            ir::Op::Undefined(0),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
                 src: ir::Scalar::Var(VarLocation::Local(1)),
@@ -125,11 +140,15 @@ fn test_assign_7() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -141,11 +160,15 @@ fn test_assign_8() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -157,11 +180,15 @@ fn test_assign_9() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -173,11 +200,15 @@ fn test_assign_10() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -189,11 +220,15 @@ fn test_assign_11() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 

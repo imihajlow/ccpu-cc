@@ -12,6 +12,9 @@ fn test_rel_1() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::LessThan,
                 dst_width: ir::Width::Word,
@@ -40,6 +43,9 @@ fn test_rel_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Conv(ir::ConvOp {
                 dst: VarLocation::Local(3),
                 dst_width: ir::Width::Dword,
@@ -76,6 +82,9 @@ fn test_rel_3() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::LessOrEqual,
                 dst_width: ir::Width::Word,
@@ -104,6 +113,9 @@ fn test_rel_4() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::GreaterThan,
                 dst_width: ir::Width::Word,
@@ -132,6 +144,9 @@ fn test_rel_5() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::Equal,
                 dst_width: ir::Width::Word,
@@ -160,6 +175,9 @@ fn test_rel_6() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::NotEqual,
                 dst_width: ir::Width::Word,

@@ -149,6 +149,14 @@ impl TypedLValue {
         }
     }
 
+    pub fn get_var(self) -> Option<VarLocation> {
+        if let LValue::Var(v) = self.lv {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
     fn compile_member_expression(
         expr: Node<MemberExpression>,
         scope: &mut NameScope,

@@ -11,11 +11,15 @@ fn test_lvalue_1() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Store(ir::StoreOp {
-            dst_addr: ir::Scalar::Var(VarLocation::Local(0)),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Store(ir::StoreOp {
+                dst_addr: ir::Scalar::Var(VarLocation::Local(0)),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -29,6 +33,9 @@ fn test_lvalue_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Mul(ir::BinaryOp {
                 dst: VarLocation::Local(3),
                 lhs: ir::Scalar::Var(VarLocation::Local(1)),
@@ -62,6 +69,9 @@ fn test_lvalue_3() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Conv(ir::ConvOp {
                 dst: VarLocation::Local(3),
                 dst_width: ir::Width::Word,
@@ -111,6 +121,7 @@ fn test_lvalue_member_1() {
                 lhs: ir::Scalar::FramePointer,
                 rhs: ir::Scalar::ConstInt(0)
             }),
+            ir::Op::Undefined(1),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 width: ir::Width::PTR_WIDTH,
@@ -138,6 +149,8 @@ fn test_lvalue_member_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 width: ir::Width::PTR_WIDTH,
@@ -211,6 +224,7 @@ fn test_lvalue_member_4() {
                 lhs: ir::Scalar::FramePointer,
                 rhs: ir::Scalar::ConstInt(0)
             }),
+            ir::Op::Undefined(1),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 width: ir::Width::Word,

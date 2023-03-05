@@ -11,11 +11,15 @@ fn test_unary_1() {
     assert_eq!(body.len(), 1);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -29,6 +33,8 @@ fn test_unary_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Neg(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(2),
                 src: ir::Scalar::Var(VarLocation::Local(1)),
@@ -61,6 +67,8 @@ fn test_unary_3() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Not(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(2),
                 src: ir::Scalar::Var(VarLocation::Local(1)),
@@ -85,6 +93,8 @@ fn test_unary_4() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::BoolInv(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(2),
                 src: ir::Scalar::Var(VarLocation::Local(1)),
@@ -109,6 +119,8 @@ fn test_unary_5() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 lhs: ir::Scalar::Var(VarLocation::Local(1)),
@@ -140,6 +152,8 @@ fn test_unary_6() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Mul(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 lhs: ir::Scalar::ConstInt(1),
@@ -178,6 +192,8 @@ fn test_unary_7() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(2),
                 src: ir::Scalar::Var(VarLocation::Local(1)),
@@ -214,6 +230,8 @@ fn test_unary_8() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(2),
                 src: ir::Scalar::Var(VarLocation::Local(1)),
@@ -268,6 +286,8 @@ fn test_addr_1() {
                 width: ir::Width::PTR_WIDTH,
                 sign: false,
             }),
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(0),
                 src: ir::Scalar::Var(VarLocation::Local(2)),
@@ -289,11 +309,15 @@ fn test_addr_2() {
     assert_eq!(fixed_regs.len(), 0);
     assert_eq!(
         body[0].ops,
-        vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
-            src: ir::Scalar::Var(VarLocation::Local(1)),
-            width: ir::Width::Word
-        })]
+        vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(0),
+                src: ir::Scalar::Var(VarLocation::Local(1)),
+                width: ir::Width::Word
+            })
+        ]
     );
 }
 
@@ -310,6 +334,8 @@ fn test_deref_1() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Load(ir::LoadOp {
                 dst: VarLocation::Local(2),
                 src_addr: ir::Scalar::Var(VarLocation::Local(1)),

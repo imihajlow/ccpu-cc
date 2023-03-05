@@ -12,6 +12,9 @@ fn test_add_1() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(3),
                 width: ir::Width::Word,
@@ -38,6 +41,9 @@ fn test_add_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Conv(ir::ConvOp {
                 dst: VarLocation::Local(3),
                 src: ir::Scalar::Var(VarLocation::Local(2)),
@@ -72,6 +78,9 @@ fn test_add_ptr_1() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Mul(ir::BinaryOp {
                 dst: VarLocation::Local(3),
                 width: ir::Width::Word,
@@ -105,6 +114,8 @@ fn test_assign_add_1() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Add(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 width: ir::Width::Word,
@@ -131,6 +142,8 @@ fn test_assign_add_2() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Load(ir::LoadOp {
                 dst: VarLocation::Local(2),
                 src_addr: ir::Scalar::Var(VarLocation::Local(0)),
@@ -162,6 +175,8 @@ fn test_index_1() {
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::Undefined(0),
+            ir::Op::Undefined(1),
             ir::Op::Mul(ir::BinaryOp {
                 dst: VarLocation::Local(2),
                 width: ir::Width::Word,
