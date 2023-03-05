@@ -69,7 +69,7 @@ impl BlockEmitter {
         blocks.insert(
             self.current_id,
             LabeledBlock {
-                phi: Vec::new(),
+                phi: ir::Phi::new(),
                 ops: self.current_ops,
                 tail: LabeledTail::Tail(ir::Tail::Ret),
             },
@@ -829,7 +829,7 @@ impl BlockEmitter {
             self.current_id,
             LabeledBlock {
                 ops: current_ops,
-                phi: Vec::new(),
+                phi: ir::Phi::new(),
                 tail,
             },
         );

@@ -95,21 +95,7 @@ fn insert_mem_ops(
             i += 1;
         }
     }
-    let mut to_visit = Vec::new();
-    match &body[block_number].tail {
-        ir::Tail::Ret => (),
-        ir::Tail::Jump(n) => to_visit.push(*n),
-        ir::Tail::Cond(_, n, m) => {
-            to_visit.push(*n);
-            to_visit.push(*m);
-        }
-        ir::Tail::Switch(_, _, cases, default) => {
-            for (_, n) in cases.iter() {
-                to_visit.push(*n);
-            }
-            to_visit.push(*default);
-        }
-    };
+    let to_visit = body[block_number].tail.get_connections();
     let mut extra_load = false;
     let mut extra_store = false;
     for n in &to_visit {

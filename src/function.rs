@@ -113,7 +113,9 @@ impl Function {
     }
 
     pub fn enforce_ssa(&mut self, scope: &mut NameScope) {
-        ssa::enforce_ssa(&mut self.body, scope)
+        ssa::enforce_ssa(&mut self.body, scope);
+        println!("{}", self);
+        // ssa::delete_trivial_phi(&mut self.body);
     }
 
     #[cfg(test)]

@@ -552,15 +552,15 @@ impl NameScope {
         }
     }
 
-    fn get_tagged_type(&self, id: usize) -> &Tagged {
-        let result = &self.tagged_types[id].0;
-        result
-    }
-
-    fn alloc_reg(&mut self) -> Reg {
+    pub fn alloc_reg(&mut self) -> Reg {
         let r = self.last_reg;
         self.last_reg += 1;
         r
+    }
+
+    fn get_tagged_type(&self, id: usize) -> &Tagged {
+        let result = &self.tagged_types[id].0;
+        result
     }
 
     fn alloc_global_var_id(&mut self, name: &str) -> GlobalVarId {

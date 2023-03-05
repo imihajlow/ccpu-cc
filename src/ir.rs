@@ -1,6 +1,12 @@
-use std::{collections::HashSet, fmt::Formatter};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Formatter,
+    mem,
+};
 
-use crate::machine;
+use replace_with::replace_with_or_abort;
+
+use crate::{machine, name_scope::NameScope};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
 pub enum Width {
@@ -163,13 +169,12 @@ pub enum Tail {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
-    dst: Reg,
-    srcs: Vec<(BlockNumber, Reg)>,
+    srcs: HashMap<Reg, Vec<(BlockNumber, Reg)>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenericBlock<GTail> {
-    pub phi: Vec<Phi>,
+    pub phi: Phi,
     pub ops: Vec<Op>,
     pub tail: GTail,
 }
@@ -350,6 +355,38 @@ impl Op {
             Op::Dummy(_) => (),
         }
     }
+
+    /**
+     * Remap registers according to the map.
+     * If scope is given, for each assignment to a register create its new version and update the map.
+     */
+    pub fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        match self {
+            Op::Copy(op) => op.remap_regs(map, scope),
+            Op::Bool(op) => op.remap_regs(map, scope),
+            Op::BoolInv(op) => op.remap_regs(map, scope),
+            Op::Add(op) => op.remap_regs(map, scope),
+            Op::Sub(op) => op.remap_regs(map, scope),
+            Op::Mul(op) => op.remap_regs(map, scope),
+            Op::Div(op) => op.remap_regs(map, scope),
+            Op::Mod(op) => op.remap_regs(map, scope),
+            Op::BAnd(op) => op.remap_regs(map, scope),
+            Op::BOr(op) => op.remap_regs(map, scope),
+            Op::BXor(op) => op.remap_regs(map, scope),
+            Op::LShift(op) => op.remap_regs(map, scope),
+            Op::RShift(op) => op.remap_regs(map, scope),
+            Op::Neg(op) => op.remap_regs(map, scope),
+            Op::Not(op) => op.remap_regs(map, scope),
+            Op::Compare(op) => op.remap_regs(map, scope),
+            Op::Conv(op) => op.remap_regs(map, scope),
+            Op::Store(op) => op.remap_regs(map, scope),
+            Op::Load(op) => op.remap_regs(map, scope),
+            Op::Call(op) => op.remap_regs(map, scope),
+            Op::Memcpy(op) => op.remap_regs(map, scope),
+            #[cfg(test)]
+            Op::Dummy(_) => (),
+        }
+    }
 }
 
 impl Tail {
@@ -359,6 +396,105 @@ impl Tail {
             Tail::Cond(c, _, _) => c.collect_regs(set),
             Tail::Switch(c, _, _, _) => c.collect_regs(set),
         }
+    }
+
+    pub fn get_connections(&self) -> Vec<usize> {
+        let mut to_visit = Vec::new();
+        match self {
+            Tail::Ret => (),
+            Tail::Jump(n) => to_visit.push(*n),
+            Tail::Cond(_, n, m) => {
+                to_visit.push(*n);
+                to_visit.push(*m);
+            }
+            Tail::Switch(_, _, cases, default) => {
+                for (_, n) in cases.iter() {
+                    to_visit.push(*n);
+                }
+                to_visit.push(*default);
+            }
+        };
+        to_visit
+    }
+
+    pub fn remap_regs(&mut self, map: &HashMap<Reg, Reg>) {
+        match self {
+            Tail::Jump(_) | Tail::Ret => (),
+            Tail::Cond(c, _, _) => c.remap_reg(map),
+            Tail::Switch(c, _, _, _) => c.remap_reg(map),
+        }
+    }
+}
+
+impl Phi {
+    pub fn new() -> Self {
+        Self {
+            srcs: HashMap::new(),
+        }
+    }
+
+    pub fn add_binding(&mut self, dst: &Reg, src: &Reg, block: usize) {
+        if let Some(l) = self.srcs.get_mut(dst) {
+            l.push((block, *src));
+        } else {
+            self.srcs.insert(*dst, vec![(block, *src)]);
+        }
+    }
+
+    pub fn with_adjusted_block_ids(self, offsets: &Vec<usize>) -> Self {
+        let srcs = self
+            .srcs
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    k,
+                    v.into_iter()
+                        .map(|(block_id, var)| (block_id - offsets[block_id], var))
+                        .collect(),
+                )
+            })
+            .collect();
+        Self { srcs }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.srcs.is_empty()
+    }
+
+    /**
+     * Delete bindings which have only a single source.
+     *
+     * Return Vec of (dst, src).
+     */
+    pub fn delete_trivial_bindings(&mut self) -> Vec<(Reg, Reg)> {
+        let old_srcs = mem::replace(&mut self.srcs, HashMap::new());
+        let mut new_srcs = HashMap::new();
+        let mut result = Vec::new();
+        for (dst, srcs) in old_srcs.into_iter() {
+            assert_ne!(srcs.len(), 0);
+            if srcs.len() == 1 {
+                result.push((dst, srcs.first().unwrap().1));
+            } else {
+                new_srcs.insert(dst, srcs);
+            }
+        }
+        self.srcs = new_srcs;
+        result
+    }
+
+    pub fn remap_regs(&mut self, map: &HashMap<Reg, Reg>) {
+        replace_with_or_abort(&mut self.srcs, |srcs| {
+            srcs.into_iter()
+                .map(|(dst, srcs)| {
+                    (
+                        map.get(&dst).copied().unwrap_or(dst),
+                        srcs.into_iter()
+                            .map(|(block, reg)| (block, map.get(&reg).copied().unwrap_or(reg)))
+                            .collect(),
+                    )
+                })
+                .collect()
+        });
     }
 }
 
@@ -379,6 +515,12 @@ impl CompareOp {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        self.lhs.remap_reg(map);
+        self.rhs.remap_reg(map);
+        self.dst.remap_reg_to_new_version(map, scope);
+    }
 }
 
 impl UnaryUnsignedOp {
@@ -396,6 +538,11 @@ impl UnaryUnsignedOp {
 
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
+    }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        self.src.remap_reg(map);
+        self.dst.remap_reg_to_new_version(map, scope);
     }
 }
 
@@ -416,6 +563,12 @@ impl BinaryOp {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        self.lhs.remap_reg(map);
+        self.rhs.remap_reg(map);
+        self.dst.remap_reg_to_new_version(map, scope);
+    }
 }
 
 impl BinaryUnsignedOp {
@@ -434,6 +587,12 @@ impl BinaryUnsignedOp {
 
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
+    }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        self.lhs.remap_reg(map);
+        self.rhs.remap_reg(map);
+        self.dst.remap_reg_to_new_version(map, scope);
     }
 }
 
@@ -454,6 +613,12 @@ impl ShiftOp {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        self.lhs.remap_reg(map);
+        self.rhs.remap_reg(map);
+        self.dst.remap_reg_to_new_version(map, scope);
+    }
 }
 
 impl ConvOp {
@@ -472,6 +637,11 @@ impl ConvOp {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        self.src.remap_reg(map);
+        self.dst.remap_reg_to_new_version(map, scope);
+    }
 }
 
 impl StoreOp {
@@ -488,6 +658,11 @@ impl StoreOp {
     }
 
     fn collect_set_regs(&self, _regs: &mut HashSet<Reg>) {}
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, _scope: Option<&mut NameScope>) {
+        self.src.remap_reg(map);
+        self.dst_addr.remap_reg(map);
+    }
 }
 
 impl LoadOp {
@@ -505,6 +680,11 @@ impl LoadOp {
 
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
+    }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        self.src_addr.remap_reg(map);
+        self.dst.remap_reg_to_new_version(map, scope);
     }
 }
 
@@ -537,6 +717,15 @@ impl CallOp {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.as_ref().map(|(dst, _)| dst.collect_regs(regs));
     }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        for (a, _) in &mut self.args {
+            a.remap_reg(map);
+        }
+        self.dst
+            .as_mut()
+            .map(|(dst, _)| dst.remap_reg_to_new_version(map, scope));
+    }
 }
 
 impl MemcpyOp {
@@ -550,6 +739,11 @@ impl MemcpyOp {
     }
 
     fn collect_set_regs(&self, _regs: &mut HashSet<Reg>) {}
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, _scope: Option<&mut NameScope>) {
+        self.src_addr.remap_reg(map);
+        self.dst_addr.remap_reg(map);
+    }
 }
 
 impl VarLocation {
@@ -566,6 +760,33 @@ impl VarLocation {
             regs.insert(*n);
         }
     }
+
+    fn remap_reg(&mut self, map: &HashMap<Reg, Reg>) {
+        if let VarLocation::Local(n) = self {
+            *n = map.get(n).copied().unwrap_or(*n);
+        }
+    }
+
+    /**
+     * If scope is given, allocate a new register, remap this location to its value and update the map.
+     * If scope is none, remap the register according to the map if it exists there.
+     */
+    fn remap_reg_to_new_version(
+        &mut self,
+        map: &mut HashMap<Reg, Reg>,
+        scope: Option<&mut NameScope>,
+    ) {
+        if let VarLocation::Local(n) = self {
+            let reg = if let Some(scope) = scope {
+                let reg = scope.alloc_reg();
+                map.insert(*n, reg);
+                reg
+            } else {
+                map.get(n).copied().unwrap_or(*n)
+            };
+            *n = reg;
+        }
+    }
 }
 
 impl Scalar {
@@ -580,6 +801,12 @@ impl Scalar {
     fn collect_regs(&self, regs: &mut HashSet<Reg>) {
         if let Scalar::Var(x) = self {
             x.collect_regs(regs);
+        }
+    }
+
+    fn remap_reg(&mut self, map: &HashMap<Reg, Reg>) {
+        if let Scalar::Var(v) = self {
+            v.remap_reg(map);
         }
     }
 }
@@ -624,9 +851,7 @@ where
     GTail: std::fmt::Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        for phi in &self.phi {
-            writeln!(f, "{}", phi)?;
-        }
+        writeln!(f, "{}", self.phi)?;
         for op in &self.ops {
             writeln!(f, "{}", op)?;
         }
@@ -636,14 +861,16 @@ where
 
 impl std::fmt::Display for Phi {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "r{} = ", self.dst)?;
-        for s in self
-            .srcs
-            .iter()
-            .map(|(n, r)| format!("{} -> r{}", n, r))
-            .intersperse(", ".to_string())
-        {
-            f.write_str(&s)?;
+        for (dst, srcs) in self.srcs.iter() {
+            write!(f, "%{} = ", dst)?;
+            for s in srcs
+                .iter()
+                .map(|(n, r)| format!("{} -> %{}", n, r))
+                .intersperse(", ".to_string())
+            {
+                f.write_str(&s)?;
+            }
+            f.write_str("\n")?;
         }
         Ok(())
     }

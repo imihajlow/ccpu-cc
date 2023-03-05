@@ -1,10 +1,46 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::graph::ObjectGraph;
 use crate::{ir, name_scope::NameScope};
 
 pub fn enforce_ssa(blocks: &mut Vec<ir::Block>, scope: &mut NameScope) {
     let live_regs = find_live_regs(blocks);
+
+    // mappings from original register number to new register number on block entry
+    let entry_mappings = {
+        let mut entry_mappings = Vec::with_capacity(blocks.len());
+        for live in &live_regs {
+            let mut map = HashMap::new();
+            for reg in live {
+                let new_reg = scope.alloc_reg();
+                map.insert(*reg, new_reg);
+            }
+            entry_mappings.push(map);
+        }
+        entry_mappings
+    };
+
+    // updated mappings from original register number to new register number for each block
+    let mut local_mappings = entry_mappings.clone();
+    for cur_block_index in 0..blocks.len() {
+        let map = &mut local_mappings[cur_block_index];
+        for op in &mut blocks[cur_block_index].ops {
+            op.remap_regs(map, Some(scope));
+        }
+        blocks[cur_block_index].tail.remap_regs(map);
+        for dst_index in blocks[cur_block_index].tail.get_connections() {
+            update_phi(
+                blocks,
+                dst_index,
+                cur_block_index,
+                &live_regs,
+                &entry_mappings[dst_index],
+                &map,
+            );
+        }
+    }
+
+    // delete_trivial_phi(blocks);
 }
 
 fn build_block_graph(blocks: &Vec<ir::Block>) -> ObjectGraph<usize> {
@@ -84,6 +120,21 @@ fn find_live_regs(blocks: &Vec<ir::Block>) -> Vec<HashSet<ir::Reg>> {
     live_regs
 }
 
+fn update_phi(
+    blocks: &mut Vec<ir::Block>,
+    dst_index: usize,
+    src_index: usize,
+    live: &Vec<HashSet<ir::Reg>>,
+    dst_map: &HashMap<ir::Reg, ir::Reg>,
+    src_map: &HashMap<ir::Reg, ir::Reg>,
+) {
+    let block = &mut blocks[dst_index];
+    for orig_reg in live[dst_index].intersection(&live[src_index]) {
+        let dst_reg = dst_map.get(orig_reg).unwrap();
+        let src_reg = src_map.get(orig_reg).unwrap();
+        block.phi.add_binding(dst_reg, src_reg, src_index);
+    }
+}
 fn collect_read_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
     for op in &block.ops {
         op.collect_read_regs(refs);

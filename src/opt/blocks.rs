@@ -70,19 +70,8 @@ pub fn merge_chains(blocks: &mut Vec<ir::Block>) -> bool {
     let mut ref_counts = vec![0; blocks.len()];
     ref_counts[0] = 1;
     for block in blocks.iter() {
-        match &block.tail {
-            ir::Tail::Jump(n) => ref_counts[*n] += 1,
-            ir::Tail::Cond(_, then_id, else_id) => {
-                ref_counts[*then_id] += 1;
-                ref_counts[*else_id] += 1;
-            }
-            ir::Tail::Switch(_, _, cases, default) => {
-                for (_, id) in cases {
-                    ref_counts[*id] += 1;
-                }
-                ref_counts[*default] += 1;
-            }
-            ir::Tail::Ret => (),
+        for next in block.tail.get_connections() {
+            ref_counts[next] += 1;
         }
     }
     let mut merge_with = Vec::with_capacity(blocks.len());
@@ -99,6 +88,7 @@ pub fn merge_chains(blocks: &mut Vec<ir::Block>) -> bool {
         for i in 0..blocks.len() {
             if let Some(n) = merge_with[i] {
                 if merge_with[n].is_none() {
+                    assert!(blocks[n].phi.is_empty());
                     result = true;
                     let mut ops = mem::replace(&mut blocks[n].ops, Vec::new());
                     blocks[i].ops.append(&mut ops);
@@ -154,11 +144,14 @@ fn adjust_block_ids(block: ir::Block, offsets: &Vec<usize>) -> ir::Block {
         }
         ir::Tail::Ret => ir::Tail::Ret,
     };
-    ir::Block { tail, ..block }
+    let phi = block.phi.with_adjusted_block_ids(offsets);
+    ir::Block { tail, phi, ..block }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::ir::Phi;
+
     use super::*;
 
     #[test]
@@ -169,32 +162,32 @@ mod test {
         */
         let blocks = vec![
             ir::Block {
-                phi: Vec::new(),
+                phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(0)],
                 tail: ir::Tail::Jump(2),
             },
             ir::Block {
-                phi: Vec::new(),
+                phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(1)],
                 tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 0, 2),
             },
             ir::Block {
-                phi: Vec::new(),
+                phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(2)],
                 tail: ir::Tail::Jump(4),
             },
             ir::Block {
-                phi: Vec::new(),
+                phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(3)],
                 tail: ir::Tail::Jump(4),
             },
             ir::Block {
-                phi: Vec::new(),
+                phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(4)],
                 tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 2, 5),
             },
             ir::Block {
-                phi: Vec::new(),
+                phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(5)],
                 tail: ir::Tail::Jump(0),
             },
@@ -206,22 +199,22 @@ mod test {
             new_blocks,
             vec![
                 ir::Block {
-                    phi: Vec::new(),
+                    phi: Phi::new(),
                     ops: vec![ir::Op::Dummy(0)],
                     tail: ir::Tail::Jump(1),
                 },
                 ir::Block {
-                    phi: Vec::new(),
+                    phi: Phi::new(),
                     ops: vec![ir::Op::Dummy(2)],
                     tail: ir::Tail::Jump(2),
                 },
                 ir::Block {
-                    phi: Vec::new(),
+                    phi: Phi::new(),
                     ops: vec![ir::Op::Dummy(4)],
                     tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 1, 3),
                 },
                 ir::Block {
-                    phi: Vec::new(),
+                    phi: Phi::new(),
                     ops: vec![ir::Op::Dummy(5)],
                     tail: ir::Tail::Jump(0),
                 },
