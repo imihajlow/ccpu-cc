@@ -25,6 +25,7 @@ use crate::{
 pub struct BlockEmitter {
     next_id: usize,
     current_id: usize,
+    loop_depth: usize,
     blocks: HashMap<usize, LabeledBlock>,
     current_ops: Vec<ir::Op>,
     breaks: Vec<usize>,
@@ -55,6 +56,7 @@ impl BlockEmitter {
         Self {
             next_id: 1,
             current_id: 0,
+            loop_depth: 0,
             blocks: HashMap::new(),
             current_ops: Vec::new(),
             breaks: Vec::new(),
@@ -65,6 +67,7 @@ impl BlockEmitter {
     }
 
     pub fn finalize(self, ec: &mut ErrorCollector) -> Result<Vec<ir::GenericBlock<ir::Tail>>, ()> {
+        assert_eq!(self.loop_depth, 0);
         let mut blocks = self.blocks;
         blocks.insert(
             self.current_id,
@@ -72,6 +75,7 @@ impl BlockEmitter {
                 phi: ir::Phi::new(),
                 ops: self.current_ops,
                 tail: LabeledTail::Tail(ir::Tail::Ret),
+                loop_depth: 0,
             },
         );
         let mut result = Vec::new();
@@ -92,6 +96,7 @@ impl BlockEmitter {
                 phi: block.phi,
                 ops: block.ops,
                 tail,
+                loop_depth: block.loop_depth,
             });
         }
         Ok(result)
@@ -480,6 +485,7 @@ impl BlockEmitter {
             LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
             condition_block_id,
         );
+        self.loop_depth += 1;
 
         let cond_span = whiles.node.expression.span;
         let cond = compile_expression(*whiles.node.expression, scope, self, ec)?;
@@ -506,6 +512,7 @@ impl BlockEmitter {
             LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
             continue_block_id,
         );
+        self.loop_depth -= 1;
 
         Ok(())
     }
@@ -524,6 +531,7 @@ impl BlockEmitter {
             LabeledTail::Tail(ir::Tail::Jump(body_block_id)),
             body_block_id,
         );
+        self.loop_depth += 1;
 
         scope.push();
         self.set_break(continue_block_id);
@@ -550,6 +558,7 @@ impl BlockEmitter {
             )),
             continue_block_id,
         );
+        self.loop_depth -= 1;
         Ok(())
     }
 
@@ -586,6 +595,7 @@ impl BlockEmitter {
             LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
             condition_block_id,
         );
+        self.loop_depth += 1;
 
         if let Some(cond) = fors.node.condition {
             let cond_span = cond.span;
@@ -617,6 +627,7 @@ impl BlockEmitter {
             LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
             continue_block_id,
         );
+        self.loop_depth += 1;
 
         scope.pop_and_collect_initializers();
         Ok(())
@@ -831,6 +842,7 @@ impl BlockEmitter {
                 ops: current_ops,
                 phi: ir::Phi::new(),
                 tail,
+                loop_depth: self.loop_depth,
             },
         );
         self.current_id = next_block;

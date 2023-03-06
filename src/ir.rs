@@ -178,6 +178,7 @@ pub struct GenericBlock<GTail> {
     pub phi: Phi,
     pub ops: Vec<Op>,
     pub tail: GTail,
+    pub loop_depth: usize,
 }
 
 pub type Block = GenericBlock<Tail>;
