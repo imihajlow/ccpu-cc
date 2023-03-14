@@ -194,6 +194,15 @@ impl Op {
         self.get_dst_reg() == Some(reg)
     }
 
+    pub fn has_side_effects(&self) -> bool {
+        match self {
+            Op::Call(_) => true,
+            Op::Memcpy(_) => true,
+            Op::Store(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn get_dst_reg(&self) -> Option<Reg> {
         match self {
             Op::Undefined(target) => Some(*target),
@@ -421,6 +430,14 @@ impl Tail {
         }
     }
 
+    pub fn is_read_from_register(&self, reg: Reg) -> bool {
+        match self {
+            Tail::Jump(_) | Tail::Ret => false,
+            Tail::Cond(c, _, _) => c.is_reg(reg),
+            Tail::Switch(c, _, _, _) => c.is_reg(reg),
+        }
+    }
+
     pub fn get_connections(&self) -> Vec<usize> {
         let mut to_visit = Vec::new();
         match self {
@@ -445,6 +462,13 @@ impl Tail {
             Tail::Jump(_) | Tail::Ret => (),
             Tail::Cond(c, _, _) => c.remap_reg(map),
             Tail::Switch(c, _, _, _) => c.remap_reg(map),
+        }
+    }
+
+    pub fn is_return(&self) -> bool {
+        match self {
+            Tail::Ret => true,
+            _ => false,
         }
     }
 }
@@ -485,12 +509,14 @@ impl Phi {
         self.srcs.is_empty()
     }
 
-    pub fn delete_dsts_from_set(&mut self, set: &HashSet<Reg>) {
+    pub fn delete_dsts_from_set(&mut self, set: &HashSet<Reg>) -> bool {
         let old_srcs = mem::replace(&mut self.srcs, HashMap::new());
+        let old_len = old_srcs.len();
         self.srcs = old_srcs
             .into_iter()
             .filter(|(dst, _)| !set.contains(dst))
             .collect();
+        old_len != self.srcs.len()
     }
 
     pub fn remap_regs(&mut self, map: &HashMap<Reg, Reg>) {

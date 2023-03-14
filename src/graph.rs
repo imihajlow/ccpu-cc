@@ -1,5 +1,5 @@
 use std::cmp;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::hash::Hash;
 
@@ -11,6 +11,12 @@ where
     g: Graph,
     obj_to_node: HashMap<T, usize>,
     node_to_obj: Vec<T>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CycleLength {
+    Infinite,
+    Finite(usize),
 }
 
 impl<T: Eq + Hash + Clone> ObjectGraph<T> {
@@ -148,6 +154,12 @@ impl Graph {
         Self { edges: Vec::new() }
     }
 
+    pub fn with_node_count(count: usize) -> Self {
+        Self {
+            edges: vec![Vec::new(); count],
+        }
+    }
+
     pub fn add_nodes_up_to(&mut self, n: usize) {
         if n >= self.edges.len() {
             self.edges.resize(n + 1, Vec::new());
@@ -186,6 +198,10 @@ impl Graph {
             }
         }
         r
+    }
+
+    pub fn get_children(&self, from: usize) -> &[usize] {
+        &self.edges[from]
     }
 
     /// Find strongly connected components.
@@ -317,6 +333,43 @@ impl Graph {
         }
         Ok(result)
     }
+
+    pub fn find_shortest_cycles(&self) -> Vec<CycleLength> {
+        let n = self.edges.len();
+        let mut result = Vec::with_capacity(n);
+        'outer: for start in 0..n {
+            let mut visited = vec![false; n];
+            let mut q = VecDeque::new();
+            q.push_back((start, 0));
+            visited[start] = true;
+            while let Some((i, l)) = q.pop_front() {
+                for adj in self.edges[i].iter() {
+                    if *adj == start {
+                        result.push(CycleLength::Finite(l));
+                        continue 'outer;
+                    }
+                    if !visited[*adj] {
+                        visited[*adj] = true;
+                        q.push_back((*adj, l + 1));
+                    }
+                }
+            }
+            result.push(CycleLength::Infinite);
+        }
+        result
+    }
+}
+
+impl PartialOrd for CycleLength {
+    fn partial_cmp(&self, other: &CycleLength) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering::*;
+        match (self, other) {
+            (CycleLength::Infinite, CycleLength::Infinite) => None,
+            (CycleLength::Infinite, CycleLength::Finite(_)) => Some(Greater),
+            (CycleLength::Finite(_), CycleLength::Infinite) => Some(Less),
+            (CycleLength::Finite(x), CycleLength::Finite(y)) => x.partial_cmp(&y),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -420,5 +473,26 @@ mod tests {
         assert!(p1 > p3);
         assert!(p4 > p3);
         assert!(p4 > p1);
+    }
+
+    #[test]
+    fn test_cycle_len() {
+        let mut g = Graph::new();
+        g.add_edge(0, 1);
+        g.add_edge(1, 2);
+        g.add_edge(2, 3);
+        g.add_edge(3, 4);
+        g.add_edge(4, 5);
+        g.add_edge(5, 2);
+        g.add_edge(4, 3);
+        g.add_edge(0, 0);
+        let r = g.find_shortest_cycles();
+        assert_eq!(r.len(), 6);
+        assert_eq!(r[0], CycleLength::Finite(0));
+        assert_eq!(r[1], CycleLength::Infinite);
+        assert_eq!(r[2], CycleLength::Finite(3));
+        assert_eq!(r[3], CycleLength::Finite(1));
+        assert_eq!(r[4], CycleLength::Finite(1));
+        assert_eq!(r[5], CycleLength::Finite(3));
     }
 }

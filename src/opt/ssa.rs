@@ -15,19 +15,24 @@ pub fn delete_unused_regs(blocks: &mut Vec<ir::Block>) -> bool {
         .difference(&total_read_regs)
         .copied()
         .collect();
+    let mut modified = false;
     for block in blocks.iter_mut() {
-        block.phi.delete_dsts_from_set(&unused_regs);
+        modified |= block.phi.delete_dsts_from_set(&unused_regs);
+        let old_len = block.ops.len();
         replace_with_or_abort(&mut block.ops, |ops| {
             ops.into_iter()
                 .filter(|op| {
-                    op.get_dst_reg()
-                        .map(|reg| !unused_regs.contains(&reg))
-                        .unwrap_or(true)
+                    op.has_side_effects()
+                        || op
+                            .get_dst_reg()
+                            .map(|reg| !unused_regs.contains(&reg))
+                            .unwrap_or(true)
                 })
                 .collect()
-        })
+        });
+        modified |= old_len != block.ops.len()
     }
-    !unused_regs.is_empty()
+    modified
 }
 
 fn collect_read_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
