@@ -1,6 +1,8 @@
-use std::assert_matches::assert_matches;
+use std::mem;
 
-use crate::graph::{CycleLength, Graph};
+use bitflags::bitflags;
+
+use crate::graph::Graph;
 use crate::ir;
 use crate::name_scope::FunctionFrame;
 
@@ -34,28 +36,24 @@ pub fn insert_flush_instructions(body: &mut Vec<ir::Block>, frame: &FunctionFram
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum FlushState {
-    Clean,
-    RegDirty,
-    MemDirty,
-    BothDirty,
+bitflags! {
+    #[derive(Default)]
+    struct Device: u32 {
+        const REG = 1 << 0;
+        const MEM = 1 << 1;
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum EntryEffect {
-    None,
-    RegRead,
-    RegWrite,
-    MemAccess,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum ExitEffect {
-    None,
-    RegRead,
-    RegWrite,
-    MemWrite,
+#[derive(Debug, Clone, Copy)]
+struct BlockDescription {
+    /// These devices are expected to contain actual values on block entry.
+    expects_synced: Device,
+    /// These devices might be out of sync after this block.
+    desyncs: Device,
+    /// During execution of this block, these devices are reset to new values.
+    provides: Device,
+    /// The sync expectation of these devices don't propagate back through this block.
+    sync_expectation_barrier: Device,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -79,9 +77,9 @@ fn insert_flush_instructions_for_reg(
     gt: &Graph,
     exit_nodes: &[usize],
 ) {
-    let mut effects = Vec::with_capacity(body.len());
+    let mut desctiptions = Vec::with_capacity(body.len());
     for block in body.iter_mut() {
-        effects.push(insert_inner_flush_instructions(
+        desctiptions.push(insert_inner_flush_instructions(
             block,
             fixed_reg,
             address_reg,
@@ -89,128 +87,106 @@ fn insert_flush_instructions_for_reg(
         ));
     }
     println!("reg = {} @ {}", fixed_reg, address_reg);
-    println!("effects = {:#?}", effects);
-    let fwd_states = build_forward_states(g, &effects);
-    println!("fwd_states = {:#?}", fwd_states);
+    println!("desctiptions = {:#?}", desctiptions);
+    let desynced = build_forward_states(g, &desctiptions);
+    println!("desynced = {:#?}", desynced);
     println!("exit_nodes = {:?}", exit_nodes);
-    let bwd_states = build_backward_states(gt, exit_nodes, &effects);
-    println!("bwd_states = {:#?}", bwd_states);
-    let fps = find_possible_flush_positions(&fwd_states, &bwd_states);
+    let expects = build_backward_states(gt, exit_nodes, &desctiptions);
+    println!("expects = {:#?}", expects);
+    let fps = find_possible_flush_positions(&desynced, &expects);
     println!("flush_positions = {:?}", fps);
 }
 
-fn build_forward_states(
-    g: &Graph,
-    effects: &[(EntryEffect, ExitEffect)],
-) -> Vec<(FlushState, FlushState)> {
-    assert_eq!(g.get_node_count(), effects.len());
+fn build_forward_states(g: &Graph, descriptions: &[BlockDescription]) -> Vec<(Device, Device)> {
+    assert_eq!(g.get_node_count(), descriptions.len());
     assert!(g.get_node_count() > 0);
     let mut result = vec![(None, None); g.get_node_count()];
     fn dfs(
         start: usize,
-        state: FlushState,
+        desynced_on_start: Device,
         g: &Graph,
-        effects: &[(EntryEffect, ExitEffect)],
-        result: &mut Vec<(Option<FlushState>, Option<FlushState>)>,
+        descriptions: &[BlockDescription],
+        result: &mut Vec<(Option<Device>, Option<Device>)>,
     ) {
-        let (_, exit_effect) = effects[start];
-        let old_entry_state = result[start].0;
-        if let Some(old_entry_state) = old_entry_state {
+        let descr = descriptions[start];
+        let last_desynced_on_start = result[start].0;
+        if let Some(last_desynced_on_start) = last_desynced_on_start {
             // This node is already visited
-            if old_entry_state != state {
+            if last_desynced_on_start != desynced_on_start {
                 // Entry state is updated
-                let new_exit_state = match old_entry_state {
-                    FlushState::Clean => {
-                        result[start].0 = Some(state);
-                        transform_state(state, exit_effect)
-                    }
-                    _ => {
-                        result[start].0 = Some(FlushState::BothDirty);
-                        transform_state(FlushState::BothDirty, exit_effect)
-                    }
-                };
-                if Some(new_exit_state) != result[start].1 {
+                let new_desynced_on_start = desynced_on_start | last_desynced_on_start;
+                result[start].0 = Some(new_desynced_on_start);
+                let new_desynced_on_exit = descr.update_desynced(new_desynced_on_start);
+                if Some(new_desynced_on_exit) != result[start].1 {
                     // Exit state updated - visit children
-                    result[start].1 = Some(new_exit_state);
+                    result[start].1 = Some(new_desynced_on_exit);
                     for child in g.get_children(start) {
-                        dfs(*child, new_exit_state, g, effects, result);
+                        dfs(*child, new_desynced_on_exit, g, descriptions, result);
                     }
                 }
             }
         } else {
             // First time visiting this node
-            result[start].0 = Some(state);
-            let new_state = transform_state(state, exit_effect);
-            result[start].1 = Some(new_state);
+            result[start].0 = Some(desynced_on_start);
+            let new_desynced_on_exit = descr.update_desynced(desynced_on_start);
+            result[start].1 = Some(new_desynced_on_exit);
             for child in g.get_children(start) {
-                dfs(*child, new_state, g, effects, result);
+                dfs(*child, new_desynced_on_exit, g, descriptions, result);
             }
         }
     }
-    dfs(0, FlushState::Clean, g, effects, &mut result);
+    dfs(0, Device::empty(), g, descriptions, &mut result);
     result
         .into_iter()
-        .map(|(entry, exit)| {
-            (
-                entry.unwrap_or(FlushState::Clean),
-                exit.unwrap_or(FlushState::Clean),
-            )
-        })
+        .map(|(entry, exit)| (entry.unwrap_or_default(), exit.unwrap_or_default()))
         .collect()
 }
 
 fn build_backward_states(
     gt: &Graph,
     exit_nodes: &[usize],
-    effects: &[(EntryEffect, ExitEffect)],
-) -> Vec<(FlushState, FlushState)> {
-    assert_eq!(gt.get_node_count(), effects.len());
+    descriptions: &[BlockDescription],
+) -> Vec<(Device, Device)> {
+    assert_eq!(gt.get_node_count(), descriptions.len());
     assert!(gt.get_node_count() > 0);
     assert!(exit_nodes.len() > 0);
     let mut result = vec![(None, None); gt.get_node_count()];
     fn dfs(
         start: usize,
-        state: FlushState,
+        expected_on_exit: Device,
         gt: &Graph,
-        effects: &[(EntryEffect, ExitEffect)],
-        result: &mut Vec<(Option<FlushState>, Option<FlushState>)>,
+        descriptions: &[BlockDescription],
+        result: &mut Vec<(Option<Device>, Option<Device>)>,
     ) {
-        let (entry_effect, _) = effects[start];
-        let old_exit_state = result[start].1;
-        if let Some(old_exit_state) = old_exit_state {
+        let descr = descriptions[start];
+        let last_expected_on_exit = result[start].1;
+        if let Some(last_expected_on_exit) = last_expected_on_exit {
             // This node is already visited
-            if old_exit_state != state {
+            if last_expected_on_exit != expected_on_exit {
                 // Exit state is updated
-                let new_entry_state = match old_exit_state {
-                    FlushState::Clean => {
-                        result[start].1 = Some(state);
-                        transform_state_bwd(state, entry_effect)
-                    }
-                    _ => {
-                        result[start].1 = Some(FlushState::BothDirty);
-                        transform_state_bwd(FlushState::BothDirty, entry_effect)
-                    }
-                };
-                if Some(new_entry_state) != result[start].0 {
+                let new_expected_on_exit = expected_on_exit | last_expected_on_exit;
+                result[start].1 = Some(new_expected_on_exit);
+                let new_expected_on_entry = descr.update_expected(new_expected_on_exit);
+                if Some(new_expected_on_entry) != result[start].0 {
                     // Entry state updated - visit children
-                    result[start].0 = Some(new_entry_state);
+                    result[start].0 = Some(new_expected_on_entry);
                     for child in gt.get_children(start) {
-                        dfs(*child, new_entry_state, gt, effects, result);
+                        dfs(*child, new_expected_on_entry, gt, descriptions, result);
                     }
                 }
             }
         } else {
             // First time visiting this node
-            result[start].1 = Some(state);
-            let new_state = transform_state_bwd(state, entry_effect);
-            result[start].0 = Some(new_state);
+            result[start].1 = Some(expected_on_exit);
+            let expected_on_entry = descr.update_expected(expected_on_exit);
+            result[start].0 = Some(expected_on_entry);
             for child in gt.get_children(start) {
-                dfs(*child, new_state, gt, effects, result);
+                dfs(*child, expected_on_entry, gt, descriptions, result);
             }
         }
     }
     for node in exit_nodes {
-        dfs(*node, FlushState::Clean, gt, effects, &mut result);
+        dfs(*node, Device::empty(), gt, descriptions, &mut result);
     }
     result
         .into_iter()
@@ -224,34 +200,34 @@ fn build_backward_states(
 }
 
 fn find_possible_flush_positions(
-    fwd_states: &[(FlushState, FlushState)],
-    bwd_states: &[(FlushState, FlushState)],
+    desynced: &[(Device, Device)],
+    expected: &[(Device, Device)],
 ) -> Vec<(usize, BlockPosition, FlushInstruction)> {
-    assert_eq!(fwd_states.len(), bwd_states.len());
+    assert_eq!(desynced.len(), expected.len());
     let mut result = Vec::new();
-    for i in 0..fwd_states.len() {
-        if let Some(instr) = get_flush_instruction(fwd_states[i].0, bwd_states[i].0) {
+    for i in 0..desynced.len() {
+        if let Some(instr) = get_flush_instruction(desynced[i].0, expected[i].0) {
             result.push((i, BlockPosition::Front, instr))
         }
-        if let Some(instr) = get_flush_instruction(fwd_states[i].1, bwd_states[i].1) {
+        if let Some(instr) = get_flush_instruction(desynced[i].1, expected[i].1) {
             result.push((i, BlockPosition::Back, instr))
         }
     }
     result
 }
 
-fn get_flush_instruction(fwd_state: FlushState, bwd_state: FlushState) -> Option<FlushInstruction> {
-    match fwd_state {
-        FlushState::BothDirty => None,
-        FlushState::Clean => None,
-        FlushState::RegDirty => match bwd_state {
-            FlushState::MemDirty | FlushState::BothDirty => Some(FlushInstruction::Store),
-            FlushState::Clean | FlushState::RegDirty => None,
-        },
-        FlushState::MemDirty => match bwd_state {
-            FlushState::RegDirty | FlushState::BothDirty => Some(FlushInstruction::Load),
-            FlushState::Clean | FlushState::MemDirty => None,
-        },
+fn get_flush_instruction(desynced: Device, expected: Device) -> Option<FlushInstruction> {
+    if !desynced.is_all() {
+        let device = desynced & expected;
+        if device == Device::REG {
+            Some(FlushInstruction::Load)
+        } else if device == Device::MEM {
+            Some(FlushInstruction::Store)
+        } else {
+            None
+        }
+    } else {
+        None
     }
 }
 
@@ -260,115 +236,106 @@ fn insert_inner_flush_instructions(
     fixed_reg: ir::Reg,
     address_reg: ir::Reg,
     width: ir::Width,
-) -> (EntryEffect, ExitEffect) {
-    let mut entry_effect = EntryEffect::None;
-    let mut exit_effect = ExitEffect::None;
-    let mut flush_state = FlushState::Clean;
-    let mut i = 0;
-    while i != block.ops.len() {
-        let (local_entry_effect, local_exit_effect) =
-            get_instruction_effects(&block.ops[i], fixed_reg);
-        if entry_effect == EntryEffect::None {
-            entry_effect = local_entry_effect;
-        }
-        if local_exit_effect != ExitEffect::None {
-            exit_effect = local_exit_effect;
-        }
-        flush_state = match (flush_state, local_entry_effect) {
-            (FlushState::Clean, _) => exit_effect_to_flush_state(local_exit_effect),
-            (state, EntryEffect::None) => state,
-            (FlushState::RegDirty, EntryEffect::RegRead) => FlushState::RegDirty,
-            (FlushState::RegDirty, EntryEffect::RegWrite) => FlushState::RegDirty,
-            (FlushState::MemDirty, EntryEffect::RegWrite) => FlushState::RegDirty,
-            (FlushState::MemDirty, EntryEffect::MemAccess) => FlushState::MemDirty,
-            (FlushState::RegDirty, EntryEffect::MemAccess) => {
-                block.ops.insert(
-                    i,
-                    ir::Op::Store(ir::StoreOp {
-                        dst_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
-                        src: ir::Scalar::Var(ir::VarLocation::Local(fixed_reg)),
-                        width,
-                    }),
-                );
-                FlushState::Clean
-            }
-            (FlushState::MemDirty, EntryEffect::RegRead) => {
-                block.ops.insert(
-                    i,
-                    ir::Op::Load(ir::LoadOp {
-                        src_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
-                        dst: ir::VarLocation::Local(fixed_reg),
-                        width,
-                    }),
-                );
-                FlushState::Clean
-            }
-            (FlushState::BothDirty, _) => unreachable!(),
-        };
-        i += 1;
+) -> BlockDescription {
+    enum Operation {
+        Op(ir::Op),
+        Load,
+        Store,
     }
-    if block.tail.is_read_from_register(fixed_reg) {
-        if flush_state == FlushState::MemDirty {
-            block.ops.push(ir::Op::Load(ir::LoadOp {
+
+    let ops = mem::replace(&mut block.ops, Vec::new());
+
+    // Devices which are expected to have actual values at the beginning of the block
+    let mut expected = if block.tail.is_read_from_register(fixed_reg) {
+        Device::REG
+    } else {
+        Device::empty()
+    };
+    let mut new_rev_ops = Vec::with_capacity(ops.len());
+    for op in ops.into_iter().rev() {
+        if expected.contains(Device::MEM) && op.is_write_to_register(fixed_reg) {
+            new_rev_ops.push(Operation::Store);
+            expected = Device::empty();
+        } else if expected.contains(Device::REG) && op.is_memory_write() {
+            new_rev_ops.push(Operation::Load);
+            expected = Device::empty();
+        }
+        if op.is_write_to_register(fixed_reg) {
+            expected &= !Device::REG;
+        }
+        if op.is_read_from_register(fixed_reg) {
+            expected |= Device::REG;
+        }
+        if op.is_memory_write() || op.is_memory_read() {
+            expected |= Device::MEM;
+        }
+        new_rev_ops.push(Operation::Op(op))
+    }
+
+    // Devices whose values are provied by this block
+    let mut provides = Device::empty();
+    for op in new_rev_ops.iter() {
+        match op {
+            Operation::Load => provides |= Device::REG,
+            Operation::Store => provides |= Device::MEM,
+            Operation::Op(op) if op.is_write_to_register(fixed_reg) => provides |= Device::REG,
+            _ => (),
+        }
+    }
+
+    // Devices whose values may be out of sync after this block
+    let mut desynced = Device::empty();
+    for op in new_rev_ops.iter().rev() {
+        match op {
+            Operation::Load => desynced = Device::empty(),
+            Operation::Store => desynced = Device::empty(),
+            Operation::Op(op) if op.is_write_to_register(fixed_reg) => desynced = Device::MEM,
+            Operation::Op(op) if op.is_memory_write() => desynced = Device::REG,
+            _ => (),
+        }
+    }
+    assert_ne!(desynced, Device::all());
+
+    // Devices which are expected to be synchronized before and after this block independently.
+    let mut sync_expectation_barrier = Device::empty();
+    for op in new_rev_ops.iter().rev() {
+        match op {
+            Operation::Load => sync_expectation_barrier = Device::all(),
+            Operation::Store => sync_expectation_barrier = Device::all(),
+            Operation::Op(op) if op.is_write_to_register(fixed_reg) => {
+                sync_expectation_barrier = Device::all()
+            }
+            Operation::Op(op) if op.is_read_from_register(fixed_reg) => {
+                sync_expectation_barrier |= Device::REG
+            }
+            Operation::Op(op) if op.is_memory_write() => sync_expectation_barrier = Device::all(),
+            Operation::Op(op) if op.is_memory_read() => sync_expectation_barrier |= Device::MEM,
+            _ => (),
+        }
+    }
+
+    block.ops = new_rev_ops
+        .into_iter()
+        .rev()
+        .map(|op| match op {
+            Operation::Op(op) => op,
+            Operation::Store => ir::Op::Store(ir::StoreOp {
+                dst_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
+                src: ir::Scalar::Var(ir::VarLocation::Local(fixed_reg)),
+                width,
+            }),
+            Operation::Load => ir::Op::Load(ir::LoadOp {
                 src_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
                 dst: ir::VarLocation::Local(fixed_reg),
                 width,
-            }));
-        }
-        exit_effect = ExitEffect::RegRead;
-        if entry_effect == EntryEffect::None {
-            entry_effect = EntryEffect::RegRead;
-        }
-    }
-    (entry_effect, exit_effect)
-}
-
-fn get_instruction_effects(op: &ir::Op, fixed_reg: ir::Reg) -> (EntryEffect, ExitEffect) {
-    let entry_effect = if op.is_read_from_register(fixed_reg) {
-        EntryEffect::RegRead
-    } else if op.is_memory_read() || op.is_memory_write() {
-        EntryEffect::MemAccess
-    } else if op.is_write_to_register(fixed_reg) {
-        EntryEffect::RegWrite
-    } else {
-        EntryEffect::None
-    };
-    let exit_effect = if op.is_write_to_register(fixed_reg) {
-        ExitEffect::RegWrite
-    } else if op.is_memory_write() {
-        ExitEffect::MemWrite
-    } else if op.is_read_from_register(fixed_reg) {
-        ExitEffect::RegRead
-    } else {
-        ExitEffect::None
-    };
-    (entry_effect, exit_effect)
-}
-
-fn exit_effect_to_flush_state(effect: ExitEffect) -> FlushState {
-    match effect {
-        ExitEffect::None => FlushState::Clean,
-        ExitEffect::RegRead => FlushState::Clean,
-        ExitEffect::RegWrite => FlushState::RegDirty,
-        ExitEffect::MemWrite => FlushState::MemDirty,
-    }
-}
-
-fn transform_state(state: FlushState, effect: ExitEffect) -> FlushState {
-    match effect {
-        ExitEffect::None => state,
-        ExitEffect::RegRead => FlushState::Clean,
-        ExitEffect::RegWrite => FlushState::RegDirty,
-        ExitEffect::MemWrite => FlushState::MemDirty,
-    }
-}
-
-fn transform_state_bwd(state: FlushState, effect: EntryEffect) -> FlushState {
-    match effect {
-        EntryEffect::None => state,
-        EntryEffect::RegRead => FlushState::RegDirty,
-        EntryEffect::RegWrite => FlushState::Clean,
-        EntryEffect::MemAccess => FlushState::MemDirty,
+            }),
+        })
+        .collect();
+    BlockDescription {
+        expects_synced: expected,
+        desyncs: desynced,
+        provides,
+        sync_expectation_barrier,
     }
 }
 
@@ -380,4 +347,14 @@ fn build_graph(blocks: &Vec<ir::Block>) -> Graph {
         }
     }
     g
+}
+
+impl BlockDescription {
+    fn update_desynced(&self, desynced_on_start: Device) -> Device {
+        (desynced_on_start & !self.provides) | self.desyncs
+    }
+
+    fn update_expected(&self, expected_on_exit: Device) -> Device {
+        (expected_on_exit & !self.sync_expectation_barrier) | self.expects_synced
+    }
 }
