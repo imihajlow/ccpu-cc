@@ -77,9 +77,9 @@ fn insert_flush_instructions_for_reg(
     gt: &Graph,
     exit_nodes: &[usize],
 ) {
-    let mut desctiptions = Vec::with_capacity(body.len());
+    let mut descriptions = Vec::with_capacity(body.len());
     for block in body.iter_mut() {
-        desctiptions.push(insert_inner_flush_instructions(
+        descriptions.push(insert_inner_flush_instructions(
             block,
             fixed_reg,
             address_reg,
@@ -87,17 +87,39 @@ fn insert_flush_instructions_for_reg(
         ));
     }
     println!("reg = {} @ {}", fixed_reg, address_reg);
-    println!("desctiptions = {:#?}", desctiptions);
-    let desynced = build_forward_states(g, &desctiptions);
-    println!("desynced = {:#?}", desynced);
-    println!("exit_nodes = {:?}", exit_nodes);
-    let expects = build_backward_states(gt, exit_nodes, &desctiptions);
-    println!("expects = {:#?}", expects);
-    let fps = find_possible_flush_positions(&desynced, &expects);
-    println!("flush_positions = {:?}", fps);
+    println!("descriptions = {:#?}", descriptions);
+
+    let mut modifications = Vec::new();
+    loop {
+        let desynced = propagate_desynced(g, &descriptions);
+        println!("desynced = {:#?}", desynced);
+        println!("exit_nodes = {:?}", exit_nodes);
+        let expected = propagate_expected(gt, exit_nodes, &descriptions);
+        println!("expected = {:#?}", expected);
+        if is_consistent(&desynced, &expected) {
+            break;
+        }
+        let fps = find_possible_flush_positions(&desynced, &expected);
+        println!("flush_positions = {:?}", fps);
+
+        let pos = fps
+            .iter()
+            .min_by(|(i, _, _), (j, _, _)| body[*i].loop_depth.cmp(&body[*j].loop_depth))
+            .unwrap();
+        println!("use pos {}", pos.0);
+        modifications.push(pos.clone());
+        descriptions[pos.0].update_with_instruction(pos.1, pos.2);
+    }
+    for (index, pos, instr) in modifications {
+        let op = construct_flush_instruction(instr, fixed_reg, address_reg, width);
+        match pos {
+            BlockPosition::Front => body[index].ops.insert(0, op),
+            BlockPosition::Back => body[index].ops.push(op),
+        }
+    }
 }
 
-fn build_forward_states(g: &Graph, descriptions: &[BlockDescription]) -> Vec<(Device, Device)> {
+fn propagate_desynced(g: &Graph, descriptions: &[BlockDescription]) -> Vec<(Device, Device)> {
     assert_eq!(g.get_node_count(), descriptions.len());
     assert!(g.get_node_count() > 0);
     let mut result = vec![(None, None); g.get_node_count()];
@@ -116,7 +138,7 @@ fn build_forward_states(g: &Graph, descriptions: &[BlockDescription]) -> Vec<(De
                 // Entry state is updated
                 let new_desynced_on_start = desynced_on_start | last_desynced_on_start;
                 result[start].0 = Some(new_desynced_on_start);
-                let new_desynced_on_exit = descr.update_desynced(new_desynced_on_start);
+                let new_desynced_on_exit = descr.propagate_desynced(new_desynced_on_start);
                 if Some(new_desynced_on_exit) != result[start].1 {
                     // Exit state updated - visit children
                     result[start].1 = Some(new_desynced_on_exit);
@@ -128,7 +150,7 @@ fn build_forward_states(g: &Graph, descriptions: &[BlockDescription]) -> Vec<(De
         } else {
             // First time visiting this node
             result[start].0 = Some(desynced_on_start);
-            let new_desynced_on_exit = descr.update_desynced(desynced_on_start);
+            let new_desynced_on_exit = descr.propagate_desynced(desynced_on_start);
             result[start].1 = Some(new_desynced_on_exit);
             for child in g.get_children(start) {
                 dfs(*child, new_desynced_on_exit, g, descriptions, result);
@@ -142,7 +164,7 @@ fn build_forward_states(g: &Graph, descriptions: &[BlockDescription]) -> Vec<(De
         .collect()
 }
 
-fn build_backward_states(
+fn propagate_expected(
     gt: &Graph,
     exit_nodes: &[usize],
     descriptions: &[BlockDescription],
@@ -166,7 +188,7 @@ fn build_backward_states(
                 // Exit state is updated
                 let new_expected_on_exit = expected_on_exit | last_expected_on_exit;
                 result[start].1 = Some(new_expected_on_exit);
-                let new_expected_on_entry = descr.update_expected(new_expected_on_exit);
+                let new_expected_on_entry = descr.propagate_expected(new_expected_on_exit);
                 if Some(new_expected_on_entry) != result[start].0 {
                     // Entry state updated - visit children
                     result[start].0 = Some(new_expected_on_entry);
@@ -178,7 +200,7 @@ fn build_backward_states(
         } else {
             // First time visiting this node
             result[start].1 = Some(expected_on_exit);
-            let expected_on_entry = descr.update_expected(expected_on_exit);
+            let expected_on_entry = descr.propagate_expected(expected_on_exit);
             result[start].0 = Some(expected_on_entry);
             for child in gt.get_children(start) {
                 dfs(*child, expected_on_entry, gt, descriptions, result);
@@ -190,13 +212,24 @@ fn build_backward_states(
     }
     result
         .into_iter()
-        .map(|(entry, exit)| {
-            (
-                entry.unwrap(), // entry.unwrap_or(FlushState::Clean),
-                exit.unwrap(),  // exit.unwrap_or(FlushState::Clean),
-            )
-        })
+        .map(|(entry, exit)| (entry.unwrap(), exit.unwrap()))
         .collect()
+}
+
+fn is_consistent(desynced: &[(Device, Device)], expected: &[(Device, Device)]) -> bool {
+    assert_eq!(desynced.len(), expected.len());
+    for i in 0..desynced.len() {
+        if desynced[i].0.is_all() || desynced[i].1.is_all() {
+            return false;
+        }
+        if !(expected[i].0 & desynced[i].0).is_empty() {
+            return false;
+        }
+        if !(expected[i].1 & desynced[i].1).is_empty() {
+            return false;
+        }
+    }
+    true
 }
 
 fn find_possible_flush_positions(
@@ -239,8 +272,7 @@ fn insert_inner_flush_instructions(
 ) -> BlockDescription {
     enum Operation {
         Op(ir::Op),
-        Load,
-        Store,
+        Flush(FlushInstruction),
     }
 
     let ops = mem::replace(&mut block.ops, Vec::new());
@@ -254,10 +286,10 @@ fn insert_inner_flush_instructions(
     let mut new_rev_ops = Vec::with_capacity(ops.len());
     for op in ops.into_iter().rev() {
         if expected.contains(Device::MEM) && op.is_write_to_register(fixed_reg) {
-            new_rev_ops.push(Operation::Store);
+            new_rev_ops.push(Operation::Flush(FlushInstruction::Store));
             expected = Device::empty();
         } else if expected.contains(Device::REG) && op.is_memory_write() {
-            new_rev_ops.push(Operation::Load);
+            new_rev_ops.push(Operation::Flush(FlushInstruction::Load));
             expected = Device::empty();
         }
         if op.is_write_to_register(fixed_reg) {
@@ -276,8 +308,8 @@ fn insert_inner_flush_instructions(
     let mut provides = Device::empty();
     for op in new_rev_ops.iter() {
         match op {
-            Operation::Load => provides |= Device::REG,
-            Operation::Store => provides |= Device::MEM,
+            Operation::Flush(FlushInstruction::Load) => provides |= Device::REG,
+            Operation::Flush(FlushInstruction::Store) => provides |= Device::MEM,
             Operation::Op(op) if op.is_write_to_register(fixed_reg) => provides |= Device::REG,
             _ => (),
         }
@@ -287,8 +319,8 @@ fn insert_inner_flush_instructions(
     let mut desynced = Device::empty();
     for op in new_rev_ops.iter().rev() {
         match op {
-            Operation::Load => desynced = Device::empty(),
-            Operation::Store => desynced = Device::empty(),
+            Operation::Flush(FlushInstruction::Load) => desynced = Device::empty(),
+            Operation::Flush(FlushInstruction::Store) => desynced = Device::empty(),
             Operation::Op(op) if op.is_write_to_register(fixed_reg) => desynced = Device::MEM,
             Operation::Op(op) if op.is_memory_write() => desynced = Device::REG,
             _ => (),
@@ -300,8 +332,8 @@ fn insert_inner_flush_instructions(
     let mut sync_expectation_barrier = Device::empty();
     for op in new_rev_ops.iter().rev() {
         match op {
-            Operation::Load => sync_expectation_barrier = Device::all(),
-            Operation::Store => sync_expectation_barrier = Device::all(),
+            Operation::Flush(FlushInstruction::Load) => sync_expectation_barrier = Device::all(),
+            Operation::Flush(FlushInstruction::Store) => sync_expectation_barrier = Device::all(),
             Operation::Op(op) if op.is_write_to_register(fixed_reg) => {
                 sync_expectation_barrier = Device::all()
             }
@@ -319,16 +351,9 @@ fn insert_inner_flush_instructions(
         .rev()
         .map(|op| match op {
             Operation::Op(op) => op,
-            Operation::Store => ir::Op::Store(ir::StoreOp {
-                dst_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
-                src: ir::Scalar::Var(ir::VarLocation::Local(fixed_reg)),
-                width,
-            }),
-            Operation::Load => ir::Op::Load(ir::LoadOp {
-                src_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
-                dst: ir::VarLocation::Local(fixed_reg),
-                width,
-            }),
+            Operation::Flush(instr) => {
+                construct_flush_instruction(instr, fixed_reg, address_reg, width)
+            }
         })
         .collect();
     BlockDescription {
@@ -349,12 +374,58 @@ fn build_graph(blocks: &Vec<ir::Block>) -> Graph {
     g
 }
 
+fn construct_flush_instruction(
+    instr: FlushInstruction,
+    fixed_reg: ir::Reg,
+    address_reg: ir::Reg,
+    width: ir::Width,
+) -> ir::Op {
+    match instr {
+        FlushInstruction::Store => ir::Op::Store(ir::StoreOp {
+            dst_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
+            src: ir::Scalar::Var(ir::VarLocation::Local(fixed_reg)),
+            width,
+        }),
+        FlushInstruction::Load => ir::Op::Load(ir::LoadOp {
+            src_addr: ir::Scalar::Var(ir::VarLocation::Local(address_reg)),
+            dst: ir::VarLocation::Local(fixed_reg),
+            width,
+        }),
+    }
+}
+
 impl BlockDescription {
-    fn update_desynced(&self, desynced_on_start: Device) -> Device {
+    fn propagate_desynced(&self, desynced_on_start: Device) -> Device {
         (desynced_on_start & !self.provides) | self.desyncs
     }
 
-    fn update_expected(&self, expected_on_exit: Device) -> Device {
+    fn propagate_expected(&self, expected_on_exit: Device) -> Device {
         (expected_on_exit & !self.sync_expectation_barrier) | self.expects_synced
+    }
+
+    fn update_with_instruction(&mut self, pos: BlockPosition, instr: FlushInstruction) {
+        match (pos, instr) {
+            (BlockPosition::Front, FlushInstruction::Store) => {
+                self.expects_synced &= !Device::MEM;
+                self.provides |= Device::MEM;
+            }
+            (BlockPosition::Front, FlushInstruction::Load) => {
+                self.expects_synced &= !Device::REG;
+                self.provides |= Device::REG;
+            }
+            (BlockPosition::Back, FlushInstruction::Store) => {
+                self.desyncs = Device::empty();
+                self.expects_synced =
+                    (Device::REG & !self.sync_expectation_barrier) | self.expects_synced;
+                self.provides |= Device::MEM;
+            }
+            (BlockPosition::Back, FlushInstruction::Load) => {
+                self.desyncs = Device::empty();
+                self.expects_synced =
+                    (Device::MEM & !self.sync_expectation_barrier) | self.expects_synced;
+                self.provides |= Device::REG;
+            }
+        }
+        self.sync_expectation_barrier = Device::all();
     }
 }
