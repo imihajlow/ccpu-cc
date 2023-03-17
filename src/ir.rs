@@ -704,6 +704,7 @@ impl StoreOp {
 
     fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
         self.src.collect_regs(regs);
+        self.dst_addr.collect_regs(regs);
     }
 
     fn collect_set_regs(&self, _regs: &mut HashSet<Reg>) {}
