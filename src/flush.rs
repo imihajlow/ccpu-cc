@@ -23,8 +23,9 @@ pub fn insert_flush_instructions(body: &mut Vec<ir::Block>, frame: &FunctionFram
             }
         })
         .collect();
+    let mut flush_instructions = Vec::new();
     for (fixed_reg, address_reg, width) in frame.fixed_regs_iter() {
-        insert_flush_instructions_for_reg(
+        let instrs = construct_flush_instructions_for_reg(
             body,
             fixed_reg,
             address_reg,
@@ -33,6 +34,17 @@ pub fn insert_flush_instructions(body: &mut Vec<ir::Block>, frame: &FunctionFram
             &gt,
             &exit_nodes,
         );
+        flush_instructions.extend(instrs.into_iter().map(|(block_index, pos, instr)| {
+            (block_index, pos, instr, fixed_reg, address_reg, width)
+        }));
+    }
+    for (block_index, pos, instr, fixed_reg, address_reg, width) in flush_instructions.into_iter() {
+        let op = construct_flush_instruction(instr, fixed_reg, address_reg, width);
+        let block = &mut body[block_index].ops;
+        match pos {
+            BlockPosition::Front => block.insert(0, op),
+            BlockPosition::Back => block.push(op),
+        }
     }
 }
 
@@ -68,7 +80,7 @@ enum FlushInstruction {
     Load,
 }
 
-fn insert_flush_instructions_for_reg(
+fn construct_flush_instructions_for_reg(
     body: &mut Vec<ir::Block>,
     fixed_reg: ir::Reg,
     address_reg: ir::Reg,
@@ -76,7 +88,7 @@ fn insert_flush_instructions_for_reg(
     g: &Graph,
     gt: &Graph,
     exit_nodes: &[usize],
-) {
+) -> Vec<(usize, BlockPosition, FlushInstruction)> {
     let mut descriptions = Vec::with_capacity(body.len());
     for block in body.iter_mut() {
         descriptions.push(insert_inner_flush_instructions(
@@ -110,13 +122,7 @@ fn insert_flush_instructions_for_reg(
         modifications.push(pos.clone());
         descriptions[pos.0].update_with_instruction(pos.1, pos.2);
     }
-    for (index, pos, instr) in modifications {
-        let op = construct_flush_instruction(instr, fixed_reg, address_reg, width);
-        match pos {
-            BlockPosition::Front => body[index].ops.insert(0, op),
-            BlockPosition::Back => body[index].ops.push(op),
-        }
-    }
+    modifications
 }
 
 fn propagate_desynced(g: &Graph, descriptions: &[BlockDescription]) -> Vec<(Device, Device)> {

@@ -52,13 +52,13 @@ struct SwitchRecord {
 }
 
 impl BlockEmitter {
-    pub fn new() -> Self {
+    pub fn new(initial_ops: Vec<ir::Op>) -> Self {
         Self {
             next_id: 1,
             current_id: 0,
             loop_depth: 0,
             blocks: HashMap::new(),
-            current_ops: Vec::new(),
+            current_ops: initial_ops,
             breaks: Vec::new(),
             continues: Vec::new(),
             labels: HashMap::new(),

@@ -24,7 +24,6 @@ pub type BlockNumber = usize;
 pub enum VarLocation {
     Global(GlobalVarId),
     Local(Reg),
-    Arg(usize),
     Frame(u32),
     Return,
 }
@@ -43,6 +42,7 @@ pub enum Scalar {
 #[derive(Clone, PartialEq, Eq)]
 pub enum Op {
     Undefined(Reg),
+    Arg(Reg, usize),
     Copy(UnaryUnsignedOp),
     Bool(UnaryUnsignedOp),
     BoolInv(UnaryUnsignedOp),
@@ -206,6 +206,7 @@ impl Op {
     pub fn get_dst_reg(&self) -> Option<Reg> {
         match self {
             Op::Undefined(target) => Some(*target),
+            Op::Arg(reg, _) => Some(*reg),
             Op::Copy(op) => op.get_dst_reg(),
             Op::Bool(op) => op.get_dst_reg(),
             Op::BoolInv(op) => op.get_dst_reg(),
@@ -235,6 +236,7 @@ impl Op {
     pub fn is_read_from_register(&self, reg: Reg) -> bool {
         match self {
             Op::Undefined(_) => false,
+            Op::Arg(_, _) => false,
             Op::Copy(op) => op.is_read_from_register(reg),
             Op::Bool(op) => op.is_read_from_register(reg),
             Op::BoolInv(op) => op.is_read_from_register(reg),
@@ -264,6 +266,7 @@ impl Op {
     pub fn is_memory_read(&self) -> bool {
         match self {
             Op::Undefined(_) => false,
+            Op::Arg(_, _) => false,
             Op::Copy(_) => false,
             Op::Bool(_) => false,
             Op::BoolInv(_) => false,
@@ -293,6 +296,7 @@ impl Op {
     pub fn is_memory_write(&self) -> bool {
         match self {
             Op::Undefined(_) => false,
+            Op::Arg(_, _) => false,
             Op::Copy(_) => false,
             Op::Bool(_) => false,
             Op::BoolInv(_) => false,
@@ -322,6 +326,7 @@ impl Op {
     pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
         match self {
             Op::Undefined(_) => (),
+            Op::Arg(_, _) => (),
             Op::Copy(op) => op.collect_read_regs(set),
             Op::Bool(op) => op.collect_read_regs(set),
             Op::BoolInv(op) => op.collect_read_regs(set),
@@ -351,6 +356,9 @@ impl Op {
     pub fn collect_set_regs(&self, set: &mut HashSet<Reg>) {
         match self {
             Op::Undefined(reg) => {
+                set.insert(*reg);
+            }
+            Op::Arg(reg, _) => {
                 set.insert(*reg);
             }
             Op::Copy(op) => op.collect_set_regs(set),
@@ -385,7 +393,7 @@ impl Op {
      */
     pub fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
         match self {
-            Op::Undefined(reg) => {
+            Op::Undefined(reg) | Op::Arg(reg, _) => {
                 if let Some(scope) = scope {
                     let new_reg = scope.alloc_reg();
                     map.insert(*reg, new_reg);
@@ -922,7 +930,7 @@ where
     GTail: std::fmt::Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        writeln!(f, "{}", self.phi)?;
+        write!(f, "{}", self.phi)?;
         for op in &self.ops {
             writeln!(f, "{}", op)?;
         }
@@ -951,6 +959,7 @@ impl std::fmt::Display for Op {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             Self::Undefined(reg) => write!(f, "undef {}", reg),
+            Self::Arg(reg, i) => write!(f, "arg %{}, {}", reg, i),
             Self::Copy(op) => write!(f, "copy{}", op),
             Self::Add(op) => write!(f, "add{}", op),
             Self::Sub(op) => write!(f, "sub{}", op),
@@ -1131,7 +1140,6 @@ impl std::fmt::Display for VarLocation {
         match self {
             VarLocation::Local(r) => write!(f, "%{}", r),
             VarLocation::Global(id) => write!(f, "{}", id),
-            VarLocation::Arg(p) => write!(f, "%a{}", p),
             VarLocation::Frame(p) => write!(f, "[F+0x{:x}]", p),
             VarLocation::Return => write!(f, "%ret"),
         }

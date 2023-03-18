@@ -70,8 +70,8 @@ impl Function {
                 StorageClassSpecifier::Static => GlobalStorageClass::Static,
             },
         };
-        scope.start_function(&args, &return_type);
-        let mut be = BlockEmitter::new();
+        let arg_instructions = scope.start_function(&args, &return_type);
+        let mut be = BlockEmitter::new(arg_instructions);
         compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
         let frame = scope.end_function();
         prepend_address_regs_initialization(&mut be, &frame);

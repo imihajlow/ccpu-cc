@@ -42,7 +42,6 @@ pub struct NameScope {
 pub enum Value {
     Type(QualifiedType),
     AutoVar(QualifiedType, Reg),
-    Arg(QualifiedType, usize),
     StaticVar(
         QualifiedType,
         GlobalVarId,
@@ -121,18 +120,33 @@ impl NameScope {
     /**
      * Push scope, declare function arguments and save return type.
      */
-    pub fn start_function(&mut self, args: &FunctionArgs, return_type: &QualifiedType) {
+    pub fn start_function(
+        &mut self,
+        args: &FunctionArgs,
+        return_type: &QualifiedType,
+    ) -> Vec<ir::Op> {
         let mut defs = HashMap::new();
-        if let FunctionArgs::List(l) = args {
+        let arg_instructions = if let FunctionArgs::List(l) = args {
+            let mut ops = Vec::new();
             for (i, (t, name, span)) in l.iter().enumerate() {
                 if let Some(name) = name {
-                    defs.insert(name.to_string(), (Value::Arg(t.clone(), i), *span));
+                    if t.t.is_scalar() {
+                        let reg = self.alloc_reg();
+                        defs.insert(name.to_string(), (Value::AutoVar(t.clone(), reg), *span));
+                        ops.push(ir::Op::Arg(reg, i))
+                    }
+                } else {
+                    todo!("struct passing in parameters")
                 }
             }
-        }
+            ops
+        } else {
+            Vec::new()
+        };
         self.defs.push(Scope::new_with_defs(defs));
         assert!(self.function_frame.is_none());
         self.function_frame = Some(FunctionFrame::new(return_type));
+        arg_instructions
     }
 
     /**
@@ -434,10 +448,6 @@ impl NameScope {
                     t: t.clone(),
                     src: RValue::new_var(VarLocation::Local(*r)),
                 }),
-                Value::Arg(t, n) => Ok(TypedRValue {
-                    t: t.clone(),
-                    src: RValue::new_var(VarLocation::Arg(*n)),
-                }),
                 Value::StaticVar(t, id, _, _) => Ok(TypedRValue {
                     t: t.clone(),
                     src: RValue::new_var(VarLocation::Global(id.clone())),
@@ -468,10 +478,6 @@ impl NameScope {
                 Value::AutoVar(t, r) => Ok(TypedLValue {
                     t: t.clone(),
                     lv: LValue::Var(VarLocation::Local(*r)),
-                }),
-                Value::Arg(t, n) => Ok(TypedLValue {
-                    t: t.clone(),
-                    lv: LValue::Var(VarLocation::Arg(*n)),
                 }),
                 Value::StaticVar(t, id, _, _) => Ok(TypedLValue {
                     t: t.clone(),
@@ -546,7 +552,6 @@ impl NameScope {
                     ir::Scalar::Var(ir::VarLocation::Local(address_reg))
                 }
             }
-            VarLocation::Arg(_) => todo!("address of an argument"),
             VarLocation::Frame(_) => todo!(),
             VarLocation::Return => unreachable!("address of a return value"),
         }
@@ -684,7 +689,6 @@ impl Value {
         match self {
             Value::Type(t) => t,
             Value::AutoVar(t, _) => t,
-            Value::Arg(t, _) => t,
             Value::StaticVar(t, _, _, _) => t,
             Value::Object(t, _) => t,
         }
