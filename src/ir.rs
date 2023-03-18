@@ -170,7 +170,7 @@ pub enum Tail {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
-    srcs: HashMap<Reg, Vec<(BlockNumber, Scalar)>>,
+    pub srcs: HashMap<Reg, Vec<(BlockNumber, Scalar)>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -866,6 +866,14 @@ impl Scalar {
             v
         } else {
             panic!("not a var");
+        }
+    }
+
+    pub fn get_reg(&self) -> Option<Reg> {
+        if let Scalar::Var(VarLocation::Local(r)) = self {
+            Some(*r)
+        } else {
+            None
         }
     }
 

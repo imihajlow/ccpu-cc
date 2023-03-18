@@ -1,11 +1,11 @@
-use std::fmt::Formatter;
+use std::{collections::HashMap, fmt::Formatter};
 
 use crate::{
     block_emitter::BlockEmitter,
     compile, flush, ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
     opt::ssa::delete_unused_regs,
-    ssa,
+    regalloc, ssa,
 };
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
@@ -115,6 +115,10 @@ impl Function {
     pub fn enforce_ssa(&mut self, scope: &mut NameScope) {
         ssa::enforce_ssa(&mut self.body, scope);
         println!("{}", self);
+    }
+
+    pub fn allocate_registers(&self) -> HashMap<ir::Reg, usize> {
+        regalloc::allocate_registers(&self.body)
     }
 
     #[cfg(test)]

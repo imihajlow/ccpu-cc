@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![feature(assert_matches)]
 #![feature(iter_intersperse)]
+#![feature(map_try_insert)]
 
 mod block_emitter;
 mod compile;
@@ -18,6 +19,7 @@ mod machine;
 mod name_scope;
 mod object_location;
 mod opt;
+mod regalloc;
 mod rvalue;
 mod ssa;
 mod string;
@@ -41,14 +43,11 @@ fn main() {
     let p = parse_preprocessed(
         &cfg,
         "
-int send(int a)
-{
-    if (a) {
-        return a + 1;
-    } else {
-        return a - 1;
+    int send(int a)
+    {
+        int x = a, y = x ? a + 1 : x - 2;
+        return x + y;
     }
-}
     "
         .to_string(),
     )
@@ -62,5 +61,6 @@ int send(int a)
         tu.enforce_ssa();
         tu.optimize();
         println!("<{}>", tu);
+        tu.print_register_allocations();
     }
 }

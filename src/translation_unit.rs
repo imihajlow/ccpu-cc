@@ -62,6 +62,12 @@ impl TranslationUnit {
         }
     }
 
+    pub fn print_register_allocations(&self) {
+        for f in self.functions.iter() {
+            println!("{:#?}", f.allocate_registers());
+        }
+    }
+
     fn add_declaration(&mut self, n: Node<Declaration>, ec: &mut ErrorCollector) -> Result<(), ()> {
         let decl = n.node;
         let (mut type_builder, storage_class, _extra) =
