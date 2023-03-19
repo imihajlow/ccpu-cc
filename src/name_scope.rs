@@ -134,9 +134,9 @@ impl NameScope {
                         let reg = self.alloc_reg();
                         defs.insert(name.to_string(), (Value::AutoVar(t.clone(), reg), *span));
                         ops.push(ir::Op::Arg(reg, i))
+                    } else {
+                        todo!("struct passing in parameters")
                     }
-                } else {
-                    todo!("struct passing in parameters")
                 }
             }
             ops

@@ -14,6 +14,12 @@ pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::Reg, usize> {
     let mut hints = HashMap::new();
     let mut allocations = HashMap::new();
 
+    for op in body.first().unwrap().ops.iter() {
+        if let ir::Op::Arg(reg, arg) = op {
+            hints.insert(*reg, *arg);
+        }
+    }
+
     for i in 0..body.len() {
         allocate_registers_for_block(body, i, &mut allocations, &mut hints);
     }
