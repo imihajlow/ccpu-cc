@@ -10,13 +10,14 @@ const MAX_HW_REGISTERS: usize = 200;
  * Each virtual register is expected to live only across single block and in sources of phi nodes of its children.
  * Physical registers are plenty, no spilling is performed.
  */
-pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::Reg, usize> {
+pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::Reg, ir::Reg> {
     let mut hints = HashMap::new();
     let mut allocations = HashMap::new();
 
+    // Function parameters come in first registers - hint them.
     for op in body.first().unwrap().ops.iter() {
-        if let ir::Op::Arg(reg, arg) = op {
-            hints.insert(*reg, *arg);
+        if let ir::Op::Arg(arg_op) = op {
+            hints.insert(arg_op.dst_reg, arg_op.arg_number as ir::Reg);
         }
     }
 
@@ -30,8 +31,8 @@ pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::Reg, usize> {
 fn allocate_registers_for_block(
     body: &[ir::Block],
     block_index: usize,
-    allocations: &mut HashMap<ir::Reg, usize>,
-    hints: &mut HashMap<ir::Reg, usize>,
+    allocations: &mut HashMap<ir::Reg, ir::Reg>,
+    hints: &mut HashMap<ir::Reg, ir::Reg>,
 ) {
     let mut vacant_registers = vec![true; MAX_HW_REGISTERS];
     let block = &body[block_index];
@@ -43,7 +44,7 @@ fn allocate_registers_for_block(
         let mut live_regs = HashSet::new();
         for child_id in block.tail.get_connections() {
             body[child_id].phi.collect_read_regs(&mut live_regs);
-            for (dst, srcs) in body[child_id].phi.srcs.iter() {
+            for (dst, (_, srcs)) in body[child_id].phi.srcs.iter() {
                 if let Some(allocation) = allocations.get(dst) {
                     for (src_block_index, src) in srcs.iter() {
                         if *src_block_index == block_index {
@@ -67,7 +68,7 @@ fn allocate_registers_for_block(
 
     // Get hints from chidren's phi
     for child_id in block.tail.get_connections() {
-        for (phi_dst, phi_srcs) in body[child_id].phi.srcs.iter() {
+        for (phi_dst, (_, phi_srcs)) in body[child_id].phi.srcs.iter() {
             if let Some(phi_dst_allocation) = allocations.get(phi_dst) {
                 for (src_block_index, src_scalar) in phi_srcs.iter() {
                     if *src_block_index == block_index {
@@ -83,11 +84,11 @@ fn allocate_registers_for_block(
     fn allocate(
         reg: ir::Reg,
         vacant_registers: &mut Vec<bool>,
-        hints: &HashMap<ir::Reg, usize>,
-    ) -> usize {
+        hints: &HashMap<ir::Reg, ir::Reg>,
+    ) -> ir::Reg {
         if let Some(&hint) = hints.get(&reg) {
-            if vacant_registers[hint] {
-                vacant_registers[hint] = false;
+            if vacant_registers[hint as usize] {
+                vacant_registers[hint as usize] = false;
                 return hint;
             }
         }
@@ -95,9 +96,9 @@ fn allocate_registers_for_block(
             .iter()
             .enumerate()
             .find(|(_, vacant)| **vacant)
-            .map(|(i, _)| i)
+            .map(|(i, _)| i as ir::Reg)
             .expect("out of registers");
-        vacant_registers[phy_reg] = false;
+        vacant_registers[phy_reg as usize] = false;
         phy_reg
     }
 
@@ -114,8 +115,8 @@ fn allocate_registers_for_block(
     for (i, op) in block.ops.iter().enumerate() {
         for reg in kill[i].iter() {
             let phy_reg = *allocations.get(reg).unwrap();
-            assert!(!vacant_registers[phy_reg]);
-            vacant_registers[phy_reg] = true;
+            assert!(!vacant_registers[phy_reg as usize]);
+            vacant_registers[phy_reg as usize] = true;
         }
         if let Some(dst) = op.get_dst_reg() {
             let dst_reg = allocate(dst, &mut vacant_registers, hints);
@@ -129,7 +130,7 @@ fn allocate_registers_for_block(
     // Hint children
     for child_id in block.tail.get_connections() {
         let child = &body[child_id];
-        for (phi_dst, phi_srcs) in child.phi.srcs.iter() {
+        for (phi_dst, (_, phi_srcs)) in child.phi.srcs.iter() {
             for (src_block_index, src_scalar) in phi_srcs.iter() {
                 if *src_block_index == block_index {
                     if let Some(src_reg) = src_scalar.get_reg() {
@@ -142,29 +143,3 @@ fn allocate_registers_for_block(
         }
     }
 }
-
-enum LiveRangeBegin {
-    Phi,
-    Op(usize),
-}
-
-enum LiveRangeEnd {
-    Phi,
-    Op(usize),
-    Tail,
-    Child,
-}
-
-struct LiveRange {
-    begin: LiveRangeBegin,
-    end: LiveRangeEnd,
-}
-
-// fn find_live_vars(body: &[ir::Block]) -> Vec<(HashSet<ir::Reg>, HashSet<ir::Reg>)> {
-//     let mut result = vec![(HashSet::new(), HashSet::new()); body.len()];
-//     let mut changed = vec![true; body.len()];
-//     while let Some((i, _)) = changed.iter().enumerate().find(|&(_, &c)| c) {
-
-//     }
-//     result
-// }

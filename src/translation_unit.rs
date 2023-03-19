@@ -62,9 +62,9 @@ impl TranslationUnit {
         }
     }
 
-    pub fn print_register_allocations(&self) {
-        for f in self.functions.iter() {
-            println!("{:#?}", f.allocate_registers());
+    pub fn deconstruct_ssa(&mut self) {
+        for f in self.functions.iter_mut() {
+            f.deconstruct_ssa();
         }
     }
 

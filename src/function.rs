@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Formatter};
 
 use crate::{
     block_emitter::BlockEmitter,
-    compile, flush, ir,
+    compile, deconstruct, flush, ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
     opt::ssa::delete_unused_regs,
     regalloc, ssa,
@@ -117,8 +117,9 @@ impl Function {
         println!("{}", self);
     }
 
-    pub fn allocate_registers(&self) -> HashMap<ir::Reg, usize> {
-        regalloc::allocate_registers(&self.body)
+    pub fn deconstruct_ssa(&mut self) {
+        let mut map = regalloc::allocate_registers(&self.body);
+        deconstruct::deconstruct_ssa(&mut self.body, &mut map);
     }
 
     #[cfg(test)]

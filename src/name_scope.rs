@@ -133,7 +133,11 @@ impl NameScope {
                     if t.t.is_scalar() {
                         let reg = self.alloc_reg();
                         defs.insert(name.to_string(), (Value::AutoVar(t.clone(), reg), *span));
-                        ops.push(ir::Op::Arg(reg, i))
+                        ops.push(ir::Op::Arg(ir::ArgOp {
+                            dst_reg: reg,
+                            arg_number: i,
+                            width: t.t.get_scalar_width().unwrap(),
+                        }))
                     } else {
                         todo!("struct passing in parameters")
                     }

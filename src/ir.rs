@@ -42,7 +42,7 @@ pub enum Scalar {
 #[derive(Clone, PartialEq, Eq)]
 pub enum Op {
     Undefined(Reg),
-    Arg(Reg, usize),
+    Arg(ArgOp),
     Copy(UnaryUnsignedOp),
     Bool(UnaryUnsignedOp),
     BoolInv(UnaryUnsignedOp),
@@ -76,6 +76,13 @@ pub enum CompareKind {
     LessOrEqual,
     GreaterThan,
     GreaterOrEqual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArgOp {
+    pub width: Width,
+    pub dst_reg: Reg,
+    pub arg_number: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,7 +177,7 @@ pub enum Tail {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
-    pub srcs: HashMap<Reg, Vec<(BlockNumber, Scalar)>>,
+    pub srcs: HashMap<Reg, (Width, Vec<(BlockNumber, Scalar)>)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,7 +213,7 @@ impl Op {
     pub fn get_dst_reg(&self) -> Option<Reg> {
         match self {
             Op::Undefined(target) => Some(*target),
-            Op::Arg(reg, _) => Some(*reg),
+            Op::Arg(op) => op.get_dst_reg(),
             Op::Copy(op) => op.get_dst_reg(),
             Op::Bool(op) => op.get_dst_reg(),
             Op::BoolInv(op) => op.get_dst_reg(),
@@ -236,7 +243,7 @@ impl Op {
     pub fn is_read_from_register(&self, reg: Reg) -> bool {
         match self {
             Op::Undefined(_) => false,
-            Op::Arg(_, _) => false,
+            Op::Arg(_) => false,
             Op::Copy(op) => op.is_read_from_register(reg),
             Op::Bool(op) => op.is_read_from_register(reg),
             Op::BoolInv(op) => op.is_read_from_register(reg),
@@ -266,7 +273,7 @@ impl Op {
     pub fn is_memory_read(&self) -> bool {
         match self {
             Op::Undefined(_) => false,
-            Op::Arg(_, _) => false,
+            Op::Arg(_) => false,
             Op::Copy(_) => false,
             Op::Bool(_) => false,
             Op::BoolInv(_) => false,
@@ -296,7 +303,7 @@ impl Op {
     pub fn is_memory_write(&self) -> bool {
         match self {
             Op::Undefined(_) => false,
-            Op::Arg(_, _) => false,
+            Op::Arg(_) => false,
             Op::Copy(_) => false,
             Op::Bool(_) => false,
             Op::BoolInv(_) => false,
@@ -326,7 +333,7 @@ impl Op {
     pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
         match self {
             Op::Undefined(_) => (),
-            Op::Arg(_, _) => (),
+            Op::Arg(_) => (),
             Op::Copy(op) => op.collect_read_regs(set),
             Op::Bool(op) => op.collect_read_regs(set),
             Op::BoolInv(op) => op.collect_read_regs(set),
@@ -358,9 +365,7 @@ impl Op {
             Op::Undefined(reg) => {
                 set.insert(*reg);
             }
-            Op::Arg(reg, _) => {
-                set.insert(*reg);
-            }
+            Op::Arg(op) => op.collect_set_regs(set),
             Op::Copy(op) => op.collect_set_regs(set),
             Op::Bool(op) => op.collect_set_regs(set),
             Op::BoolInv(op) => op.collect_set_regs(set),
@@ -393,15 +398,16 @@ impl Op {
      */
     pub fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
         match self {
-            Op::Undefined(reg) | Op::Arg(reg, _) => {
+            Op::Undefined(reg) => {
                 if let Some(scope) = scope {
                     let new_reg = scope.alloc_reg();
                     map.insert(*reg, new_reg);
                     *reg = new_reg;
                 } else {
-                    *reg = map.get(reg).copied().unwrap_or(*reg);
+                    *reg = map.get(reg).copied().unwrap();
                 }
             }
+            Op::Arg(op) => op.remap_regs(map, scope),
             Op::Copy(op) => op.remap_regs(map, scope),
             Op::Bool(op) => op.remap_regs(map, scope),
             Op::BoolInv(op) => op.remap_regs(map, scope),
@@ -425,6 +431,36 @@ impl Op {
             Op::Memcpy(op) => op.remap_regs(map, scope),
             #[cfg(test)]
             Op::Dummy(_) => (),
+        }
+    }
+
+    pub fn get_dst_data_width(&self) -> Option<Width> {
+        match self {
+            Op::Undefined(_) => Some(Width::Qword),
+            Op::Arg(op) => Some(op.width),
+            Op::Copy(op) => Some(op.width),
+            Op::Bool(_) => Some(Width::Byte),
+            Op::BoolInv(_) => Some(Width::Byte),
+            Op::Add(op) => Some(op.width),
+            Op::Sub(op) => Some(op.width),
+            Op::Mul(op) => Some(op.width),
+            Op::Div(op) => Some(op.width),
+            Op::Mod(op) => Some(op.width),
+            Op::BAnd(op) => Some(op.width),
+            Op::BOr(op) => Some(op.width),
+            Op::BXor(op) => Some(op.width),
+            Op::LShift(op) => Some(op.lhs_width),
+            Op::RShift(op) => Some(op.lhs_width),
+            Op::Neg(op) => Some(op.width),
+            Op::Not(op) => Some(op.width),
+            Op::Compare(op) => Some(op.dst_width),
+            Op::Conv(op) => Some(op.dst_width),
+            Op::Store(_) => None,
+            Op::Load(op) => Some(op.width),
+            Op::Call(op) => op.dst.as_ref().map(|(_, w)| w).copied(),
+            Op::Memcpy(_) => None,
+            #[cfg(test)]
+            Op::Dummy(_) => None,
         }
     }
 }
@@ -488,12 +524,15 @@ impl Phi {
         }
     }
 
-    pub fn add_binding(&mut self, dst: &Reg, src: &Reg, block: usize) {
-        if let Some(l) = self.srcs.get_mut(dst) {
+    pub fn add_binding(&mut self, dst: &Reg, src: &Reg, block: usize, width: Width) {
+        if let Some((old_width, l)) = self.srcs.get_mut(dst) {
+            assert_eq!(*old_width, width);
             l.push((block, Scalar::Var(VarLocation::Local(*src))));
         } else {
-            self.srcs
-                .insert(*dst, vec![(block, Scalar::Var(VarLocation::Local(*src)))]);
+            self.srcs.insert(
+                *dst,
+                (width, vec![(block, Scalar::Var(VarLocation::Local(*src)))]),
+            );
         }
     }
 
@@ -501,12 +540,15 @@ impl Phi {
         let srcs = self
             .srcs
             .into_iter()
-            .map(|(k, v)| {
+            .map(|(k, (w, v))| {
                 (
                     k,
-                    v.into_iter()
-                        .map(|(block_id, var)| (block_id - offsets[block_id], var))
-                        .collect(),
+                    (
+                        w,
+                        v.into_iter()
+                            .map(|(block_id, var)| (block_id - offsets[block_id], var))
+                            .collect(),
+                    ),
                 )
             })
             .collect();
@@ -530,11 +572,11 @@ impl Phi {
     pub fn remap_regs(&mut self, map: &HashMap<Reg, Reg>) {
         replace_with_or_abort(&mut self.srcs, |srcs| {
             srcs.into_iter()
-                .map(|(dst, mut srcs)| {
+                .map(|(dst, (w, mut srcs))| {
                     for (_, value) in srcs.iter_mut() {
                         value.remap_reg(map);
                     }
-                    (map.get(&dst).copied().unwrap_or(dst), srcs)
+                    (map.get(&dst).copied().unwrap(), (w, srcs))
                 })
                 .collect()
         });
@@ -547,10 +589,30 @@ impl Phi {
     }
 
     pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
-        for (_, src) in self.srcs.iter() {
+        for (_, (_, src)) in self.srcs.iter() {
             for (_, val) in src {
                 val.collect_regs(set);
             }
+        }
+    }
+}
+
+impl ArgOp {
+    fn get_dst_reg(&self) -> Option<Reg> {
+        Some(self.dst_reg)
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        regs.insert(self.dst_reg);
+    }
+
+    fn remap_regs(&mut self, map: &mut HashMap<Reg, Reg>, scope: Option<&mut NameScope>) {
+        if let Some(new_reg) = map.get(&self.dst_reg) {
+            self.dst_reg = *new_reg;
+        } else if let Some(scope) = scope {
+            let new_reg = scope.alloc_reg();
+            map.insert(self.dst_reg, new_reg);
+            self.dst_reg = new_reg;
         }
     }
 }
@@ -834,7 +896,7 @@ impl VarLocation {
 
     fn remap_reg(&mut self, map: &HashMap<Reg, Reg>) {
         if let VarLocation::Local(n) = self {
-            *n = map.get(n).copied().unwrap_or(*n);
+            *n = map.get(n).copied().unwrap();
         }
     }
 
@@ -853,7 +915,7 @@ impl VarLocation {
                 map.insert(*n, reg);
                 reg
             } else {
-                map.get(n).copied().unwrap_or(*n)
+                map.get(n).copied().unwrap()
             };
             *n = reg;
         }
@@ -949,8 +1011,9 @@ where
 impl std::fmt::Display for Phi {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         for (dst, srcs) in self.srcs.iter() {
-            write!(f, "%{} = ", dst)?;
+            write!(f, "phi{} %{} = ", srcs.0, dst)?;
             for s in srcs
+                .1
                 .iter()
                 .map(|(n, r)| format!("{} -> {}", n, r))
                 .intersperse(", ".to_string())
@@ -967,7 +1030,7 @@ impl std::fmt::Display for Op {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             Self::Undefined(reg) => write!(f, "undef {}", reg),
-            Self::Arg(reg, i) => write!(f, "arg %{}, {}", reg, i),
+            Self::Arg(op) => write!(f, "arg{}", op),
             Self::Copy(op) => write!(f, "copy{}", op),
             Self::Add(op) => write!(f, "add{}", op),
             Self::Sub(op) => write!(f, "sub{}", op),
@@ -1000,6 +1063,12 @@ fn get_sign_char(sign: bool) -> char {
         's'
     } else {
         'u'
+    }
+}
+
+impl std::fmt::Display for ArgOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{} %{}, {}", self.width, self.dst_reg, self.arg_number,)
     }
 }
 

@@ -28,6 +28,22 @@ pub fn enforce_ssa(blocks: &mut Vec<ir::Block>, scope: &mut NameScope) {
             op.remap_regs(map, Some(scope));
         }
         blocks[cur_block_index].tail.remap_regs(map);
+    }
+
+    // find width of data in each register to use in phi
+    let mut reg_width = HashMap::new();
+    for block in blocks.iter() {
+        for op in block.ops.iter() {
+            if let Some(reg) = op.get_dst_reg() {
+                if let Some(width) = op.get_dst_data_width() {
+                    reg_width.insert(reg, width);
+                }
+            }
+        }
+    }
+
+    for cur_block_index in 0..blocks.len() {
+        let map = &mut local_mappings[cur_block_index];
         for dst_index in blocks[cur_block_index].tail.get_connections() {
             update_phi(
                 blocks,
@@ -36,11 +52,10 @@ pub fn enforce_ssa(blocks: &mut Vec<ir::Block>, scope: &mut NameScope) {
                 &live_regs,
                 &entry_mappings[dst_index],
                 &map,
+                &reg_width,
             );
         }
     }
-
-    // delete_trivial_phi(blocks);
 }
 
 fn build_block_graph(blocks: &Vec<ir::Block>) -> ObjectGraph<usize> {
@@ -127,12 +142,16 @@ fn update_phi(
     live: &Vec<HashSet<ir::Reg>>,
     dst_map: &HashMap<ir::Reg, ir::Reg>,
     src_map: &HashMap<ir::Reg, ir::Reg>,
+    reg_width: &HashMap<ir::Reg, ir::Width>,
 ) {
     let block = &mut blocks[dst_index];
     for orig_reg in live[dst_index].intersection(&live[src_index]) {
         let dst_reg = dst_map.get(orig_reg).unwrap();
         let src_reg = src_map.get(orig_reg).unwrap();
-        block.phi.add_binding(dst_reg, src_reg, src_index);
+        let width = *reg_width
+            .get(&src_reg)
+            .expect("width for phi sources should be known");
+        block.phi.add_binding(dst_reg, src_reg, src_index, width);
     }
 }
 

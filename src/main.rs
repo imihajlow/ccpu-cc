@@ -7,6 +7,7 @@ mod block_emitter;
 mod compile;
 mod constant;
 mod ctype;
+mod deconstruct;
 mod enums;
 mod error;
 mod flush;
@@ -61,6 +62,7 @@ fn main() {
         tu.enforce_ssa();
         tu.optimize();
         println!("<{}>", tu);
-        tu.print_register_allocations();
+        tu.deconstruct_ssa();
+        println!("<{}>", tu);
     }
 }
