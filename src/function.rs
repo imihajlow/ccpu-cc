@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Formatter};
+use std::fmt::Formatter;
 
 use crate::{
     block_emitter::BlockEmitter,

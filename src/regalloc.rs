@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ir;
 
-const MAX_HW_REGISTERS: usize = 200;
+pub const MAX_HW_REGISTERS: usize = 200;
 
 /**
  * Allocate physical registers for a program in an SSA form.

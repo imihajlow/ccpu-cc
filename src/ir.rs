@@ -509,6 +509,35 @@ impl Tail {
         }
     }
 
+    pub fn replace_block_id(&mut self, old_id: usize, new_id: usize) {
+        match self {
+            Tail::Ret => (),
+            Tail::Jump(n) => {
+                if *n == old_id {
+                    *n = new_id;
+                }
+            }
+            Tail::Cond(_, a, b) => {
+                if *a == old_id {
+                    *a = new_id;
+                }
+                if *b == old_id {
+                    *b = new_id;
+                }
+            }
+            Tail::Switch(_, _, cases, default) => {
+                for (_, id) in cases.iter_mut() {
+                    if *id == old_id {
+                        *id = new_id;
+                    }
+                }
+                if *default == old_id {
+                    *default = new_id;
+                }
+            }
+        }
+    }
+
     pub fn is_return(&self) -> bool {
         match self {
             Tail::Ret => true,

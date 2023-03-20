@@ -2,6 +2,7 @@ mod add;
 mod assign;
 mod constant;
 mod controlflow;
+mod deconstruct;
 mod lvalue;
 mod member;
 mod object;
