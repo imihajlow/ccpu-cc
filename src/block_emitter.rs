@@ -627,7 +627,7 @@ impl BlockEmitter {
             LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
             continue_block_id,
         );
-        self.loop_depth += 1;
+        self.loop_depth -= 1;
 
         scope.pop_and_collect_initializers();
         Ok(())

@@ -50,9 +50,9 @@ impl TranslationUnit {
         }
     }
 
-    pub fn optimize(&mut self) {
+    pub fn optimize_ssa(&mut self) {
         for f in self.functions.iter_mut() {
-            f.optimize();
+            f.optimize_ssa();
         }
     }
 
@@ -65,6 +65,12 @@ impl TranslationUnit {
     pub fn deconstruct_ssa(&mut self) {
         for f in self.functions.iter_mut() {
             f.deconstruct_ssa();
+        }
+    }
+
+    pub fn optimize_deconstructed(&mut self) {
+        for f in self.functions.iter_mut() {
+            f.optimize_deconstructed();
         }
     }
 

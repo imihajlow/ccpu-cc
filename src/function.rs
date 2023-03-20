@@ -99,7 +99,7 @@ impl Function {
         self.frame.get_size()
     }
 
-    pub fn optimize(&mut self) {
+    pub fn optimize_ssa(&mut self) {
         use crate::opt::blocks::*;
         let mut modified = true;
         while modified {
@@ -109,6 +109,18 @@ impl Function {
             modified |= simplify_jumps(&mut self.body);
             modified |= merge_chains(&mut self.body);
             modified |= delete_unused_regs(&mut self.body);
+        }
+    }
+
+    pub fn optimize_deconstructed(&mut self) {
+        use crate::opt::blocks::*;
+        let mut modified = true;
+        while modified {
+            modified = false;
+            modified |=
+                replace_with::replace_with_or_abort_and_return(&mut self.body, drop_orphan_blocks);
+            modified |= simplify_jumps(&mut self.body);
+            modified |= merge_chains(&mut self.body);
         }
     }
 

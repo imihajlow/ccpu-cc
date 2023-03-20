@@ -60,9 +60,10 @@ fn main() {
     if let Ok(mut tu) = tu {
         println!("<{}>", tu);
         tu.enforce_ssa();
-        tu.optimize();
+        tu.optimize_ssa();
         println!("<{}>", tu);
         tu.deconstruct_ssa();
+        tu.optimize_deconstructed();
         println!("<{}>", tu);
     }
 }
