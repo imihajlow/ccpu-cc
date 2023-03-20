@@ -6,6 +6,18 @@ use crate::{ir, name_scope::NameScope};
 pub fn enforce_ssa(blocks: &mut Vec<ir::Block>, scope: &mut NameScope) {
     let live_regs = find_live_regs(blocks);
 
+    // find width of data in each register to use in phi
+    let mut reg_width = HashMap::new();
+    for block in blocks.iter() {
+        for op in block.ops.iter() {
+            if let Some(reg) = op.get_dst_reg() {
+                if let Some(width) = op.get_dst_data_width() {
+                    reg_width.insert(reg, width);
+                }
+            }
+        }
+    }
+
     // mappings from original register number to new register number on block entry
     let entry_mappings = {
         let mut entry_mappings = Vec::with_capacity(blocks.len());
@@ -28,18 +40,6 @@ pub fn enforce_ssa(blocks: &mut Vec<ir::Block>, scope: &mut NameScope) {
             op.remap_regs(map, Some(scope));
         }
         blocks[cur_block_index].tail.remap_regs(map);
-    }
-
-    // find width of data in each register to use in phi
-    let mut reg_width = HashMap::new();
-    for block in blocks.iter() {
-        for op in block.ops.iter() {
-            if let Some(reg) = op.get_dst_reg() {
-                if let Some(width) = op.get_dst_data_width() {
-                    reg_width.insert(reg, width);
-                }
-            }
-        }
     }
 
     for cur_block_index in 0..blocks.len() {
@@ -139,18 +139,23 @@ fn update_phi(
     blocks: &mut Vec<ir::Block>,
     dst_index: usize,
     src_index: usize,
-    live: &Vec<HashSet<ir::Reg>>,
-    dst_map: &HashMap<ir::Reg, ir::Reg>,
-    src_map: &HashMap<ir::Reg, ir::Reg>,
-    reg_width: &HashMap<ir::Reg, ir::Width>,
+    live: &Vec<HashSet<ir::Reg>>, // live registers per block (original register indexes)
+    dst_map: &HashMap<ir::Reg, ir::Reg>, // map from original indexes to indexes in destination block
+    src_map: &HashMap<ir::Reg, ir::Reg>, // map from original indexes to indexes in source block
+    orig_reg_width: &HashMap<ir::Reg, ir::Width>, // width of data in registers (original reg indexes)
 ) {
     let block = &mut blocks[dst_index];
     for orig_reg in live[dst_index].intersection(&live[src_index]) {
         let dst_reg = dst_map.get(orig_reg).unwrap();
         let src_reg = src_map.get(orig_reg).unwrap();
-        let width = *reg_width
-            .get(&src_reg)
-            .expect("width for phi sources should be known");
+        let width = if let Some(w) = orig_reg_width.get(&orig_reg) {
+            *w
+        } else {
+            panic!(
+                "width for phi sources should be known, orig_reg = {}, src_reg = {}, dst_reg = {}",
+                orig_reg, src_reg, dst_reg
+            );
+        };
         block.phi.add_binding(dst_reg, src_reg, src_index, width);
     }
 }

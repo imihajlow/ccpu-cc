@@ -71,6 +71,14 @@ impl<T: Eq + Hash + Clone> ObjectGraph<T> {
         self.g.edges[index].iter().copied()
     }
 
+    pub fn get_edges(&self, node: &T) -> Option<impl Iterator<Item = &T> + '_> {
+        let index = self.get_node_index(node);
+        index.map(|index| {
+            self.get_edges_from_index(index)
+                .map(|i| self.get_object(i).unwrap())
+        })
+    }
+
     pub fn transposed(self) -> Self {
         Self {
             g: self.g.transposed(),
