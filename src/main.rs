@@ -4,6 +4,7 @@
 #![feature(map_try_insert)]
 
 mod block_emitter;
+mod ccpu;
 mod compile;
 mod constant;
 mod ctype;
@@ -26,6 +27,7 @@ mod rvalue;
 mod ssa;
 mod string;
 mod struct_union;
+mod temp_reg;
 mod translation_unit;
 mod type_builder;
 mod utils;
@@ -45,11 +47,33 @@ fn main() {
     let p = parse_preprocessed(
         &cfg,
         "
-    int send(int a)
-    {
-        int x = a, y = x ? a + 1 : x - 2;
-        return x + y;
+void swap(int* a, int* b) {
+    int t = *a;
+    *a = *b;
+    *b = t;
+}
+
+int partition(int arr[], int low, int high) {
+    int pivot = arr[high];
+    int i = (low - 1);
+
+    for (int j = low; j <= high - 1; j++) {
+        if (arr[j] < pivot) {
+            i++;
+            swap(&arr[i], &arr[j]);
+        }
     }
+    swap(&arr[i + 1], &arr[high]);
+    return (i + 1);
+}
+
+void quickSort(int arr[], int low, int high) {
+    if (low < high) {
+        int pi = partition(arr, low, high);
+        quickSort(arr, low, pi - 1);
+        quickSort(arr, pi + 1, high);
+    }
+}
     "
         .to_string(),
     )
@@ -63,7 +87,7 @@ fn main() {
         tu.enforce_ssa();
         tu.optimize_ssa();
         println!("<{}>", tu);
-        tu.deconstruct_ssa();
+        let mut tu = tu.deconstruct_ssa();
         tu.optimize_deconstructed();
         println!("<{}>", tu);
     }

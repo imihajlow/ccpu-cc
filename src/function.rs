@@ -1,8 +1,9 @@
-use std::fmt::Formatter;
+use std::{fmt::Formatter, hash::Hash};
 
 use crate::{
     block_emitter::BlockEmitter,
-    compile, deconstruct, flush, ir,
+    ccpu::{self, reg::FrameReg},
+    compile, deconstruct, flush, generic_ir, ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
     opt::ssa::delete_unused_regs,
     regalloc, ssa,
@@ -18,7 +19,7 @@ use crate::{
     type_builder::TypeBuilder,
 };
 
-pub struct Function {
+pub struct Function<Reg: Eq + Hash> {
     is_inline: bool,
     is_noreturn: bool,
     is_vararg: bool,
@@ -27,11 +28,31 @@ pub struct Function {
     storage_class: GlobalStorageClass,
     return_type: QualifiedType,
     args: FunctionArgs,
-    body: Vec<ir::Block>,
+    body: Vec<generic_ir::Block<Reg>>,
     frame: FunctionFrame,
 }
 
-impl Function {
+impl<Reg: Hash + Eq> Function<Reg> {
+    pub fn set_reentrant(&mut self, reentrant: bool) {
+        self.is_reentrant = reentrant;
+    }
+
+    pub fn get_frame_size(&self) -> u32 {
+        self.frame.get_size()
+    }
+
+    #[cfg(test)]
+    pub fn get_body(&self) -> &Vec<generic_ir::GenericBlock<generic_ir::Tail<Reg>, Reg>> {
+        &self.body
+    }
+
+    #[cfg(test)]
+    pub fn get_frame(&self) -> &FunctionFrame {
+        &self.frame
+    }
+}
+
+impl Function<ir::VirtualReg> {
     pub fn new_from_node(
         node: Node<FunctionDefinition>,
         scope: &mut NameScope,
@@ -91,14 +112,6 @@ impl Function {
         })
     }
 
-    pub fn set_reentrant(&mut self, reentrant: bool) {
-        self.is_reentrant = reentrant;
-    }
-
-    pub fn get_frame_size(&self) -> u32 {
-        self.frame.get_size()
-    }
-
     pub fn optimize_ssa(&mut self) {
         use crate::opt::blocks::*;
         let mut modified = true;
@@ -112,6 +125,32 @@ impl Function {
         }
     }
 
+    pub fn enforce_ssa(&mut self, scope: &mut NameScope) {
+        ssa::enforce_ssa(&mut self.body, scope);
+        println!("{}", self);
+    }
+}
+
+impl Function<ir::VirtualReg> {
+    pub fn deconstruct_ssa(self) -> Function<ccpu::reg::FrameReg> {
+        let mut map = regalloc::allocate_registers(&self.body);
+        let body = deconstruct::deconstruct_ssa(self.body, &mut map);
+        Function {
+            is_inline: self.is_inline,
+            is_noreturn: self.is_noreturn,
+            is_vararg: self.is_vararg,
+            is_reentrant: self.is_reentrant,
+            name: self.name,
+            storage_class: self.storage_class,
+            return_type: self.return_type,
+            args: self.args,
+            body,
+            frame: self.frame,
+        }
+    }
+}
+
+impl Function<FrameReg> {
     pub fn optimize_deconstructed(&mut self) {
         use crate::opt::blocks::*;
         let mut modified = true;
@@ -122,26 +161,6 @@ impl Function {
             modified |= simplify_jumps(&mut self.body);
             modified |= merge_chains(&mut self.body);
         }
-    }
-
-    pub fn enforce_ssa(&mut self, scope: &mut NameScope) {
-        ssa::enforce_ssa(&mut self.body, scope);
-        println!("{}", self);
-    }
-
-    pub fn deconstruct_ssa(&mut self) {
-        let mut map = regalloc::allocate_registers(&self.body);
-        deconstruct::deconstruct_ssa(&mut self.body, &mut map);
-    }
-
-    #[cfg(test)]
-    pub fn get_body(&self) -> &Vec<ir::GenericBlock<ir::Tail>> {
-        &self.body
-    }
-
-    #[cfg(test)]
-    pub fn get_frame(&self) -> &FunctionFrame {
-        &self.frame
     }
 }
 
@@ -159,7 +178,7 @@ fn prepend_address_regs_initialization(be: &mut BlockEmitter, frame: &FunctionFr
     be.prepend_operations(ops);
 }
 
-impl std::fmt::Display for Function {
+impl<Reg: std::fmt::Display + Eq + Hash> std::fmt::Display for Function<Reg> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         writeln!(f, "function {}({})", self.name, self.get_frame_size())?;
         for (i, b) in self.body.iter().enumerate() {

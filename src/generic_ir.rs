@@ -5,8 +5,6 @@ use std::{
     mem,
 };
 
-use replace_with::replace_with_or_abort;
-
 use crate::{machine, name_scope::NameScope};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
@@ -424,6 +422,39 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Dummy(_) => (),
         }
     }
+
+    pub fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> Op<TargetReg> {
+        match self {
+            Op::Undefined(reg) => {
+                let new_reg = map.get(&reg).copied().unwrap();
+                Op::Undefined(new_reg)
+            }
+            Op::Arg(op) => Op::Arg(op.remap_regs(map)),
+            Op::Copy(op) => Op::Copy(op.remap_regs(map)),
+            Op::Bool(op) => Op::Bool(op.remap_regs(map)),
+            Op::BoolInv(op) => Op::BoolInv(op.remap_regs(map)),
+            Op::Add(op) => Op::Add(op.remap_regs(map)),
+            Op::Sub(op) => Op::Sub(op.remap_regs(map)),
+            Op::Mul(op) => Op::Mul(op.remap_regs(map)),
+            Op::Div(op) => Op::Div(op.remap_regs(map)),
+            Op::Mod(op) => Op::Mod(op.remap_regs(map)),
+            Op::BAnd(op) => Op::BAnd(op.remap_regs(map)),
+            Op::BOr(op) => Op::BOr(op.remap_regs(map)),
+            Op::BXor(op) => Op::BXor(op.remap_regs(map)),
+            Op::LShift(op) => Op::LShift(op.remap_regs(map)),
+            Op::RShift(op) => Op::RShift(op.remap_regs(map)),
+            Op::Neg(op) => Op::Neg(op.remap_regs(map)),
+            Op::Not(op) => Op::Not(op.remap_regs(map)),
+            Op::Compare(op) => Op::Compare(op.remap_regs(map)),
+            Op::Conv(op) => Op::Conv(op.remap_regs(map)),
+            Op::Store(op) => Op::Store(op.remap_regs(map)),
+            Op::Load(op) => Op::Load(op.remap_regs(map)),
+            Op::Call(op) => Op::Call(op.remap_regs(map)),
+            Op::Memcpy(op) => Op::Memcpy(op.remap_regs(map)),
+            #[cfg(test)]
+            Op::Dummy(x) => Op::Dummy(x),
+        }
+    }
 }
 
 impl Op<VirtualReg> {
@@ -431,44 +462,39 @@ impl Op<VirtualReg> {
      * Remap registers according to the map.
      * If scope is given, for each assignment to a register create its new version and update the map.
      */
-    pub fn remap_regs(
+    pub fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         match self {
             Op::Undefined(reg) => {
-                let new_reg = if let Some(scope) = scope {
-                    let new_reg = scope.alloc_reg();
-                    map.insert(reg, new_reg);
-                    new_reg
-                } else {
-                    map.get(&reg).copied().unwrap()
-                };
+                let new_reg = scope.alloc_reg();
+                map.insert(reg, new_reg);
                 Op::Undefined(new_reg)
             }
-            Op::Arg(op) => Op::Arg(op.remap_regs(map, scope)),
-            Op::Copy(op) => Op::Copy(op.remap_regs(map, scope)),
-            Op::Bool(op) => Op::Bool(op.remap_regs(map, scope)),
-            Op::BoolInv(op) => Op::BoolInv(op.remap_regs(map, scope)),
-            Op::Add(op) => Op::Add(op.remap_regs(map, scope)),
-            Op::Sub(op) => Op::Sub(op.remap_regs(map, scope)),
-            Op::Mul(op) => Op::Mul(op.remap_regs(map, scope)),
-            Op::Div(op) => Op::Div(op.remap_regs(map, scope)),
-            Op::Mod(op) => Op::Mod(op.remap_regs(map, scope)),
-            Op::BAnd(op) => Op::BAnd(op.remap_regs(map, scope)),
-            Op::BOr(op) => Op::BOr(op.remap_regs(map, scope)),
-            Op::BXor(op) => Op::BXor(op.remap_regs(map, scope)),
-            Op::LShift(op) => Op::LShift(op.remap_regs(map, scope)),
-            Op::RShift(op) => Op::RShift(op.remap_regs(map, scope)),
-            Op::Neg(op) => Op::Neg(op.remap_regs(map, scope)),
-            Op::Not(op) => Op::Not(op.remap_regs(map, scope)),
-            Op::Compare(op) => Op::Compare(op.remap_regs(map, scope)),
-            Op::Conv(op) => Op::Conv(op.remap_regs(map, scope)),
-            Op::Store(op) => Op::Store(op.remap_regs(map, scope)),
-            Op::Load(op) => Op::Load(op.remap_regs(map, scope)),
-            Op::Call(op) => Op::Call(op.remap_regs(map, scope)),
-            Op::Memcpy(op) => Op::Memcpy(op.remap_regs(map, scope)),
+            Op::Arg(op) => Op::Arg(op.remap_regs_to_new_version(map, scope)),
+            Op::Copy(op) => Op::Copy(op.remap_regs_to_new_version(map, scope)),
+            Op::Bool(op) => Op::Bool(op.remap_regs_to_new_version(map, scope)),
+            Op::BoolInv(op) => Op::BoolInv(op.remap_regs_to_new_version(map, scope)),
+            Op::Add(op) => Op::Add(op.remap_regs_to_new_version(map, scope)),
+            Op::Sub(op) => Op::Sub(op.remap_regs_to_new_version(map, scope)),
+            Op::Mul(op) => Op::Mul(op.remap_regs_to_new_version(map, scope)),
+            Op::Div(op) => Op::Div(op.remap_regs_to_new_version(map, scope)),
+            Op::Mod(op) => Op::Mod(op.remap_regs_to_new_version(map, scope)),
+            Op::BAnd(op) => Op::BAnd(op.remap_regs_to_new_version(map, scope)),
+            Op::BOr(op) => Op::BOr(op.remap_regs_to_new_version(map, scope)),
+            Op::BXor(op) => Op::BXor(op.remap_regs_to_new_version(map, scope)),
+            Op::LShift(op) => Op::LShift(op.remap_regs_to_new_version(map, scope)),
+            Op::RShift(op) => Op::RShift(op.remap_regs_to_new_version(map, scope)),
+            Op::Neg(op) => Op::Neg(op.remap_regs_to_new_version(map, scope)),
+            Op::Not(op) => Op::Not(op.remap_regs_to_new_version(map, scope)),
+            Op::Compare(op) => Op::Compare(op.remap_regs_to_new_version(map, scope)),
+            Op::Conv(op) => Op::Conv(op.remap_regs_to_new_version(map, scope)),
+            Op::Store(op) => Op::Store(op.remap_regs(map)),
+            Op::Load(op) => Op::Load(op.remap_regs_to_new_version(map, scope)),
+            Op::Call(op) => Op::Call(op.remap_regs_to_new_version(map, scope)),
+            Op::Memcpy(op) => Op::Memcpy(op.remap_regs(map)),
             #[cfg(test)]
             Op::Dummy(x) => Op::Dummy(x),
         }
@@ -548,12 +574,11 @@ impl<Reg: Copy + Eq + Hash> Tail<Reg> {
             Tail::Switch(c, _, _, _) => c.collect_regs(set),
         }
     }
-}
 
-impl Tail<VirtualReg> {
-    pub fn remap_regs(self, map: &HashMap<VirtualReg, VirtualReg>) -> Self {
+    pub fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> Tail<TargetReg> {
         match self {
-            Tail::Jump(_) | Tail::Ret => self,
+            Tail::Jump(n) => Tail::Jump(n),
+            Tail::Ret => Tail::Ret,
             Tail::Cond(c, i, e) => Tail::Cond(c.remap_reg(map), i, e),
             Tail::Switch(c, w, s, d) => Tail::Switch(c.remap_reg(map), w, s, d),
         }
@@ -612,8 +637,11 @@ impl<Reg: Copy + Eq + Hash> Phi<Reg> {
         old_len != self.srcs.len()
     }
 
-    pub fn remap_regs(self, map: &HashMap<Reg, Reg>) -> Self {
-        Self {
+    pub fn remap_regs<TargetReg: Copy + Eq + Hash>(
+        self,
+        map: &HashMap<Reg, TargetReg>,
+    ) -> Phi<TargetReg> {
+        Phi {
             srcs: self
                 .srcs
                 .into_iter()
@@ -657,22 +685,29 @@ impl<Reg: Copy + Eq + Hash> ArgOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         regs.insert(self.dst_reg);
     }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> ArgOp<TargetReg> {
+        let new_dst_reg = *map.get(&self.dst_reg).unwrap();
+        ArgOp {
+            dst_reg: new_dst_reg,
+            arg_number: self.arg_number,
+            width: self.width,
+        }
+    }
 }
 
 impl ArgOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         let new_dst_reg = if let Some(new_reg) = map.get(&self.dst_reg) {
             *new_reg
-        } else if let Some(scope) = scope {
+        } else {
             let new_reg = scope.alloc_reg();
             map.insert(self.dst_reg, new_reg);
             new_reg
-        } else {
-            panic!("can't remap register {}", self.dst_reg);
         };
         Self {
             dst_reg: new_dst_reg,
@@ -700,13 +735,25 @@ impl<Reg: Copy + Eq + Hash> CompareOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> CompareOp<TargetReg> {
+        CompareOp {
+            lhs: self.lhs.remap_reg(map),
+            rhs: self.rhs.remap_reg(map),
+            dst: self.dst.remap_reg(map),
+            kind: self.kind,
+            dst_width: self.dst_width,
+            width: self.width,
+            sign: self.sign,
+        }
+    }
 }
 
 impl CompareOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         Self {
             lhs: self.lhs.remap_reg(map),
@@ -735,13 +782,24 @@ impl<Reg: Copy + Eq + Hash> UnaryUnsignedOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs<TargetReg: Copy>(
+        self,
+        map: &HashMap<Reg, TargetReg>,
+    ) -> UnaryUnsignedOp<TargetReg> {
+        UnaryUnsignedOp {
+            src: self.src.remap_reg(map),
+            dst: self.dst.remap_reg(map),
+            width: self.width,
+        }
+    }
 }
 
 impl UnaryUnsignedOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         Self {
             src: self.src.remap_reg(map),
@@ -770,13 +828,23 @@ impl<Reg: Copy + Eq + Hash> BinaryOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> BinaryOp<TargetReg> {
+        BinaryOp {
+            lhs: self.lhs.remap_reg(map),
+            rhs: self.rhs.remap_reg(map),
+            dst: self.dst.remap_reg(map),
+            width: self.width,
+            sign: self.sign,
+        }
+    }
 }
 
 impl BinaryOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         Self {
             lhs: self.lhs.remap_reg(map),
@@ -806,13 +874,25 @@ impl<Reg: Copy + Eq + Hash> BinaryUnsignedOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs<TargetReg: Copy>(
+        self,
+        map: &HashMap<Reg, TargetReg>,
+    ) -> BinaryUnsignedOp<TargetReg> {
+        BinaryUnsignedOp {
+            lhs: self.lhs.remap_reg(map),
+            rhs: self.rhs.remap_reg(map),
+            dst: self.dst.remap_reg(map),
+            width: self.width,
+        }
+    }
 }
 
 impl BinaryUnsignedOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         Self {
             lhs: self.lhs.remap_reg(map),
@@ -842,13 +922,23 @@ impl<Reg: Copy + Eq + Hash> ShiftOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> ShiftOp<TargetReg> {
+        ShiftOp {
+            lhs: self.lhs.remap_reg(map),
+            rhs: self.rhs.remap_reg(map),
+            dst: self.dst.remap_reg(map),
+            lhs_width: self.lhs_width,
+            lhs_sign: self.lhs_sign,
+        }
+    }
 }
 
 impl ShiftOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         Self {
             lhs: self.lhs.remap_reg(map),
@@ -877,13 +967,24 @@ impl<Reg: Copy + Eq + Hash> ConvOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> ConvOp<TargetReg> {
+        ConvOp {
+            src: self.src.remap_reg(map),
+            dst: self.dst.remap_reg(map),
+            src_width: self.src_width,
+            src_sign: self.src_sign,
+            dst_width: self.dst_width,
+            dst_sign: self.dst_sign,
+        }
+    }
 }
 
 impl ConvOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         Self {
             src: self.src.remap_reg(map),
@@ -910,18 +1011,12 @@ impl<Reg: Copy + Eq + Hash> StoreOp<Reg> {
     }
 
     fn collect_set_regs(&self, _regs: &mut HashSet<Reg>) {}
-}
 
-impl StoreOp<VirtualReg> {
-    fn remap_regs(
-        self,
-        map: &mut HashMap<VirtualReg, VirtualReg>,
-        _scope: Option<&mut NameScope>,
-    ) -> Self {
-        Self {
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> StoreOp<TargetReg> {
+        StoreOp {
             src: self.src.remap_reg(map),
             dst_addr: self.dst_addr.remap_reg(map),
-            ..self
+            width: self.width,
         }
     }
 }
@@ -944,13 +1039,21 @@ impl<Reg: Copy + Eq + Hash> LoadOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.collect_regs(regs);
     }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> LoadOp<TargetReg> {
+        LoadOp {
+            src_addr: self.src_addr.remap_reg(map),
+            dst: self.dst.remap_reg(map),
+            width: self.width,
+        }
+    }
 }
 
 impl LoadOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         Self {
             src_addr: self.src_addr.remap_reg(map),
@@ -988,13 +1091,26 @@ impl<Reg: Copy + Eq + Hash> CallOp<Reg> {
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
         self.dst.as_ref().map(|(dst, _)| dst.collect_regs(regs));
     }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> CallOp<TargetReg> {
+        CallOp {
+            args: self
+                .args
+                .into_iter()
+                .map(|(a, w)| (a.remap_reg(map), w))
+                .collect(),
+
+            dst: self.dst.map(|(dst, w)| (dst.remap_reg(map), w)),
+            addr: self.addr.remap_reg(map),
+        }
+    }
 }
 
 impl CallOp<VirtualReg> {
-    fn remap_regs(
+    fn remap_regs_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         Self {
             args: self
@@ -1024,18 +1140,12 @@ impl<Reg: Copy + Eq + Hash> MemcpyOp<Reg> {
     }
 
     fn collect_set_regs(&self, _regs: &mut HashSet<Reg>) {}
-}
 
-impl MemcpyOp<VirtualReg> {
-    fn remap_regs(
-        self,
-        map: &mut HashMap<VirtualReg, VirtualReg>,
-        _scope: Option<&mut NameScope>,
-    ) -> Self {
-        Self {
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> MemcpyOp<TargetReg> {
+        MemcpyOp {
             src_addr: self.src_addr.remap_reg(map),
             dst_addr: self.dst_addr.remap_reg(map),
-            ..self
+            len: self.len,
         }
     }
 }
@@ -1075,11 +1185,12 @@ impl<Reg: Copy + Eq + Hash> VarLocation<Reg> {
         }
     }
 
-    fn remap_reg(self, map: &HashMap<Reg, Reg>) -> Self {
-        if let VarLocation::Local(n) = self {
-            VarLocation::Local(map.get(&n).copied().unwrap())
-        } else {
-            self
+    fn remap_reg<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> VarLocation<TargetReg> {
+        match self {
+            VarLocation::Local(n) => VarLocation::Local(map.get(&n).copied().unwrap()),
+            VarLocation::Global(x) => VarLocation::Global(x),
+            VarLocation::Frame(n) => VarLocation::Frame(n),
+            VarLocation::Return => VarLocation::Return,
         }
     }
 }
@@ -1092,16 +1203,11 @@ impl VarLocation<VirtualReg> {
     fn remap_reg_to_new_version(
         self,
         map: &mut HashMap<VirtualReg, VirtualReg>,
-        scope: Option<&mut NameScope>,
+        scope: &mut NameScope,
     ) -> Self {
         if let VarLocation::Local(n) = self {
-            let reg = if let Some(scope) = scope {
-                let reg = scope.alloc_reg();
-                map.insert(n, reg);
-                reg
-            } else {
-                map.get(&n).copied().unwrap()
-            };
+            let reg = scope.alloc_reg();
+            map.insert(n, reg);
             VarLocation::Local(reg)
         } else {
             self
@@ -1142,11 +1248,12 @@ impl<Reg: Copy + Eq + Hash> Scalar<Reg> {
         }
     }
 
-    fn remap_reg(self, map: &HashMap<Reg, Reg>) -> Self {
-        if let Scalar::Var(v) = self {
-            Scalar::Var(v.remap_reg(map))
-        } else {
-            self
+    fn remap_reg<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> Scalar<TargetReg> {
+        match self {
+            Scalar::Var(v) => Scalar::Var(v.remap_reg(map)),
+            Scalar::ConstInt(n) => Scalar::ConstInt(n),
+            Scalar::SymbolOffset(s, o) => Scalar::SymbolOffset(s, o),
+            Scalar::FramePointer => Scalar::FramePointer,
         }
     }
 }

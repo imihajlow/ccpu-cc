@@ -203,12 +203,12 @@ impl StructUnion {
 #[cfg(test)]
 mod test {
     use crate::ctype::{CType, Qualifiers};
-    use crate::ir::{self, VarLocation};
+    use crate::ir::{self, VarLocation, VirtualReg};
     use crate::translation_unit::TranslationUnit;
 
     use super::*;
 
-    fn compile(code: &str) -> (TranslationUnit, ErrorCollector) {
+    fn compile(code: &str) -> (TranslationUnit<VirtualReg>, ErrorCollector) {
         use lang_c::driver::{parse_preprocessed, Config, Flavor};
         let mut cfg = Config::default();
         cfg.flavor = Flavor::StdC11;
@@ -228,7 +228,7 @@ mod test {
         assert!(TranslationUnit::translate(p.unit, &mut ec).is_err());
     }
 
-    fn get_first_body(tu: &TranslationUnit) -> &Vec<ir::Block> {
+    fn get_first_body(tu: &TranslationUnit<VirtualReg>) -> &Vec<ir::Block> {
         tu.functions.first().unwrap().get_body()
     }
 

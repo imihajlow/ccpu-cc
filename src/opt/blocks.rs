@@ -1,14 +1,17 @@
+use std::hash::Hash;
 use std::mem;
 
 use replace_with::replace_with_or_abort;
 
-use crate::ir;
+use crate::{generic_ir, ir};
 
 /**
  * Find and delete unreachable blocks.
  * The first argument of the return tuple indicates if any changes have been made.
  */
-pub fn drop_orphan_blocks(blocks: Vec<ir::Block>) -> (bool, Vec<ir::Block>) {
+pub fn drop_orphan_blocks<Reg: Hash + Eq + Copy>(
+    blocks: Vec<generic_ir::Block<Reg>>,
+) -> (bool, Vec<generic_ir::Block<Reg>>) {
     assert!(!blocks.is_empty());
     let mut visited = vec![false; blocks.len()];
     visit_blocks(0, &blocks, &mut visited);
@@ -38,23 +41,24 @@ pub fn drop_orphan_blocks(blocks: Vec<ir::Block>) -> (bool, Vec<ir::Block>) {
  *
  * Returns true if any changes have been made.
  */
-pub fn simplify_jumps(blocks: &mut Vec<ir::Block>) -> bool {
+pub fn simplify_jumps<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<Reg>>) -> bool {
+    use generic_ir::Tail;
     let mut result = false;
     for block in blocks.iter_mut() {
         replace_with_or_abort(&mut block.tail, |tail| match tail {
-            ir::Tail::Cond(_, t, e) if t == e => {
+            Tail::Cond(_, t, e) if t == e => {
                 result = true;
-                ir::Tail::Jump(t)
+                Tail::Jump(t)
             }
-            ir::Tail::Switch(s, w, cases, default) => {
+            Tail::Switch(s, w, cases, default) => {
                 if cases.iter().all(|(_, id)| *id == default) {
                     result = true;
-                    ir::Tail::Jump(default)
+                    Tail::Jump(default)
                 } else {
-                    ir::Tail::Switch(s, w, cases, default)
+                    Tail::Switch(s, w, cases, default)
                 }
             }
-            ir::Tail::Cond(_, _, _) | ir::Tail::Jump(_) | ir::Tail::Ret => tail,
+            Tail::Cond(_, _, _) | Tail::Jump(_) | Tail::Ret => tail,
         });
     }
     result
@@ -65,7 +69,7 @@ pub fn simplify_jumps(blocks: &mut Vec<ir::Block>) -> bool {
  *
  * Returns true if any changes have been made.
  */
-pub fn merge_chains(blocks: &mut Vec<ir::Block>) -> bool {
+pub fn merge_chains<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<Reg>>) -> bool {
     assert!(!blocks.is_empty());
     let mut ref_counts = vec![0; blocks.len()];
     ref_counts[0] = 1;
@@ -77,7 +81,7 @@ pub fn merge_chains(blocks: &mut Vec<ir::Block>) -> bool {
     let mut merge_with = Vec::with_capacity(blocks.len());
     for block in blocks.iter() {
         merge_with.push(match &block.tail {
-            ir::Tail::Jump(n) if ref_counts[*n] == 1 => Some(*n),
+            generic_ir::Tail::Jump(n) if ref_counts[*n] == 1 => Some(*n),
             _ => None,
         });
     }
@@ -103,7 +107,11 @@ pub fn merge_chains(blocks: &mut Vec<ir::Block>) -> bool {
     result
 }
 
-fn visit_blocks(index: usize, blocks: &Vec<ir::Block>, visited: &mut Vec<bool>) {
+fn visit_blocks<Reg: Copy + Hash + Eq>(
+    index: usize,
+    blocks: &Vec<generic_ir::Block<Reg>>,
+    visited: &mut Vec<bool>,
+) {
     assert_eq!(blocks.len(), visited.len());
 
     if visited[index] {
@@ -113,39 +121,42 @@ fn visit_blocks(index: usize, blocks: &Vec<ir::Block>, visited: &mut Vec<bool>) 
     visited[index] = true;
     let block = &blocks[index];
     match &block.tail {
-        ir::Tail::Jump(i) => visit_blocks(*i, blocks, visited),
-        ir::Tail::Cond(_, then_id, else_id) => {
+        generic_ir::Tail::Jump(i) => visit_blocks(*i, blocks, visited),
+        generic_ir::Tail::Cond(_, then_id, else_id) => {
             visit_blocks(*then_id, blocks, visited);
             visit_blocks(*else_id, blocks, visited);
         }
-        ir::Tail::Switch(_, _, cases, default) => {
+        generic_ir::Tail::Switch(_, _, cases, default) => {
             for (_, i) in cases {
                 visit_blocks(*i, blocks, visited);
             }
             visit_blocks(*default, blocks, visited);
         }
-        ir::Tail::Ret => (),
+        generic_ir::Tail::Ret => (),
     }
 }
 
-fn adjust_block_ids(block: ir::Block, offsets: &Vec<usize>) -> ir::Block {
+fn adjust_block_ids<Reg: Copy + Hash + Eq>(
+    block: generic_ir::Block<Reg>,
+    offsets: &Vec<usize>,
+) -> generic_ir::Block<Reg> {
     let tail = match block.tail {
-        ir::Tail::Jump(n) => ir::Tail::Jump(n - offsets[n]),
-        ir::Tail::Cond(c, then_id, else_id) => {
-            ir::Tail::Cond(c, then_id - offsets[then_id], else_id - offsets[else_id])
+        generic_ir::Tail::Jump(n) => generic_ir::Tail::Jump(n - offsets[n]),
+        generic_ir::Tail::Cond(c, then_id, else_id) => {
+            generic_ir::Tail::Cond(c, then_id - offsets[then_id], else_id - offsets[else_id])
         }
-        ir::Tail::Switch(c, w, cases, default) => {
+        generic_ir::Tail::Switch(c, w, cases, default) => {
             let cases = cases
                 .into_iter()
                 .map(|(v, id)| (v, id - offsets[id]))
                 .collect();
             let default = default - offsets[default];
-            ir::Tail::Switch(c, w, cases, default)
+            generic_ir::Tail::Switch(c, w, cases, default)
         }
-        ir::Tail::Ret => ir::Tail::Ret,
+        generic_ir::Tail::Ret => generic_ir::Tail::Ret,
     };
     let phi = block.phi.with_adjusted_block_ids(offsets);
-    ir::Block { tail, phi, ..block }
+    generic_ir::Block { tail, phi, ..block }
 }
 
 #[cfg(test)]

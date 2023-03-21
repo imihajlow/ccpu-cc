@@ -39,7 +39,7 @@ pub fn enforce_ssa(blocks: &mut Vec<ir::Block>, scope: &mut NameScope) {
     for cur_block_index in 0..blocks.len() {
         let map = &mut local_mappings[cur_block_index];
         for op in &mut blocks[cur_block_index].ops {
-            replace_with_or_abort(op, |op| op.remap_regs(map, Some(scope)));
+            replace_with_or_abort(op, |op| op.remap_regs_to_new_version(map, scope));
         }
         replace_with_or_abort(&mut blocks[cur_block_index].tail, |tail| {
             tail.remap_regs(map)

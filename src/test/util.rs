@@ -1,9 +1,9 @@
 use crate::error::ErrorCollector;
 use crate::function::Function;
-use crate::ir;
+use crate::ir::{self, VirtualReg};
 use crate::translation_unit::TranslationUnit;
 
-pub fn compile(code: &str) -> (TranslationUnit, ErrorCollector) {
+pub fn compile(code: &str) -> (TranslationUnit<VirtualReg>, ErrorCollector) {
     use lang_c::driver::{parse_preprocessed, Config, Flavor};
     let mut cfg = Config::default();
     cfg.flavor = Flavor::StdC11;
@@ -23,15 +23,15 @@ pub fn assert_compile_error(code: &str) {
     assert!(TranslationUnit::translate(p.unit, &mut ec).is_err());
 }
 
-pub fn get_first_body(tu: &TranslationUnit) -> &Vec<ir::Block> {
+pub fn get_first_body(tu: &TranslationUnit<VirtualReg>) -> &Vec<ir::Block> {
     get_first_function(tu).get_body()
 }
 
-pub fn get_first_function(tu: &TranslationUnit) -> &Function {
+pub fn get_first_function(tu: &TranslationUnit<VirtualReg>) -> &Function<VirtualReg> {
     tu.functions.first().unwrap()
 }
 
-pub fn translate(code: &str) -> (Result<TranslationUnit, ()>, ErrorCollector) {
+pub fn translate(code: &str) -> (Result<TranslationUnit<VirtualReg>, ()>, ErrorCollector) {
     use lang_c::driver::{parse_preprocessed, Config, Flavor};
     let mut cfg = Config::default();
     cfg.flavor = Flavor::StdC11;

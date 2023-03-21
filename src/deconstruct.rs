@@ -1,23 +1,25 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
+};
 
-use replace_with::replace_with_or_abort;
-
-use crate::{graph::ObjectGraph, ir, regalloc};
-
-const TMP_REG_INDEX: ir::VirtualReg = regalloc::MAX_HW_REGISTERS as ir::VirtualReg;
+use crate::{ccpu::reg::FrameReg, generic_ir, graph::ObjectGraph, ir, temp_reg::TempReg};
 
 pub fn deconstruct_ssa(
-    body: &mut Vec<ir::Block>,
-    map: &mut HashMap<ir::VirtualReg, ir::VirtualReg>,
-) {
+    body: Vec<ir::Block>,
+    map: &HashMap<ir::VirtualReg, FrameReg>,
+) -> Vec<generic_ir::Block<FrameReg>> {
     // Rename registers in body and tail
-    for block in body.iter_mut() {
-        for op in block.ops.iter_mut() {
-            replace_with_or_abort(op, |op| op.remap_regs(map, None));
-        }
-        replace_with_or_abort(&mut block.tail, |tail| tail.remap_regs(map));
-        replace_with_or_abort(&mut block.phi, |phi| phi.remap_regs(map));
-    }
+    let mut body: Vec<generic_ir::Block<FrameReg>> = body
+        .into_iter()
+        .map(|block| generic_ir::Block {
+            ops: block.ops.into_iter().map(|op| op.remap_regs(map)).collect(),
+            tail: block.tail.remap_regs(map),
+            phi: block.phi.remap_regs(map),
+            loop_depth: block.loop_depth,
+        })
+        .collect();
 
     let mut copies = CopyOps::new();
 
@@ -26,7 +28,7 @@ pub fn deconstruct_ssa(
         for (src_block_id, dst, src, width) in phi_to_copies(&block.phi).into_iter() {
             copies.push_copy(dst_block_id, src_block_id, dst, src, width);
         }
-        block.phi = ir::Phi::new();
+        block.phi = generic_ir::Phi::new();
     }
 
     println!("copies = {:#?}", copies);
@@ -43,9 +45,9 @@ pub fn deconstruct_ssa(
         }
 
         for (dst_block_id, copies) in moved_copies.into_iter() {
-            let new_block = ir::Block {
-                phi: ir::Phi::new(),
-                tail: ir::Tail::Jump(dst_block_id),
+            let new_block = generic_ir::Block {
+                phi: generic_ir::Phi::new(),
+                tail: generic_ir::Tail::Jump(dst_block_id),
                 ops: copies
                     .into_iter()
                     .map(|(dst, src, width)| get_copy_op(dst, src, width))
@@ -59,12 +61,13 @@ pub fn deconstruct_ssa(
                 .replace_block_id(dst_block_id, new_block_id);
         }
     }
+    body
 }
 
-fn get_copy_op(dst: ir::VirtualReg, src: ir::VirtualReg, width: ir::Width) -> ir::Op {
-    ir::Op::Copy(ir::UnaryUnsignedOp {
-        dst: ir::VarLocation::Local(dst),
-        src: ir::Scalar::Var(ir::VarLocation::Local(src)),
+fn get_copy_op<Reg>(dst: Reg, src: Reg, width: ir::Width) -> generic_ir::Op<Reg> {
+    generic_ir::Op::Copy(generic_ir::UnaryUnsignedOp {
+        dst: generic_ir::VarLocation::Local(dst),
+        src: generic_ir::Scalar::Var(generic_ir::VarLocation::Local(src)),
         width,
     })
 }
@@ -73,12 +76,9 @@ fn get_copy_op(dst: ir::VirtualReg, src: ir::VirtualReg, width: ir::Width) -> ir
  * Build graphs for each source block connecting destination registers to source registers.
  * Additionally, build a map of used width in destination registers.
  */
-fn build_phi_graphs(
-    phi: &ir::Phi,
-) -> (
-    HashMap<usize, ObjectGraph<ir::VirtualReg>>,
-    HashMap<ir::VirtualReg, ir::Width>,
-) {
+fn build_phi_graphs<Reg: Copy + Eq + Hash>(
+    phi: &generic_ir::Phi<Reg>,
+) -> (HashMap<usize, ObjectGraph<Reg>>, HashMap<Reg, ir::Width>) {
     let mut graphs = HashMap::new();
     let mut widths = HashMap::new();
     for (dst, (w, srcs)) in &phi.srcs {
@@ -100,7 +100,9 @@ fn build_phi_graphs(
     (graphs, widths)
 }
 
-fn phi_to_copies(phi: &ir::Phi) -> Vec<(usize, ir::VirtualReg, ir::VirtualReg, ir::Width)> {
+fn phi_to_copies<Reg: Copy + Eq + Hash + TempReg + Debug>(
+    phi: &generic_ir::Phi<Reg>,
+) -> Vec<(usize, Reg, Reg, ir::Width)> {
     let (graphs, widths) = build_phi_graphs(phi);
     let mut copies = Vec::new();
     for (src_block, g) in graphs {
@@ -139,9 +141,9 @@ fn phi_to_copies(phi: &ir::Phi) -> Vec<(usize, ir::VirtualReg, ir::VirtualReg, i
                 }
                 let dst_reg = g.get_object(first_reg_node_idx).unwrap();
                 let width = *widths.get(dst_reg).unwrap();
-                loop_copies.push((src_block, *dst_reg, TMP_REG_INDEX, width));
+                loop_copies.push((src_block, *dst_reg, Reg::get_temp_register(), width));
 
-                copies.push((src_block, TMP_REG_INDEX, first_reg, width));
+                copies.push((src_block, Reg::get_temp_register(), first_reg, width));
                 copies.extend(loop_copies.into_iter());
             }
         }
@@ -153,7 +155,7 @@ fn phi_to_copies(phi: &ir::Phi) -> Vec<(usize, ir::VirtualReg, ir::VirtualReg, i
 struct CopyOps(HashMap<usize, BlockCopyOps>);
 
 #[derive(Debug)]
-struct BlockCopyOps(HashMap<usize, Vec<(ir::VirtualReg, ir::VirtualReg, ir::Width)>>);
+struct BlockCopyOps(HashMap<usize, Vec<(FrameReg, FrameReg, ir::Width)>>);
 
 impl CopyOps {
     fn new() -> Self {
@@ -164,8 +166,8 @@ impl CopyOps {
         &mut self,
         dst_block_id: usize,
         src_block_id: usize,
-        dst_reg: ir::VirtualReg,
-        src_reg: ir::VirtualReg,
+        dst_reg: FrameReg,
+        src_reg: FrameReg,
         width: ir::Width,
     ) {
         let src_map = if let Some(m) = self.0.get_mut(&src_block_id) {
@@ -191,8 +193,8 @@ impl BlockCopyOps {
     fn push_copy(
         &mut self,
         dst_block_id: usize,
-        dst_reg: ir::VirtualReg,
-        src_reg: ir::VirtualReg,
+        dst_reg: FrameReg,
+        src_reg: FrameReg,
         width: ir::Width,
     ) {
         let dst_vec = if let Some(m) = self.0.get_mut(&dst_block_id) {
@@ -213,10 +215,10 @@ impl BlockCopyOps {
      */
     fn into_lists(
         self,
-        tail_regs: HashSet<ir::VirtualReg>,
+        tail_regs: HashSet<FrameReg>,
     ) -> (
-        Vec<(ir::VirtualReg, ir::VirtualReg, ir::Width)>,
-        Vec<(usize, Vec<(ir::VirtualReg, ir::VirtualReg, ir::Width)>)>,
+        Vec<(FrameReg, FrameReg, ir::Width)>,
+        Vec<(usize, Vec<(FrameReg, FrameReg, ir::Width)>)>,
     ) {
         let conflicting_dsts = self.find_conflicts(&tail_regs);
         let mut original_copies = Vec::new();
@@ -236,7 +238,7 @@ impl BlockCopyOps {
      * such that copies for those destination blocks conflict with each other
      * or with registers used in block's tail.
      */
-    fn find_conflicts(&self, tail_regs: &HashSet<ir::VirtualReg>) -> HashSet<usize> {
+    fn find_conflicts(&self, tail_regs: &HashSet<FrameReg>) -> HashSet<usize> {
         #[derive(Copy, Clone, PartialEq, Eq, Hash)]
         enum Usage {
             Tail,
@@ -291,9 +293,16 @@ mod test {
     use super::*;
     use ir::Width::*;
 
-    fn index_of(
-        copies: &Vec<(usize, ir::VirtualReg, ir::VirtualReg, ir::Width)>,
-        el: (usize, ir::VirtualReg, ir::VirtualReg, ir::Width),
+    const TMP_REG_INDEX: u32 = 10000;
+    impl TempReg for u32 {
+        fn get_temp_register() -> Self {
+            TMP_REG_INDEX
+        }
+    }
+
+    fn index_of<Reg: Copy + Eq + Hash>(
+        copies: &Vec<(usize, Reg, Reg, ir::Width)>,
+        el: (usize, Reg, Reg, ir::Width),
     ) -> usize {
         copies.iter().position(|e| e == &el).unwrap()
     }

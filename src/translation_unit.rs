@@ -1,8 +1,11 @@
 use std::fmt::Formatter;
+use std::hash::Hash;
 
+use crate::ccpu::reg::FrameReg;
 use crate::constant::{self, compute_constant_initializer};
 use crate::error::{CompileWarning, ErrorCollector};
 use crate::function::Function;
+use crate::ir;
 use crate::name_scope::{GlobalStorageClass, NameScope};
 use crate::type_builder::TypeBuilder;
 
@@ -11,12 +14,12 @@ use lang_c::ast::{
 };
 use lang_c::span::Node;
 
-pub struct TranslationUnit {
+pub struct TranslationUnit<Reg: Eq + Hash> {
     pub scope: NameScope,
-    pub functions: Vec<Function>,
+    pub functions: Vec<Function<Reg>>,
 }
 
-impl TranslationUnit {
+impl TranslationUnit<ir::VirtualReg> {
     pub fn translate(
         tu: lang_c::ast::TranslationUnit,
         ec: &mut ErrorCollector,
@@ -62,15 +65,14 @@ impl TranslationUnit {
         }
     }
 
-    pub fn deconstruct_ssa(&mut self) {
-        for f in self.functions.iter_mut() {
-            f.deconstruct_ssa();
-        }
-    }
-
-    pub fn optimize_deconstructed(&mut self) {
-        for f in self.functions.iter_mut() {
-            f.optimize_deconstructed();
+    pub fn deconstruct_ssa(self) -> TranslationUnit<FrameReg> {
+        TranslationUnit {
+            scope: self.scope,
+            functions: self
+                .functions
+                .into_iter()
+                .map(|f| f.deconstruct_ssa())
+                .collect(),
         }
     }
 
@@ -148,6 +150,14 @@ impl TranslationUnit {
     }
 }
 
+impl TranslationUnit<FrameReg> {
+    pub fn optimize_deconstructed(&mut self) {
+        for f in self.functions.iter_mut() {
+            f.optimize_deconstructed();
+        }
+    }
+}
+
 fn match_storage_classes(old: &GlobalStorageClass, new: &GlobalStorageClass) -> bool {
     use GlobalStorageClass::*;
     // same classes match
@@ -162,7 +172,7 @@ fn match_storage_classes(old: &GlobalStorageClass, new: &GlobalStorageClass) -> 
     }
 }
 
-impl std::fmt::Display for TranslationUnit {
+impl<Reg: Copy + Hash + Eq + std::fmt::Display> std::fmt::Display for TranslationUnit<Reg> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         for fun in &self.functions {
             writeln!(f, "{}", fun)?;
