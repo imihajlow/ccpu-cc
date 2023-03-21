@@ -177,13 +177,13 @@ pub enum Tail<Reg> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Phi {
-    pub srcs: HashMap<VirtualReg, (Width, Vec<(BlockNumber, Scalar<VirtualReg>)>)>,
+pub struct Phi<Reg: Eq + Hash> {
+    pub srcs: HashMap<Reg, (Width, Vec<(BlockNumber, Scalar<Reg>)>)>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct GenericBlock<GTail, Reg> {
-    pub phi: Phi,
+pub struct GenericBlock<GTail, Reg: Eq + Hash> {
+    pub phi: Phi<Reg>,
     pub ops: Vec<Op<Reg>>,
     pub tail: GTail,
     pub loop_depth: usize,
@@ -192,7 +192,7 @@ pub struct GenericBlock<GTail, Reg> {
 pub type Block<Reg> = GenericBlock<Tail<Reg>, Reg>;
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct Function<Reg> {
+pub struct Function<Reg: Eq + Hash> {
     pub stack_size: u16,
     pub blocks: Vec<Block<Reg>>,
 }
@@ -559,14 +559,14 @@ impl Tail<VirtualReg> {
     }
 }
 
-impl Phi {
+impl<Reg: Copy + Eq + Hash> Phi<Reg> {
     pub fn new() -> Self {
         Self {
             srcs: HashMap::new(),
         }
     }
 
-    pub fn add_binding(&mut self, dst: &VirtualReg, src: &VirtualReg, block: usize, width: Width) {
+    pub fn add_binding(&mut self, dst: &Reg, src: &Reg, block: usize, width: Width) {
         if let Some((old_width, l)) = self.srcs.get_mut(dst) {
             assert_eq!(*old_width, width);
             l.push((block, Scalar::Var(VarLocation::Local(*src))));
@@ -601,7 +601,7 @@ impl Phi {
         self.srcs.is_empty()
     }
 
-    pub fn delete_dsts_from_set(&mut self, set: &HashSet<VirtualReg>) -> bool {
+    pub fn delete_dsts_from_set(&mut self, set: &HashSet<Reg>) -> bool {
         let old_srcs = mem::replace(&mut self.srcs, HashMap::new());
         let old_len = old_srcs.len();
         self.srcs = old_srcs
@@ -611,7 +611,7 @@ impl Phi {
         old_len != self.srcs.len()
     }
 
-    pub fn remap_regs(&mut self, map: &HashMap<VirtualReg, VirtualReg>) {
+    pub fn remap_regs(&mut self, map: &HashMap<Reg, Reg>) {
         replace_with_or_abort(&mut self.srcs, |srcs| {
             srcs.into_iter()
                 .map(|(dst, (w, mut srcs))| {
@@ -624,13 +624,13 @@ impl Phi {
         });
     }
 
-    pub fn collect_set_regs(&self, set: &mut HashSet<VirtualReg>) {
+    pub fn collect_set_regs(&self, set: &mut HashSet<Reg>) {
         for (dst, _) in self.srcs.iter() {
             set.insert(*dst);
         }
     }
 
-    pub fn collect_read_regs(&self, set: &mut HashSet<VirtualReg>) {
+    pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
         for (_, (_, src)) in self.srcs.iter() {
             for (_, val) in src {
                 val.collect_regs(set);
@@ -1136,7 +1136,7 @@ impl PartialOrd for Width {
 impl<GTail, Reg> std::fmt::Display for GenericBlock<GTail, Reg>
 where
     GTail: std::fmt::Display,
-    Reg: std::fmt::Display,
+    Reg: std::fmt::Display + Eq + Hash,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "{}", self.phi)?;
@@ -1147,7 +1147,10 @@ where
     }
 }
 
-impl std::fmt::Display for Phi {
+impl<Reg> std::fmt::Display for Phi<Reg>
+where
+    Reg: std::fmt::Display + Eq + Hash,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         for (dst, srcs) in self.srcs.iter() {
             write!(f, "phi{} %{} = ", srcs.0, dst)?;
@@ -1442,7 +1445,7 @@ where
 
 impl<GTail, Reg> std::fmt::Debug for GenericBlock<GTail, Reg>
 where
-    Reg: std::fmt::Display,
+    Reg: std::fmt::Display + Eq + Hash,
     GTail: std::fmt::Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
