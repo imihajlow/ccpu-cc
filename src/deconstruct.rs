@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use replace_with::replace_with_or_abort;
+
 use crate::{graph::ObjectGraph, ir, regalloc};
 
 const TMP_REG_INDEX: ir::VirtualReg = regalloc::MAX_HW_REGISTERS as ir::VirtualReg;
@@ -11,10 +13,10 @@ pub fn deconstruct_ssa(
     // Rename registers in body and tail
     for block in body.iter_mut() {
         for op in block.ops.iter_mut() {
-            op.remap_regs(map, None);
+            replace_with_or_abort(op, |op| op.remap_regs(map, None));
         }
-        block.tail.remap_regs(map);
-        block.phi.remap_regs(map);
+        replace_with_or_abort(&mut block.tail, |tail| tail.remap_regs(map));
+        replace_with_or_abort(&mut block.phi, |phi| phi.remap_regs(map));
     }
 
     let mut copies = CopyOps::new();
