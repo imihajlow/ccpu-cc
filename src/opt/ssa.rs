@@ -57,7 +57,7 @@ pub fn delete_unused_regs(blocks: &mut Vec<ir::Block>) -> bool {
     modified
 }
 
-fn collect_set_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
+fn collect_set_regs(block: &ir::Block, refs: &mut HashSet<ir::VirtualReg>) {
     block.phi.collect_set_regs(refs);
     for op in &block.ops {
         op.collect_set_regs(refs);

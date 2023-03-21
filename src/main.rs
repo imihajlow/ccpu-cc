@@ -12,6 +12,7 @@ mod enums;
 mod error;
 mod flush;
 mod function;
+mod generic_ir;
 mod graph;
 mod initializer;
 mod ir;

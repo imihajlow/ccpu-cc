@@ -17,7 +17,7 @@ use crate::{
 };
 use crate::{
     initializer::TypedConstant,
-    ir::{GlobalVarId, Reg, VarLocation},
+    ir::{GlobalVarId, VarLocation, VirtualReg},
 };
 
 /**
@@ -30,7 +30,7 @@ use crate::{
  */
 #[derive(Clone)]
 pub struct NameScope {
-    last_reg: Reg,
+    last_reg: VirtualReg,
     last_static_id: u32,
     defs: Vec<Scope>,
     static_initializers: HashMap<GlobalVarId, TypedConstant>,
@@ -41,7 +41,7 @@ pub struct NameScope {
 #[derive(Clone)]
 pub enum Value {
     Type(QualifiedType),
-    AutoVar(QualifiedType, Reg),
+    AutoVar(QualifiedType, VirtualReg),
     StaticVar(
         QualifiedType,
         GlobalVarId,
@@ -54,8 +54,8 @@ pub enum Value {
 #[derive(Clone)]
 pub struct FunctionFrame {
     frame_size: u32,
-    fixed_regs: HashMap<ir::Reg, (ir::Reg, ir::Width)>, // reg -> address reg
-    address_regs: Vec<(ir::Reg, u32)>,
+    fixed_regs: HashMap<ir::VirtualReg, (ir::VirtualReg, ir::Width)>, // reg -> address reg
+    address_regs: Vec<(ir::VirtualReg, u32)>,
     return_type: QualifiedType,
 }
 
@@ -561,7 +561,7 @@ impl NameScope {
         }
     }
 
-    pub fn alloc_reg(&mut self) -> Reg {
+    pub fn alloc_reg(&mut self) -> VirtualReg {
         let r = self.last_reg;
         self.last_reg += 1;
         r
@@ -744,14 +744,16 @@ impl FunctionFrame {
             .map(|(reg, offset)| (*offset, ir::VarLocation::Local(*reg)))
     }
 
-    pub fn fixed_regs_iter(&self) -> impl Iterator<Item = (ir::Reg, ir::Reg, ir::Width)> + '_ {
+    pub fn fixed_regs_iter(
+        &self,
+    ) -> impl Iterator<Item = (ir::VirtualReg, ir::VirtualReg, ir::Width)> + '_ {
         self.fixed_regs
             .iter()
             .map(|(fixed_reg, (address_reg, width))| (*fixed_reg, *address_reg, *width))
     }
 
     #[cfg(test)]
-    pub fn get_fixed_regs(&self) -> &HashMap<ir::Reg, (ir::Reg, ir::Width)> {
+    pub fn get_fixed_regs(&self) -> &HashMap<ir::VirtualReg, (ir::VirtualReg, ir::Width)> {
         &self.fixed_regs
     }
 

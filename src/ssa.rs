@@ -80,14 +80,15 @@ fn build_block_graph(blocks: &Vec<ir::Block>) -> ObjectGraph<usize> {
     g
 }
 
-fn find_live_regs(blocks: &Vec<ir::Block>) -> Vec<HashSet<ir::Reg>> {
+fn find_live_regs(blocks: &Vec<ir::Block>) -> Vec<HashSet<ir::VirtualReg>> {
     let g = build_block_graph(blocks);
     let scc = g.find_strongly_connected();
 
     let topo_order = scc.clone().inverse_topsort().unwrap(); // no cycles in an SCC graph
     let scc_t = scc.clone().transposed();
 
-    let mut referenced_regs: Vec<HashSet<ir::Reg>> = vec![HashSet::new(); scc.get_node_count()];
+    let mut referenced_regs: Vec<HashSet<ir::VirtualReg>> =
+        vec![HashSet::new(); scc.get_node_count()];
     for group in topo_order.iter() {
         let node_index = scc_t.get_node_index(&group).unwrap();
         for block_id in group {
@@ -101,7 +102,7 @@ fn find_live_regs(blocks: &Vec<ir::Block>) -> Vec<HashSet<ir::Reg>> {
         }
     }
 
-    let mut defined_regs: Vec<HashSet<ir::Reg>> = vec![HashSet::new(); scc.get_node_count()];
+    let mut defined_regs: Vec<HashSet<ir::VirtualReg>> = vec![HashSet::new(); scc.get_node_count()];
     for group in topo_order.iter().rev() {
         let node_index = scc.get_node_index(&group).unwrap();
         for block_id in group {
@@ -115,7 +116,7 @@ fn find_live_regs(blocks: &Vec<ir::Block>) -> Vec<HashSet<ir::Reg>> {
         }
     }
 
-    let live_regs_scc: Vec<HashSet<ir::Reg>> = referenced_regs
+    let live_regs_scc: Vec<HashSet<ir::VirtualReg>> = referenced_regs
         .into_iter()
         .zip(defined_regs.into_iter())
         .map(|(r, d)| r.intersection(&d).copied().collect())
@@ -139,10 +140,10 @@ fn update_phi(
     blocks: &mut Vec<ir::Block>,
     dst_index: usize,
     src_index: usize,
-    live: &Vec<HashSet<ir::Reg>>, // live registers per block (original register indexes)
-    dst_map: &HashMap<ir::Reg, ir::Reg>, // map from original indexes to indexes in destination block
-    src_map: &HashMap<ir::Reg, ir::Reg>, // map from original indexes to indexes in source block
-    orig_reg_width: &HashMap<ir::Reg, ir::Width>, // width of data in registers (original reg indexes)
+    live: &Vec<HashSet<ir::VirtualReg>>, // live registers per block (original register indexes)
+    dst_map: &HashMap<ir::VirtualReg, ir::VirtualReg>, // map from original indexes to indexes in destination block
+    src_map: &HashMap<ir::VirtualReg, ir::VirtualReg>, // map from original indexes to indexes in source block
+    orig_reg_width: &HashMap<ir::VirtualReg, ir::Width>, // width of data in registers (original reg indexes)
 ) {
     let block = &mut blocks[dst_index];
     for orig_reg in live[dst_index].intersection(&live[src_index]) {
@@ -160,14 +161,14 @@ fn update_phi(
     }
 }
 
-fn collect_read_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
+fn collect_read_regs(block: &ir::Block, refs: &mut HashSet<ir::VirtualReg>) {
     for op in &block.ops {
         op.collect_read_regs(refs);
     }
     block.tail.collect_read_regs(refs);
 }
 
-fn collect_set_regs(block: &ir::Block, refs: &mut HashSet<ir::Reg>) {
+fn collect_set_regs(block: &ir::Block, refs: &mut HashSet<ir::VirtualReg>) {
     for op in &block.ops {
         op.collect_set_regs(refs);
     }

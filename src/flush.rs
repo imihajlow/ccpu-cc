@@ -82,8 +82,8 @@ enum FlushInstruction {
 
 fn construct_flush_instructions_for_reg(
     body: &mut Vec<ir::Block>,
-    fixed_reg: ir::Reg,
-    address_reg: ir::Reg,
+    fixed_reg: ir::VirtualReg,
+    address_reg: ir::VirtualReg,
     width: ir::Width,
     g: &Graph,
     gt: &Graph,
@@ -272,8 +272,8 @@ fn get_flush_instruction(desynced: Device, expected: Device) -> Option<FlushInst
 
 fn insert_inner_flush_instructions(
     block: &mut ir::Block,
-    fixed_reg: ir::Reg,
-    address_reg: ir::Reg,
+    fixed_reg: ir::VirtualReg,
+    address_reg: ir::VirtualReg,
     width: ir::Width,
 ) -> BlockDescription {
     enum Operation {
@@ -382,8 +382,8 @@ fn build_graph(blocks: &Vec<ir::Block>) -> Graph {
 
 fn construct_flush_instruction(
     instr: FlushInstruction,
-    fixed_reg: ir::Reg,
-    address_reg: ir::Reg,
+    fixed_reg: ir::VirtualReg,
+    address_reg: ir::VirtualReg,
     width: ir::Width,
 ) -> ir::Op {
     match instr {

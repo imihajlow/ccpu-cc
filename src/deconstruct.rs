@@ -2,9 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{graph::ObjectGraph, ir, regalloc};
 
-const TMP_REG_INDEX: ir::Reg = regalloc::MAX_HW_REGISTERS as ir::Reg;
+const TMP_REG_INDEX: ir::VirtualReg = regalloc::MAX_HW_REGISTERS as ir::VirtualReg;
 
-pub fn deconstruct_ssa(body: &mut Vec<ir::Block>, map: &mut HashMap<ir::Reg, ir::Reg>) {
+pub fn deconstruct_ssa(
+    body: &mut Vec<ir::Block>,
+    map: &mut HashMap<ir::VirtualReg, ir::VirtualReg>,
+) {
     // Rename registers in body and tail
     for block in body.iter_mut() {
         for op in block.ops.iter_mut() {
@@ -56,7 +59,7 @@ pub fn deconstruct_ssa(body: &mut Vec<ir::Block>, map: &mut HashMap<ir::Reg, ir:
     }
 }
 
-fn get_copy_op(dst: ir::Reg, src: ir::Reg, width: ir::Width) -> ir::Op {
+fn get_copy_op(dst: ir::VirtualReg, src: ir::VirtualReg, width: ir::Width) -> ir::Op {
     ir::Op::Copy(ir::UnaryUnsignedOp {
         dst: ir::VarLocation::Local(dst),
         src: ir::Scalar::Var(ir::VarLocation::Local(src)),
@@ -71,8 +74,8 @@ fn get_copy_op(dst: ir::Reg, src: ir::Reg, width: ir::Width) -> ir::Op {
 fn build_phi_graphs(
     phi: &ir::Phi,
 ) -> (
-    HashMap<usize, ObjectGraph<ir::Reg>>,
-    HashMap<ir::Reg, ir::Width>,
+    HashMap<usize, ObjectGraph<ir::VirtualReg>>,
+    HashMap<ir::VirtualReg, ir::Width>,
 ) {
     let mut graphs = HashMap::new();
     let mut widths = HashMap::new();
@@ -95,7 +98,7 @@ fn build_phi_graphs(
     (graphs, widths)
 }
 
-fn phi_to_copies(phi: &ir::Phi) -> Vec<(usize, ir::Reg, ir::Reg, ir::Width)> {
+fn phi_to_copies(phi: &ir::Phi) -> Vec<(usize, ir::VirtualReg, ir::VirtualReg, ir::Width)> {
     let (graphs, widths) = build_phi_graphs(phi);
     let mut copies = Vec::new();
     for (src_block, g) in graphs {
@@ -148,7 +151,7 @@ fn phi_to_copies(phi: &ir::Phi) -> Vec<(usize, ir::Reg, ir::Reg, ir::Width)> {
 struct CopyOps(HashMap<usize, BlockCopyOps>);
 
 #[derive(Debug)]
-struct BlockCopyOps(HashMap<usize, Vec<(ir::Reg, ir::Reg, ir::Width)>>);
+struct BlockCopyOps(HashMap<usize, Vec<(ir::VirtualReg, ir::VirtualReg, ir::Width)>>);
 
 impl CopyOps {
     fn new() -> Self {
@@ -159,8 +162,8 @@ impl CopyOps {
         &mut self,
         dst_block_id: usize,
         src_block_id: usize,
-        dst_reg: ir::Reg,
-        src_reg: ir::Reg,
+        dst_reg: ir::VirtualReg,
+        src_reg: ir::VirtualReg,
         width: ir::Width,
     ) {
         let src_map = if let Some(m) = self.0.get_mut(&src_block_id) {
@@ -186,8 +189,8 @@ impl BlockCopyOps {
     fn push_copy(
         &mut self,
         dst_block_id: usize,
-        dst_reg: ir::Reg,
-        src_reg: ir::Reg,
+        dst_reg: ir::VirtualReg,
+        src_reg: ir::VirtualReg,
         width: ir::Width,
     ) {
         let dst_vec = if let Some(m) = self.0.get_mut(&dst_block_id) {
@@ -208,10 +211,10 @@ impl BlockCopyOps {
      */
     fn into_lists(
         self,
-        tail_regs: HashSet<ir::Reg>,
+        tail_regs: HashSet<ir::VirtualReg>,
     ) -> (
-        Vec<(ir::Reg, ir::Reg, ir::Width)>,
-        Vec<(usize, Vec<(ir::Reg, ir::Reg, ir::Width)>)>,
+        Vec<(ir::VirtualReg, ir::VirtualReg, ir::Width)>,
+        Vec<(usize, Vec<(ir::VirtualReg, ir::VirtualReg, ir::Width)>)>,
     ) {
         let conflicting_dsts = self.find_conflicts(&tail_regs);
         let mut original_copies = Vec::new();
@@ -231,7 +234,7 @@ impl BlockCopyOps {
      * such that copies for those destination blocks conflict with each other
      * or with registers used in block's tail.
      */
-    fn find_conflicts(&self, tail_regs: &HashSet<ir::Reg>) -> HashSet<usize> {
+    fn find_conflicts(&self, tail_regs: &HashSet<ir::VirtualReg>) -> HashSet<usize> {
         #[derive(Copy, Clone, PartialEq, Eq, Hash)]
         enum Usage {
             Tail,
@@ -287,8 +290,8 @@ mod test {
     use ir::Width::*;
 
     fn index_of(
-        copies: &Vec<(usize, ir::Reg, ir::Reg, ir::Width)>,
-        el: (usize, ir::Reg, ir::Reg, ir::Width),
+        copies: &Vec<(usize, ir::VirtualReg, ir::VirtualReg, ir::Width)>,
+        el: (usize, ir::VirtualReg, ir::VirtualReg, ir::Width),
     ) -> usize {
         copies.iter().position(|e| e == &el).unwrap()
     }
