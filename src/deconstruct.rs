@@ -4,7 +4,7 @@ use std::{
     hash::Hash,
 };
 
-use crate::{ccpu::reg::FrameReg, generic_ir, graph::ObjectGraph, ir, temp_reg::TempReg};
+use crate::{ccpu::reg::FrameReg, generic_ir, graph::ObjectGraph, ir, register::Register};
 
 pub fn deconstruct_ssa(
     body: Vec<ir::Block>,
@@ -100,7 +100,7 @@ fn build_phi_graphs<Reg: Copy + Eq + Hash>(
     (graphs, widths)
 }
 
-fn phi_to_copies<Reg: Copy + Eq + Hash + TempReg + Debug>(
+fn phi_to_copies<Reg: Copy + Eq + Hash + Register + Debug>(
     phi: &generic_ir::Phi<Reg>,
 ) -> Vec<(usize, Reg, Reg, ir::Width)> {
     let (graphs, widths) = build_phi_graphs(phi);
@@ -294,9 +294,26 @@ mod test {
     use ir::Width::*;
 
     const TMP_REG_INDEX: u32 = 10000;
-    impl TempReg for u32 {
+    impl Register for u32 {
         fn get_temp_register() -> Self {
             TMP_REG_INDEX
+        }
+        fn get_register_count() -> usize {
+            10001
+        }
+        fn get_index(&self) -> usize {
+            *self as usize
+        }
+        fn from_index(index: usize) -> Option<Self> {
+            Some(index as Self)
+        }
+
+        fn get_current_fn_arg(arg_index: usize) -> Option<Self> {
+            Some(arg_index as u32)
+        }
+
+        fn get_callee_arg(arg_index: usize) -> Option<Self> {
+            Some(arg_index as u32 + 500)
         }
     }
 

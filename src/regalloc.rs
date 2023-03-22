@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{ccpu::reg::FrameReg, ir};
-
-pub const MAX_HW_REGISTERS: usize = 200; // TODO move to ccpu
+use crate::{ccpu::reg::FrameReg, ir, register::Register};
 
 /**
  * Allocate physical registers for a program in an SSA form.
@@ -14,10 +12,24 @@ pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::VirtualReg, FrameRe
     let mut hints = HashMap::new();
     let mut allocations = HashMap::new();
 
-    // Function parameters come in first registers - hint them.
+    // Hint this function parameters registers - Arg operations only come in the first block
     for op in body.first().unwrap().ops.iter() {
         if let ir::Op::Arg(arg_op) = op {
-            hints.insert(arg_op.dst_reg, FrameReg::FrameA(arg_op.arg_number as u16));
+            hints.insert(
+                arg_op.dst_reg,
+                FrameReg::get_current_fn_arg(arg_op.arg_number).unwrap(),
+            );
+        }
+    }
+    for block in body {
+        for op in &block.ops {
+            if let ir::Op::Call(call_op) = op {
+                for (i, (arg, _)) in call_op.args.iter().enumerate() {
+                    if let Some(arg_reg) = arg.get_reg() {
+                        hints.insert(arg_reg, FrameReg::get_callee_arg(i).unwrap());
+                    }
+                }
+            }
         }
     }
 
@@ -34,7 +46,7 @@ fn allocate_registers_for_block(
     allocations: &mut HashMap<ir::VirtualReg, FrameReg>,
     hints: &mut HashMap<ir::VirtualReg, FrameReg>,
 ) {
-    let mut vacant_registers = vec![true; MAX_HW_REGISTERS];
+    let mut vacant_registers = vec![true; FrameReg::get_register_count()];
     let block = &body[block_index];
 
     // Determine kill positions
@@ -87,9 +99,9 @@ fn allocate_registers_for_block(
         hints: &HashMap<ir::VirtualReg, FrameReg>,
     ) -> FrameReg {
         if let Some(&hint) = hints.get(&reg) {
-            let n = hint.unwrap_frame_a();
-            if vacant_registers[n as usize] {
-                vacant_registers[n as usize] = false;
+            let n = hint.get_index();
+            if vacant_registers[n] {
+                vacant_registers[n] = false;
                 return hint;
             }
         }
@@ -116,8 +128,8 @@ fn allocate_registers_for_block(
     for (i, op) in block.ops.iter().enumerate() {
         for reg in kill[i].iter() {
             let phy_reg = *allocations.get(reg).unwrap();
-            assert!(!vacant_registers[phy_reg.unwrap_frame_a() as usize]);
-            vacant_registers[phy_reg.unwrap_frame_a() as usize] = true;
+            assert!(!vacant_registers[phy_reg.get_index()]);
+            vacant_registers[phy_reg.get_index()] = true;
         }
         if let Some(dst) = op.get_dst_reg() {
             let dst_reg = allocate(dst, &mut vacant_registers, hints);
