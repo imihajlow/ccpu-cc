@@ -41,7 +41,10 @@ impl<Reg: Hash + Eq> Function<Reg> {
         self.frame.get_size()
     }
 
-    #[cfg(test)]
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
     pub fn get_body(&self) -> &Vec<generic_ir::GenericBlock<generic_ir::Tail<Reg>, Reg>> {
         &self.body
     }

@@ -273,10 +273,11 @@ impl InstructionWriter {
         } else if let Reg::Zero = dst {
             panic!("Zero can't be a destination register");
         } else {
-            if let Reg::Zero = src {
-                panic!("cannot assign Zero to any other register than A");
+            if let Reg::A = src {
+                (true, dst)
+            } else {
+                panic!("one of opernads must be A");
             }
-            (true, src)
         };
         self.push(TextItem::Op(Op::Arithm(op, src, inv)));
     }
@@ -308,7 +309,7 @@ impl std::fmt::Display for InstructionWriter {
             writeln!(f, "\t.section text.{}", symbol)?;
             writeln!(f, "{}:", symbol)?;
             for item in text {
-                writeln!(f, "{}", item)?;
+                write!(f, "{}", item)?;
             }
         }
         writeln!(f, "")?;
@@ -378,7 +379,7 @@ impl std::fmt::Display for Reg {
 impl std::fmt::Display for Imm {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Imm::Const(c) => write!(f, "{}", c),
+            Imm::Const(c) => write!(f, "0x{:02X}", c),
             Imm::Lo(sym, 0) => write!(f, "lo({})", sym),
             Imm::Lo(sym, n) => write!(f, "lo({} + {})", sym, n),
             Imm::Hi(sym, 0) => write!(f, "hi({})", sym),

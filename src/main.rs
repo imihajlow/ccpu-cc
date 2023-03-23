@@ -90,5 +90,7 @@ void quickSort(int arr[], int low, int high) {
         let mut tu = tu.deconstruct_ssa();
         tu.optimize_deconstructed();
         println!("<{}>", tu);
+        let w = ccpu::gen::gen_tu(tu);
+        println!("{}", w);
     }
 }
