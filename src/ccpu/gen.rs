@@ -6,13 +6,17 @@ use crate::{
 };
 
 use super::{
+    global,
     instr::{InstructionWriter, Reg, Reg::*},
     reg::FrameReg,
     stack,
 };
 
+mod copy;
+
 pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
     let mut w = InstructionWriter::new();
+    w.import(global::RET_VALUE_REG_SYMBOL.to_string());
     for f in tu.functions.into_iter() {
         gen_function(&mut w, f);
     }
@@ -40,7 +44,41 @@ fn gen_function(w: &mut InstructionWriter, f: Function<FrameReg>) {
 
     for (i, block) in f.get_body().iter().enumerate() {
         w.label(make_block_label(f.get_name(), i));
+        for op in block.ops.iter() {
+            gen_op(w, op, f.get_name());
+        }
         gen_tail(w, &block.tail, i, f.get_name());
+    }
+}
+
+fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_name: &str) {
+    use generic_ir::Op::*;
+    match op {
+        Undefined(_) => (),
+        Arg(op) => (),
+        Copy(op) => copy::gen_copy(w, op),
+        Bool(op) => (),
+        BoolInv(op) => (),
+        Add(op) => (),
+        Sub(op) => (),
+        Mul(op) => (),
+        Div(op) => (),
+        Mod(op) => (),
+        BAnd(op) => (),
+        BOr(op) => (),
+        BXor(op) => (),
+        LShift(op) => (),
+        RShift(op) => (),
+        Neg(op) => (),
+        Not(op) => (),
+        Compare(op) => (),
+        Conv(op) => (),
+        Store(op) => (),
+        Load(op) => (),
+        Call(op) => (),
+        Memcpy(op) => (),
+        #[cfg(test)]
+        Dummy(_) => (),
     }
 }
 

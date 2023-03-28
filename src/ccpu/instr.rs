@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
 
-use crate::generic_ir::Width;
+use crate::generic_ir::{VarLocation, Width};
+
+use super::global;
+use super::reg::FrameReg;
 
 pub struct InstructionWriter {
     exports: HashSet<String>,
@@ -9,6 +12,7 @@ pub struct InstructionWriter {
     text: Vec<(String, Vec<TextItem>)>,
     bss: HashMap<String, DataItem<u16>>,
     data: HashMap<String, DataItem<DataValue>>,
+    last: [Option<u8>; 5],
 }
 
 #[derive(Debug, Clone)]
@@ -47,13 +51,13 @@ enum Imm {
     Hi(String, u16),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Reg {
-    A,
-    B,
-    PL,
-    PH,
-    Zero,
+    A = 0,
+    B = 1,
+    PL = 2,
+    PH = 3,
+    Zero = 4,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,7 +72,7 @@ enum Cond {
     NS,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum ArithmOp {
     MOV,
     ADD,
@@ -96,10 +100,12 @@ impl InstructionWriter {
             imports: HashSet::new(),
             bss: HashMap::new(),
             data: HashMap::new(),
+            last: [None; 5],
         }
     }
 
     pub fn begin_function(&mut self, name: String) {
+        self.last = [None; 5];
         self.text.push((name, Vec::new()));
     }
 
@@ -142,6 +148,7 @@ impl InstructionWriter {
     }
 
     pub fn label(&mut self, label: String) {
+        self.last = [None; 5];
         self.push(TextItem::Label(label));
     }
 
@@ -179,15 +186,36 @@ impl InstructionWriter {
     }
 
     pub fn ldi_const(&mut self, reg: Reg, val: u8) {
-        self.push(TextItem::Op(Op::Ldi(reg, Imm::Const(val))))
+        if reg == Reg::Zero {
+            panic!("Wrong use of zero register");
+        }
+        if let Some(v) = self.last[reg as usize] {
+            if v == val {
+                return;
+            }
+        }
+        if reg == Reg::A && val == 0 {
+            self.mov(Reg::A, Reg::Zero);
+        } else {
+            self.push(TextItem::Op(Op::Ldi(reg, Imm::Const(val))));
+        }
+        self.last[reg as usize] = Some(val);
     }
 
     pub fn ldi_lo(&mut self, reg: Reg, sym: String, offset: u16) {
-        self.push(TextItem::Op(Op::Ldi(reg, Imm::Lo(sym, offset))))
+        if reg == Reg::Zero {
+            panic!("Wrong use of zero register");
+        }
+        self.push(TextItem::Op(Op::Ldi(reg, Imm::Lo(sym, offset))));
+        self.last[reg as usize] = None;
     }
 
     pub fn ldi_hi(&mut self, reg: Reg, sym: String, offset: u16) {
-        self.push(TextItem::Op(Op::Ldi(reg, Imm::Hi(sym, offset))))
+        if reg == Reg::Zero {
+            panic!("Wrong use of zero register");
+        }
+        self.push(TextItem::Op(Op::Ldi(reg, Imm::Hi(sym, offset))));
+        self.last[reg as usize] = None;
     }
 
     pub fn ldi_p_const(&mut self, val: u16) {
@@ -198,6 +226,24 @@ impl InstructionWriter {
     pub fn ldi_p_sym(&mut self, sym: String, offset: u16) {
         self.ldi_lo(Reg::PL, sym.clone(), offset);
         self.ldi_hi(Reg::PH, sym, offset);
+    }
+
+    pub fn ldi_p_var_location(&mut self, v: &VarLocation<FrameReg>, offset: u16) {
+        match v {
+            VarLocation::Local(reg) => {
+                let addr = reg.get_address();
+                self.ldi_p_const(addr + offset);
+            }
+            VarLocation::Global(g) => {
+                self.ldi_p_sym(global::get_global_var_label(g), offset);
+            }
+            VarLocation::Return => {
+                self.ldi_p_sym(global::RET_VALUE_REG_SYMBOL.to_string(), offset);
+            }
+            VarLocation::Frame(_) => {
+                todo!()
+            }
+        }
     }
 
     pub fn mov(&mut self, dst: Reg, src: Reg) {
@@ -254,6 +300,7 @@ impl InstructionWriter {
             panic!("Zero can't be a destination register");
         }
         self.push(TextItem::Op(Op::Ld(dst)));
+        self.last[dst as usize] = None;
     }
 
     pub fn st(&mut self, dst: Reg) {
@@ -280,6 +327,11 @@ impl InstructionWriter {
             }
         };
         self.push(TextItem::Op(Op::Arithm(op, src, inv)));
+        if op == ArithmOp::MOV && dst == Reg::A && src == Reg::Zero {
+            self.last[dst as usize] = Some(0);
+        } else {
+            self.last[dst as usize] = None;
+        }
     }
 
     fn arithm_unary(&mut self, op: ArithmOp, dst: Reg) {
@@ -288,6 +340,7 @@ impl InstructionWriter {
         }
         let inv = if let Reg::A = dst { false } else { true };
         self.push(TextItem::Op(Op::Arithm(op, dst, inv)));
+        self.last[dst as usize] = None;
     }
 
     fn push(&mut self, item: TextItem) {
