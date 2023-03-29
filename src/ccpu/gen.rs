@@ -12,6 +12,7 @@ use super::{
     stack,
 };
 
+mod add;
 mod conv;
 mod copy;
 
@@ -62,7 +63,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Copy(op) => copy::gen_copy(w, op),
         Bool(op) => (),
         BoolInv(op) => (),
-        Add(op) => (),
+        Add(op) => add::gen_add(w, op),
         Sub(op) => (),
         Mul(op) => (),
         Div(op) => (),
