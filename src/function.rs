@@ -5,7 +5,7 @@ use crate::{
     ccpu::{self, reg::FrameReg},
     compile, deconstruct, flush, generic_ir, ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
-    opt::ssa::delete_unused_regs,
+    opt::{ssa::delete_unused_regs, const_propagate::propagate_const},
     regalloc, ssa,
 };
 use lang_c::{
@@ -125,6 +125,7 @@ impl Function<ir::VirtualReg> {
             modified |= simplify_jumps(&mut self.body);
             modified |= merge_chains(&mut self.body);
             modified |= delete_unused_regs(&mut self.body);
+            modified |= propagate_const(&mut self.body);
         }
     }
 
