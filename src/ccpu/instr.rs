@@ -19,6 +19,7 @@ pub struct InstructionWriter {
 enum TextItem {
     Op(Op),
     Label(String),
+    Comment(String),
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +108,10 @@ impl InstructionWriter {
     pub fn begin_function(&mut self, name: String) {
         self.last = [None; 5];
         self.text.push((name, Vec::new()));
+    }
+
+    pub fn comment(&mut self, comment: String) {
+        self.push(TextItem::Comment(comment))
     }
 
     pub fn export(&mut self, symbol: String) {
@@ -267,14 +272,14 @@ impl InstructionWriter {
     pub fn dec(&mut self, dst: Reg) {
         self.arithm_unary(ArithmOp::DEC, dst);
     }
-    pub fn shl(&mut self, dst: Reg, src: Reg) {
-        self.arithm(ArithmOp::SHL, dst, src);
+    pub fn shl(&mut self, dst: Reg) {
+        self.arithm_unary(ArithmOp::SHL, dst);
     }
-    pub fn shr(&mut self, dst: Reg, src: Reg) {
-        self.arithm(ArithmOp::SHR, dst, src);
+    pub fn shr(&mut self, dst: Reg) {
+        self.arithm_unary(ArithmOp::SHR, dst);
     }
-    pub fn sar(&mut self, dst: Reg, src: Reg) {
-        self.arithm(ArithmOp::SAR, dst, src);
+    pub fn sar(&mut self, dst: Reg) {
+        self.arithm_unary(ArithmOp::SAR, dst);
     }
     pub fn and(&mut self, dst: Reg, src: Reg) {
         self.arithm(ArithmOp::AND, dst, src);
@@ -413,6 +418,7 @@ impl std::fmt::Display for TextItem {
         match self {
             TextItem::Label(l) => writeln!(f, "{}:", l),
             TextItem::Op(op) => writeln!(f, "\t{}", op),
+            TextItem::Comment(c) => writeln!(f, "\t; {}", c),
         }
     }
 }
@@ -454,16 +460,10 @@ impl std::fmt::Display for Op {
             Op::Arithm(ArithmOp::SUB, reg, true) => write!(f, "sub {}, a", reg),
             Op::Arithm(ArithmOp::SBB, reg, false) => write!(f, "sbb a, {}", reg),
             Op::Arithm(ArithmOp::SBB, reg, true) => write!(f, "sbb {}, a", reg),
-            Op::Arithm(ArithmOp::SHL, reg, false) => write!(f, "shl a, {}", reg),
-            Op::Arithm(ArithmOp::SHL, reg, true) => write!(f, "shl {}, a", reg),
-            Op::Arithm(ArithmOp::SHR, reg, false) => write!(f, "shr a, {}", reg),
-            Op::Arithm(ArithmOp::SHR, reg, true) => write!(f, "shr {}, a", reg),
-            Op::Arithm(ArithmOp::SAR, reg, false) => write!(f, "sar a, {}", reg),
-            Op::Arithm(ArithmOp::SAR, reg, true) => write!(f, "sar {}, a", reg),
             Op::Arithm(ArithmOp::AND, reg, false) => write!(f, "and a, {}", reg),
             Op::Arithm(ArithmOp::AND, reg, true) => write!(f, "and {}, a", reg),
-            Op::Arithm(ArithmOp::OR, reg, false) => write!(f, "or a, {}", reg),
-            Op::Arithm(ArithmOp::OR, reg, true) => write!(f, "or {}, a", reg),
+            Op::Arithm(ArithmOp::OR, reg, false) => write!(f, "or  a, {}", reg),
+            Op::Arithm(ArithmOp::OR, reg, true) => write!(f, "or  {}, a", reg),
             Op::Arithm(ArithmOp::XOR, reg, false) => write!(f, "xor a, {}", reg),
             Op::Arithm(ArithmOp::XOR, reg, true) => write!(f, "xor {}, a", reg),
 
@@ -477,12 +477,18 @@ impl std::fmt::Display for Op {
             Op::Arithm(ArithmOp::INC, reg, true) => write!(f, "inc {}", reg),
             Op::Arithm(ArithmOp::DEC, Reg::A, false) => write!(f, "dec a"),
             Op::Arithm(ArithmOp::DEC, reg, true) => write!(f, "dec {}", reg),
+            Op::Arithm(ArithmOp::SHL, Reg::A, false) => write!(f, "shl a"),
+            Op::Arithm(ArithmOp::SHL, reg, true) => write!(f, "shl {}", reg),
+            Op::Arithm(ArithmOp::SHR, Reg::A, false) => write!(f, "shr a"),
+            Op::Arithm(ArithmOp::SHR, reg, true) => write!(f, "shr {}", reg),
+            Op::Arithm(ArithmOp::SAR, Reg::A, false) => write!(f, "sar a"),
+            Op::Arithm(ArithmOp::SAR, reg, true) => write!(f, "sar {}", reg),
 
             Op::Arithm(_, _, _) => unreachable!(),
 
             Op::Ldi(reg, imm) => write!(f, "ldi {}, {}", reg, imm),
-            Op::Ld(reg) => write!(f, "ld {}", reg),
-            Op::St(reg) => write!(f, "st {}", reg),
+            Op::Ld(reg) => write!(f, "ld  {}", reg),
+            Op::St(reg) => write!(f, "st  {}", reg),
             Op::Jmp => f.write_str("jmp"),
             Op::Nop => f.write_str("nop"),
 

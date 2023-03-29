@@ -9,10 +9,10 @@ use crate::{machine, name_scope::NameScope};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
 pub enum Width {
-    Byte,
-    Word,
-    Dword,
-    Qword,
+    Byte = 1,
+    Word = 2,
+    Dword = 4,
+    Qword = 8,
 }
 
 pub type VirtualReg = u32;
@@ -1274,21 +1274,10 @@ impl Width {
     pub const BOOL_WIDTH: Self = Self::new(machine::BOOL_SIZE);
 }
 
-impl From<Width> for u8 {
-    fn from(w: Width) -> u8 {
-        match w {
-            Width::Byte => 1,
-            Width::Word => 2,
-            Width::Dword => 4,
-            Width::Qword => 8,
-        }
-    }
-}
-
 impl PartialOrd for Width {
     fn partial_cmp(&self, other: &Width) -> Option<std::cmp::Ordering> {
-        let self_u8: u8 = (*self).into();
-        let other_u8: u8 = (*other).into();
+        let self_u8 = (*self) as u8;
+        let other_u8 = (*other) as u8;
         self_u8.partial_cmp(&other_u8)
     }
 }

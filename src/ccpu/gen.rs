@@ -12,6 +12,7 @@ use super::{
     stack,
 };
 
+mod conv;
 mod copy;
 
 pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
@@ -45,8 +46,10 @@ fn gen_function(w: &mut InstructionWriter, f: Function<FrameReg>) {
     for (i, block) in f.get_body().iter().enumerate() {
         w.label(make_block_label(f.get_name(), i));
         for op in block.ops.iter() {
+            w.comment(format!("{}", op));
             gen_op(w, op, f.get_name());
         }
+        w.comment(format!("{}", block.tail));
         gen_tail(w, &block.tail, i, f.get_name());
     }
 }
@@ -72,7 +75,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Neg(op) => (),
         Not(op) => (),
         Compare(op) => (),
-        Conv(op) => (),
+        Conv(op) => conv::gen_conv(w, op),
         Store(op) => (),
         Load(op) => (),
         Call(op) => (),

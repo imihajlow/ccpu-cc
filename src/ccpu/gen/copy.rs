@@ -21,7 +21,7 @@ fn gen_copy_const(
     width: Width,
 ) {
     use crate::ccpu::instr::Reg::*;
-    let width: u8 = width.into();
+    let width = width as u16;
     w.ldi_p_var_location(dst, 0);
     for i in 0..width {
         let b = (src & 0xff) as u8;
@@ -50,14 +50,14 @@ fn gen_copy_var(
         w.ldi_p_var_location(dst, 0);
         w.st(A);
     } else {
-        let width: u8 = width.into();
+        let width = width as u16;
         let words = width / 2;
         for i in 0..words {
-            w.ldi_p_var_location(src, i as u16 * 2);
+            w.ldi_p_var_location(src, i * 2);
             w.ld(A);
             w.inc(PL);
             w.ld(B);
-            w.ldi_p_var_location(dst, i as u16 * 2);
+            w.ldi_p_var_location(dst, i * 2);
             w.st(A);
             w.inc(PL);
             w.st(B);
@@ -80,7 +80,7 @@ fn gen_copy_sym(
         w.inc(PL);
         w.ldi_hi(A, get_global_var_label(src_sym), offset);
         w.st(A);
-        let width: u8 = width.into();
+        let width = width as u16;
         let rest = width - 2;
         if rest > 0 {
             w.mov(A, Zero);
