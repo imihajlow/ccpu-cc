@@ -1,5 +1,5 @@
-use std::hash::Hash;
 use std::mem;
+use std::{collections::HashMap, hash::Hash};
 
 use replace_with::replace_with_or_abort;
 
@@ -50,12 +50,33 @@ pub fn simplify_jumps<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<
                 result = true;
                 Tail::Jump(t)
             }
+            Tail::Cond(generic_ir::Scalar::SymbolOffset(_, _), t, _) => {
+                result = true;
+                Tail::Jump(t)
+            }
+            Tail::Cond(generic_ir::Scalar::ConstInt(c), t, e) => {
+                result = true;
+                if c & 0xff == 0 {
+                    Tail::Jump(e)
+                } else {
+                    Tail::Jump(t)
+                }
+            }
             Tail::Switch(s, w, cases, default) => {
                 if cases.iter().all(|(_, id)| *id == default) {
                     result = true;
                     Tail::Jump(default)
                 } else {
-                    Tail::Switch(s, w, cases, default)
+                    if let generic_ir::Scalar::ConstInt(c) = s {
+                        let target = cases
+                            .iter()
+                            .find(|(v, _)| *v == c)
+                            .map(|(_, block_id)| *block_id)
+                            .unwrap_or(default);
+                        Tail::Jump(target)
+                    } else {
+                        Tail::Switch(s, w, cases, default)
+                    }
                 }
             }
             Tail::Cond(_, _, _) | Tail::Jump(_) | Tail::Ret => tail,
@@ -92,11 +113,24 @@ pub fn merge_chains<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<Re
         for i in 0..blocks.len() {
             if let Some(n) = merge_with[i] {
                 if merge_with[n].is_none() {
-                    assert!(blocks[n].phi.is_empty());
+                    let mut phi_map = HashMap::new();
+                    let phi_srcs = mem::replace(&mut blocks[n].phi.srcs, HashMap::new());
+                    for (dst, (_, srcs)) in phi_srcs {
+                        assert_eq!(srcs.len(), 1);
+                        let src = srcs.first().unwrap().1.clone();
+                        phi_map.insert(dst, src);
+                    }
                     result = true;
                     let mut ops = mem::replace(&mut blocks[n].ops, Vec::new());
+                    for op in &mut ops {
+                        op.subs_src_regs(&phi_map);
+                    }
                     blocks[i].ops.append(&mut ops);
                     blocks[i].tail = blocks[n].tail.clone();
+                    blocks[i].tail.subs_src_regs(&phi_map);
+                    for id in blocks[i].tail.get_connections() {
+                        blocks[id].phi.subs_src_regs(&phi_map);
+                    }
                     merge_with[i] = None;
                 } else {
                     done = false;

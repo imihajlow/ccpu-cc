@@ -423,6 +423,10 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
         }
     }
 
+    /**
+     * Remap registers from one type to another using the given HashMap.
+     * All registers must be present in the map.
+     */
     pub fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> Op<TargetReg> {
         match self {
             Op::Undefined(reg) => {
@@ -453,6 +457,42 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Memcpy(op) => Op::Memcpy(op.remap_regs(map)),
             #[cfg(test)]
             Op::Dummy(x) => Op::Dummy(x),
+        }
+    }
+
+    /**
+     * Remap registers in operation sources according to the map given.
+     * Keep old values unchanged if not found in the map.
+     *
+     * Returns true if any substution has been performed.
+     */
+    pub fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        match self {
+            Op::Undefined(_) => false,
+            Op::Arg(_) => false,
+            Op::Copy(op) => op.subs_src_regs(map),
+            Op::Bool(op) => op.subs_src_regs(map),
+            Op::BoolInv(op) => op.subs_src_regs(map),
+            Op::Add(op) => op.subs_src_regs(map),
+            Op::Sub(op) => op.subs_src_regs(map),
+            Op::Mul(op) => op.subs_src_regs(map),
+            Op::Div(op) => op.subs_src_regs(map),
+            Op::Mod(op) => op.subs_src_regs(map),
+            Op::BAnd(op) => op.subs_src_regs(map),
+            Op::BOr(op) => op.subs_src_regs(map),
+            Op::BXor(op) => op.subs_src_regs(map),
+            Op::LShift(op) => op.subs_src_regs(map),
+            Op::RShift(op) => op.subs_src_regs(map),
+            Op::Neg(op) => op.subs_src_regs(map),
+            Op::Not(op) => op.subs_src_regs(map),
+            Op::Compare(op) => op.subs_src_regs(map),
+            Op::Conv(op) => op.subs_src_regs(map),
+            Op::Store(op) => op.subs_src_regs(map),
+            Op::Load(op) => op.subs_src_regs(map),
+            Op::Call(op) => op.subs_src_regs(map),
+            Op::Memcpy(op) => op.subs_src_regs(map),
+            #[cfg(test)]
+            Op::Dummy(x) => false,
         }
     }
 }
@@ -583,6 +623,15 @@ impl<Reg: Copy + Eq + Hash> Tail<Reg> {
             Tail::Switch(c, w, s, d) => Tail::Switch(c.remap_reg(map), w, s, d),
         }
     }
+
+    pub fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        match self {
+            Tail::Cond(c, _, _) => c.subs_reg(map),
+            Tail::Switch(c, _, _, _) => c.subs_reg(map),
+            Tail::Ret => false,
+            Tail::Jump(_) => false,
+        }
+    }
 }
 
 impl<Reg: Copy + Eq + Hash> Phi<Reg> {
@@ -673,6 +722,16 @@ impl<Reg: Copy + Eq + Hash> Phi<Reg> {
             }
         }
     }
+
+    pub fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        let mut result = false;
+        for (_, (_, src)) in &mut self.srcs {
+            for (_, src) in src {
+                result |= src.subs_reg(map);
+            }
+        }
+        result
+    }
 }
 
 impl<Reg: Copy + Eq> ArgOp<Reg> {
@@ -747,6 +806,10 @@ impl<Reg: Copy + Eq + Hash> CompareOp<Reg> {
             sign: self.sign,
         }
     }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.lhs.subs_reg(map) | self.rhs.subs_reg(map)
+    }
 }
 
 impl CompareOp<VirtualReg> {
@@ -793,6 +856,10 @@ impl<Reg: Copy + Eq + Hash> UnaryUnsignedOp<Reg> {
             width: self.width,
         }
     }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.src.subs_reg(map)
+    }
 }
 
 impl UnaryUnsignedOp<VirtualReg> {
@@ -837,6 +904,10 @@ impl<Reg: Copy + Eq + Hash> BinaryOp<Reg> {
             width: self.width,
             sign: self.sign,
         }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.lhs.subs_reg(map) | self.rhs.subs_reg(map)
     }
 }
 
@@ -886,6 +957,10 @@ impl<Reg: Copy + Eq + Hash> BinaryUnsignedOp<Reg> {
             width: self.width,
         }
     }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.lhs.subs_reg(map) | self.rhs.subs_reg(map)
+    }
 }
 
 impl BinaryUnsignedOp<VirtualReg> {
@@ -931,6 +1006,10 @@ impl<Reg: Copy + Eq + Hash> ShiftOp<Reg> {
             lhs_width: self.lhs_width,
             lhs_sign: self.lhs_sign,
         }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.lhs.subs_reg(map) | self.rhs.subs_reg(map)
     }
 }
 
@@ -978,6 +1057,10 @@ impl<Reg: Copy + Eq + Hash> ConvOp<Reg> {
             dst_sign: self.dst_sign,
         }
     }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.src.subs_reg(map)
+    }
 }
 
 impl ConvOp<VirtualReg> {
@@ -1019,6 +1102,10 @@ impl<Reg: Copy + Eq + Hash> StoreOp<Reg> {
             width: self.width,
         }
     }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.src.subs_reg(map) | self.dst_addr.subs_reg(map)
+    }
 }
 
 impl<Reg: Copy + Eq> LoadOp<Reg> {
@@ -1046,6 +1133,10 @@ impl<Reg: Copy + Eq + Hash> LoadOp<Reg> {
             dst: self.dst.remap_reg(map),
             width: self.width,
         }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.src_addr.subs_reg(map)
     }
 }
 
@@ -1104,6 +1195,14 @@ impl<Reg: Copy + Eq + Hash> CallOp<Reg> {
             addr: self.addr.remap_reg(map),
         }
     }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        let mut result = self.addr.subs_reg(map);
+        for (arg, _) in &mut self.args {
+            result |= arg.subs_reg(map);
+        }
+        result
+    }
 }
 
 impl CallOp<VirtualReg> {
@@ -1147,6 +1246,10 @@ impl<Reg: Copy + Eq + Hash> MemcpyOp<Reg> {
             dst_addr: self.dst_addr.remap_reg(map),
             len: self.len,
         }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.dst_addr.subs_reg(map) | self.src_addr.subs_reg(map)
     }
 }
 
@@ -1197,8 +1300,7 @@ impl<Reg: Copy + Eq + Hash> VarLocation<Reg> {
 
 impl VarLocation<VirtualReg> {
     /**
-     * If scope is given, allocate a new register, remap this location to its value and update the map.
-     * If scope is none, remap the register according to the map if it exists there.
+     * Allocate a new register, remap this location to its value and update the map.
      */
     fn remap_reg_to_new_version(
         self,
@@ -1255,6 +1357,18 @@ impl<Reg: Copy + Eq + Hash> Scalar<Reg> {
             Scalar::SymbolOffset(s, o) => Scalar::SymbolOffset(s, o),
             Scalar::FramePointer => Scalar::FramePointer,
         }
+    }
+
+    pub fn subs_reg(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        if let Scalar::Var(v) = self {
+            if let Some(reg) = v.get_reg() {
+                if let Some(s) = map.get(&reg) {
+                    *self = s.clone();
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 

@@ -5,7 +5,7 @@ use crate::{
     ccpu::{self, reg::FrameReg},
     compile, deconstruct, flush, generic_ir, ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
-    opt::{ssa::delete_unused_regs, const_propagate::propagate_const},
+    opt::{const_propagate::propagate_const, ssa::delete_unused_regs},
     regalloc, ssa,
 };
 use lang_c::{
