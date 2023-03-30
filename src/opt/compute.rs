@@ -1,4 +1,7 @@
-use crate::{generic_ir::Scalar, ir::*};
+use crate::{
+    generic_ir::{self, Scalar},
+    ir::*,
+};
 
 pub fn compute_const(op: &mut Op) -> bool {
     let new_op = match op {
@@ -169,7 +172,25 @@ fn compute_not(op: &UnaryUnsignedOp) -> Option<Op> {
     }
 }
 fn compute_compare(op: &CompareOp) -> Option<Op> {
-    todo!()
+    match (&op.lhs, &op.rhs) {
+        (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => {
+            let r = compare(*lhs, *rhs, op.width, op.sign, op.kind);
+            Some(Op::Copy(UnaryUnsignedOp {
+                dst: op.dst.clone(),
+                src: Scalar::ConstInt(if r { 1 } else { 0 }),
+                width: op.dst_width,
+            }))
+        }
+        (Scalar::SymbolOffset(sl, ol), Scalar::SymbolOffset(sr, or)) if sl == sr => {
+            let r = compare(*ol as u64, *or as u64, Width::Word, op.sign, op.kind);
+            Some(Op::Copy(UnaryUnsignedOp {
+                dst: op.dst.clone(),
+                src: Scalar::ConstInt(if r { 1 } else { 0 }),
+                width: op.dst_width,
+            }))
+        }
+        _ => None,
+    }
 }
 fn compute_conv(op: &ConvOp) -> Option<Op> {
     if op.dst_width > op.src_width {
@@ -211,7 +232,7 @@ fn compute_conv(op: &ConvOp) -> Option<Op> {
 }
 
 fn clamp(c: u64, w: Width) -> u64 {
-    let mask = !((!0) << ((w as u64) * 8));
+    let mask = !((!0_u64).wrapping_shl((w as u32) * 8));
     c & mask
 }
 
@@ -219,11 +240,37 @@ fn widen(c: u64, from_w: Width, to_w: Width, sign_extend: bool) -> u64 {
     let clamped = clamp(c, from_w);
     let sign_bit = clamped >> (from_w as u16 * 8 - 1);
     if sign_extend && sign_bit != 0 {
-        let from_bits = from_w as u64 * 8;
-        let sign_extension: u64 = !0 << from_bits;
+        let from_bits = from_w as u32 * 8;
+        let sign_extension: u64 = (!0_u64).wrapping_shl(from_bits);
         clamp(clamped | sign_extension, to_w)
     } else {
         clamped
+    }
+}
+
+fn compare(lhs: u64, rhs: u64, width: Width, sign: bool, kind: CompareKind) -> bool {
+    let lhs = widen(lhs, width, Width::Qword, sign);
+    let rhs = widen(rhs, width, Width::Qword, sign);
+    if sign {
+        let lhs = lhs as i64;
+        let rhs = rhs as i64;
+        match kind {
+            CompareKind::Equal => lhs == rhs,
+            CompareKind::NotEqual => lhs != rhs,
+            CompareKind::LessThan => lhs < rhs,
+            CompareKind::GreaterThan => lhs > rhs,
+            CompareKind::LessOrEqual => lhs <= rhs,
+            CompareKind::GreaterOrEqual => lhs >= rhs,
+        }
+    } else {
+        match kind {
+            CompareKind::Equal => lhs == rhs,
+            CompareKind::NotEqual => lhs != rhs,
+            CompareKind::LessThan => lhs < rhs,
+            CompareKind::GreaterThan => lhs > rhs,
+            CompareKind::LessOrEqual => lhs <= rhs,
+            CompareKind::GreaterOrEqual => lhs >= rhs,
+        }
     }
 }
 
@@ -243,5 +290,23 @@ mod test {
         assert_eq!(widen(0x2345, Width::Byte, Width::Dword, false), 0x45);
         assert_eq!(widen(0x2345, Width::Word, Width::Dword, true), 0x2345);
         assert_eq!(widen(0x8345, Width::Word, Width::Dword, true), 0xffff8345);
+    }
+
+    #[test]
+    fn test_compare() {
+        assert!(compare(
+            0xffff,
+            0x0001,
+            Width::Word,
+            true,
+            CompareKind::LessThan
+        ));
+        assert!(!compare(
+            0xffff,
+            0x0001,
+            Width::Word,
+            false,
+            CompareKind::LessThan
+        ));
     }
 }
