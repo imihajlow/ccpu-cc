@@ -129,25 +129,118 @@ fn compute_mul(op: &BinaryOp) -> Option<Op> {
     }
 }
 fn compute_div(op: &BinaryOp) -> Option<Op> {
-    todo!()
+    match (&op.lhs, &op.rhs) {
+        (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => {
+            let lhs = widen(*lhs, op.width, Width::Qword, op.sign);
+            let rhs = widen(*rhs, op.width, Width::Qword, op.sign);
+            if rhs == 0 {
+                panic!("Division by zero"); // TODO proper error
+            }
+            let result = if op.sign {
+                let lhs = lhs as i64;
+                let rhs = rhs as i64;
+                lhs.wrapping_div(rhs) as u64
+            } else {
+                lhs.wrapping_div(rhs)
+            };
+            Some(Op::Copy(UnaryUnsignedOp {
+                dst: op.dst.clone(),
+                src: Scalar::ConstInt(clamp(result, op.width)),
+                width: op.width,
+            }))
+        }
+
+        (Scalar::SymbolOffset(_, _), _) | (_, Scalar::SymbolOffset(_, _)) => {
+            unreachable!("WTF is this")
+        }
+        _ => None,
+    }
 }
 fn compute_mod(op: &BinaryOp) -> Option<Op> {
-    todo!()
+    match (&op.lhs, &op.rhs) {
+        (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => {
+            let lhs = widen(*lhs, op.width, Width::Qword, op.sign);
+            let rhs = widen(*rhs, op.width, Width::Qword, op.sign);
+            if rhs == 0 {
+                panic!("Division by zero"); // TODO proper error
+            }
+            let result = if op.sign {
+                let lhs = lhs as i64;
+                let rhs = rhs as i64;
+                lhs.wrapping_rem(rhs) as u64
+            } else {
+                lhs.wrapping_rem(rhs)
+            };
+            Some(Op::Copy(UnaryUnsignedOp {
+                dst: op.dst.clone(),
+                src: Scalar::ConstInt(clamp(result, op.width)),
+                width: op.width,
+            }))
+        }
+
+        (Scalar::SymbolOffset(_, _), _) | (_, Scalar::SymbolOffset(_, _)) => {
+            unreachable!("WTF is this")
+        }
+        _ => None,
+    }
 }
 fn compute_band(op: &BinaryUnsignedOp) -> Option<Op> {
-    todo!()
+    match (&op.lhs, &op.rhs) {
+        (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => Some(Op::Copy(UnaryUnsignedOp {
+            dst: op.dst.clone(),
+            src: Scalar::ConstInt(clamp(lhs & rhs, op.width)),
+            width: op.width,
+        })),
+        _ => None,
+    }
 }
 fn compute_bor(op: &BinaryUnsignedOp) -> Option<Op> {
-    todo!()
+    match (&op.lhs, &op.rhs) {
+        (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => Some(Op::Copy(UnaryUnsignedOp {
+            dst: op.dst.clone(),
+            src: Scalar::ConstInt(clamp(lhs | rhs, op.width)),
+            width: op.width,
+        })),
+        _ => None,
+    }
 }
 fn compute_bxor(op: &BinaryUnsignedOp) -> Option<Op> {
-    todo!()
+    match (&op.lhs, &op.rhs) {
+        (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => Some(Op::Copy(UnaryUnsignedOp {
+            dst: op.dst.clone(),
+            src: Scalar::ConstInt(clamp(lhs ^ rhs, op.width)),
+            width: op.width,
+        })),
+        _ => None,
+    }
 }
 fn compute_lshift(op: &ShiftOp) -> Option<Op> {
-    todo!()
+    match (&op.lhs, &op.rhs) {
+        (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => Some(Op::Copy(UnaryUnsignedOp {
+            dst: op.dst.clone(),
+            src: Scalar::ConstInt(clamp(lhs.wrapping_shl(*rhs as u32), op.lhs_width)),
+            width: op.lhs_width,
+        })),
+        _ => None,
+    }
 }
 fn compute_rshift(op: &ShiftOp) -> Option<Op> {
-    todo!()
+    match (&op.lhs, &op.rhs) {
+        (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => {
+            let r = if op.lhs_sign {
+                let lhs = widen(*lhs, op.lhs_width, Width::Qword, op.lhs_sign) as i64;
+                lhs.wrapping_shr(*rhs as u32) as u64
+            } else {
+                lhs.wrapping_shr(*rhs as u32)
+            };
+            Some(Op::Copy(UnaryUnsignedOp {
+                dst: op.dst.clone(),
+                src: Scalar::ConstInt(clamp(r, op.lhs_width)),
+                width: op.lhs_width,
+            }))
+        }
+        _ => None,
+    }
 }
 fn compute_neg(op: &UnaryUnsignedOp) -> Option<Op> {
     match &op.src {
@@ -232,8 +325,12 @@ fn compute_conv(op: &ConvOp) -> Option<Op> {
 }
 
 fn clamp(c: u64, w: Width) -> u64 {
-    let mask = !((!0_u64).wrapping_shl((w as u32) * 8));
-    c & mask
+    if w == Width::Qword {
+        c
+    } else {
+        let mask = !((!0_u64).wrapping_shl((w as u32) * 8));
+        c & mask
+    }
 }
 
 fn widen(c: u64, from_w: Width, to_w: Width, sign_extend: bool) -> u64 {
@@ -282,6 +379,10 @@ mod test {
     #[test]
     fn test_clamp() {
         assert_eq!(clamp(0x12345, Width::Word), 0x2345);
+        assert_eq!(
+            clamp(0xffff_1234_ffff_1234, Width::Qword),
+            0xffff_1234_ffff_1234
+        );
     }
 
     #[test]
