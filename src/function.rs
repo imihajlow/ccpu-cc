@@ -37,6 +37,10 @@ impl<Reg: Hash + Eq> Function<Reg> {
         self.is_reentrant = reentrant;
     }
 
+    pub fn is_reentrant(&self) -> bool {
+        self.is_reentrant
+    }
+
     pub fn get_frame_size(&self) -> u32 {
         self.frame.get_size()
     }

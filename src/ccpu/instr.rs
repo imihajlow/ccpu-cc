@@ -245,9 +245,6 @@ impl InstructionWriter {
             VarLocation::Return => {
                 self.ldi_p_sym(global::RET_VALUE_REG_SYMBOL.to_string(), offset);
             }
-            VarLocation::Frame(_) => {
-                todo!()
-            }
         }
     }
 

@@ -37,7 +37,6 @@ fn find_const_registers(blocks: &Vec<ir::Block>) -> HashMap<ir::VirtualReg, ir::
                 if let Some(reg) = op.dst.get_reg() {
                     match &op.src {
                         ir::Scalar::ConstInt(_) | ir::Scalar::SymbolOffset(_, _) => {
-                            println!("subs {} <- {}", reg, op.src);
                             result.insert(reg, op.src.clone());
                         }
                         _ => (),

@@ -165,9 +165,9 @@ fn gen_load_var_8(w: &mut InstructionWriter, dst: Reg, v: &VarLocation<FrameReg>
             w.ld(dst);
         }
         VarLocation::Return => {
-            todo!()
+            w.ldi_p_sym(global::RET_VALUE_REG_SYMBOL.to_string(), 0);
+            w.ld(dst);
         }
-        VarLocation::Frame(offset) => todo!(),
     }
 }
 

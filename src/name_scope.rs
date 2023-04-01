@@ -556,7 +556,6 @@ impl NameScope {
                     ir::Scalar::Var(ir::VarLocation::Local(address_reg))
                 }
             }
-            VarLocation::Frame(_) => todo!(),
             VarLocation::Return => unreachable!("address of a return value"),
         }
     }

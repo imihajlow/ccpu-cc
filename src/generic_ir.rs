@@ -23,7 +23,6 @@ pub type BlockNumber = usize;
 pub enum VarLocation<Reg> {
     Global(GlobalVarId),
     Local(Reg),
-    Frame(u32),
     Return,
 }
 
@@ -1292,7 +1291,6 @@ impl<Reg: Copy + Eq + Hash> VarLocation<Reg> {
         match self {
             VarLocation::Local(n) => VarLocation::Local(map.get(&n).copied().unwrap()),
             VarLocation::Global(x) => VarLocation::Global(x),
-            VarLocation::Frame(n) => VarLocation::Frame(n),
             VarLocation::Return => VarLocation::Return,
         }
     }
@@ -1665,7 +1663,6 @@ where
         match self {
             VarLocation::Local(r) => write!(f, "%{}", r),
             VarLocation::Global(id) => write!(f, "{}", id),
-            VarLocation::Frame(p) => write!(f, "[F+0x{:x}]", p),
             VarLocation::Return => write!(f, "%ret"),
         }
     }
