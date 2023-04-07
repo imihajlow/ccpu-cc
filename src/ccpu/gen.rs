@@ -1,6 +1,6 @@
 use crate::{
     function::Function,
-    generic_ir::{self, Scalar, VarLocation},
+    generic_ir::{self, ArgOp, Scalar, VarLocation},
     opt::blocks,
     translation_unit::TranslationUnit,
 };
@@ -59,8 +59,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
     use generic_ir::Op::*;
     match op {
         Undefined(_) => (),
-        Arg(op) => (),
-        FramePointer(reg) => (),
+        Arg(op) => check_arg(op),
         Copy(op) => copy::gen_copy(w, op),
         Bool(op) => (),
         BoolInv(op) => (),
@@ -82,6 +81,9 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Load(op) => (),
         Call(op) => (),
         Memcpy(op) => (),
+        FramePointer(_) => {
+            unreachable!("Frame pointer expansion step must be performed before generating code")
+        }
         #[cfg(test)]
         Dummy(_) => (),
     }
@@ -174,4 +176,14 @@ fn gen_load_var_8(w: &mut InstructionWriter, dst: Reg, v: &VarLocation<FrameReg>
 
 fn make_block_label(function_name: &str, block_index: usize) -> String {
     format!("__{}_{}", function_name, block_index)
+}
+
+fn check_arg(op: &ArgOp<FrameReg>) {
+    match op.dst_reg {
+        FrameReg::FrameA(n) if n as usize == op.arg_number => (),
+        _ => panic!(
+            "Wrong argument register {} for arg {}",
+            op.dst_reg, op.arg_number
+        ),
+    }
 }

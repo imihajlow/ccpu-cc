@@ -6,6 +6,7 @@ mod deconstruct;
 mod lvalue;
 mod member;
 mod object;
+mod regalloc;
 mod relational;
 mod shift;
 mod sizeof;

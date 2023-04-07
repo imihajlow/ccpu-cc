@@ -11,11 +11,12 @@ use crate::{ccpu::reg::FrameReg, ir, register::Register};
 pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::VirtualReg, FrameReg> {
     let mut hints = HashMap::new();
     let mut allocations = HashMap::new();
+    let mut preallocated = HashMap::new();
 
-    // Hint this function parameters registers - Arg operations only come in the first block
+    // Preallocate this function parameters registers - Arg operations only come in the first block
     for op in body.first().unwrap().ops.iter() {
         if let ir::Op::Arg(arg_op) = op {
-            hints.insert(
+            preallocated.insert(
                 arg_op.dst_reg,
                 FrameReg::get_current_fn_arg(arg_op.arg_number).unwrap(),
             );
@@ -34,7 +35,7 @@ pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::VirtualReg, FrameRe
     }
 
     for i in 0..body.len() {
-        allocate_registers_for_block(body, i, &mut allocations, &mut hints);
+        allocate_registers_for_block(body, i, &mut allocations, &mut hints, &preallocated);
     }
 
     allocations
@@ -45,8 +46,10 @@ fn allocate_registers_for_block(
     block_index: usize,
     allocations: &mut HashMap<ir::VirtualReg, FrameReg>,
     hints: &mut HashMap<ir::VirtualReg, FrameReg>,
+    preallocated: &HashMap<ir::VirtualReg, FrameReg>,
 ) {
     let mut vacant_registers = vec![true; FrameReg::get_register_count()];
+
     let block = &body[block_index];
 
     // Determine kill positions
@@ -56,17 +59,6 @@ fn allocate_registers_for_block(
         let mut live_regs = HashSet::new();
         for child_id in block.tail.get_connections() {
             body[child_id].phi.collect_read_regs(&mut live_regs);
-            for (dst, (_, srcs)) in body[child_id].phi.srcs.iter() {
-                if let Some(allocation) = allocations.get(dst) {
-                    for (src_block_index, src) in srcs.iter() {
-                        if *src_block_index == block_index {
-                            if let Some(reg) = src.get_reg() {
-                                hints.try_insert(reg, *allocation).ok();
-                            }
-                        }
-                    }
-                }
-            }
         }
         block.tail.collect_read_regs(&mut live_regs);
         for (i, op) in block.ops.iter().enumerate().rev() {
@@ -77,6 +69,21 @@ fn allocate_registers_for_block(
         }
         kill
     };
+
+    let set_regs = {
+        let mut set_regs = HashSet::new();
+        block.phi.collect_set_regs(&mut set_regs);
+        for op in &block.ops {
+            op.collect_set_regs(&mut set_regs);
+        }
+        set_regs
+    };
+
+    for (v, r) in preallocated {
+        if set_regs.contains(v) {
+            vacant_registers[r.get_index()] = false;
+        }
+    }
 
     // Get hints from chidren's phi
     for child_id in block.tail.get_connections() {
@@ -97,7 +104,12 @@ fn allocate_registers_for_block(
         reg: ir::VirtualReg,
         vacant_registers: &mut Vec<bool>,
         hints: &HashMap<ir::VirtualReg, FrameReg>,
+        preallocated: &HashMap<ir::VirtualReg, FrameReg>,
     ) -> FrameReg {
+        if let Some(prealloc) = preallocated.get(&reg) {
+            assert!(!vacant_registers[prealloc.get_index()]);
+            return *prealloc;
+        }
         if let Some(&hint) = hints.get(&reg) {
             let n = hint.get_index();
             if vacant_registers[n] {
@@ -117,7 +129,7 @@ fn allocate_registers_for_block(
 
     // Allocate for phi
     for (phi_dst, _) in block.phi.srcs.iter() {
-        let phi_reg = allocate(*phi_dst, &mut vacant_registers, hints);
+        let phi_reg = allocate(*phi_dst, &mut vacant_registers, hints, preallocated);
         let old = allocations.insert(*phi_dst, phi_reg);
         if old.is_some() {
             panic!("double allocation");
@@ -132,7 +144,7 @@ fn allocate_registers_for_block(
             vacant_registers[phy_reg.get_index()] = true;
         }
         if let Some(dst) = op.get_dst_reg() {
-            let dst_reg = allocate(dst, &mut vacant_registers, hints);
+            let dst_reg = allocate(dst, &mut vacant_registers, hints, preallocated);
             let old = allocations.insert(dst, dst_reg);
             if old.is_some() {
                 panic!("double allocation");
