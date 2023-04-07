@@ -52,13 +52,26 @@ struct SwitchRecord {
 }
 
 impl BlockEmitter {
+    /**
+     * Block 0 contains initial operations and ends in a jump to block 1, which is made active.
+     */
     pub fn new(initial_ops: Vec<ir::Op>) -> Self {
+        let mut blocks = HashMap::new();
+        blocks.insert(
+            0,
+            LabeledBlock {
+                phi: ir::Phi::new(),
+                ops: initial_ops,
+                tail: LabeledTail::Tail(ir::Tail::Jump(1)),
+                loop_depth: 0,
+            },
+        );
         Self {
-            next_id: 1,
-            current_id: 0,
+            next_id: 2,
+            current_id: 1,
             loop_depth: 0,
-            blocks: HashMap::new(),
-            current_ops: initial_ops,
+            blocks,
+            current_ops: Vec::new(),
             breaks: Vec::new(),
             continues: Vec::new(),
             labels: HashMap::new(),
@@ -106,17 +119,13 @@ impl BlockEmitter {
         self.current_ops.push(op);
     }
 
-    /**
-     * Prepend a Vec of operations to the beginning of the first block
-     */
-    pub fn prepend_operations(&mut self, mut op: Vec<ir::Op>) {
-        let first_block_ops = if self.current_id == 0 {
+    pub fn append_operation_to_block(&mut self, op: ir::Op, block_id: usize) {
+        let target_ops = if self.current_id == block_id {
             &mut self.current_ops
         } else {
-            &mut self.blocks.get_mut(&0).unwrap().ops
+            &mut self.blocks.get_mut(&block_id).unwrap().ops
         };
-        op.append(first_block_ops);
-        *first_block_ops = op;
+        target_ops.push(op);
     }
 
     pub fn append_if(

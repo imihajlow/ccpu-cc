@@ -8,25 +8,25 @@ fn test_rel_1() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
             ir::Op::Undefined(2),
+            ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::LessThan,
                 dst_width: ir::Width::Word,
-                dst: VarLocation::Local(3),
+                dst: VarLocation::Local(4),
                 width: ir::Width::Word,
                 sign: true,
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
-                rhs: ir::Scalar::Var(VarLocation::Local(2))
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                rhs: ir::Scalar::Var(VarLocation::Local(3))
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             })
         ]
@@ -39,33 +39,33 @@ fn test_rel_2() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
             ir::Op::Undefined(2),
+            ir::Op::Undefined(3),
             ir::Op::Conv(ir::ConvOp {
-                dst: VarLocation::Local(3),
+                dst: VarLocation::Local(4),
                 dst_width: ir::Width::Dword,
                 dst_sign: false,
                 src_width: ir::Width::Word,
                 src_sign: true,
-                src: ir::Scalar::Var(VarLocation::Local(1))
+                src: ir::Scalar::Var(VarLocation::Local(2))
             }),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::GreaterOrEqual,
                 dst_width: ir::Width::Word,
-                dst: VarLocation::Local(4),
+                dst: VarLocation::Local(5),
                 width: ir::Width::Dword,
                 sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(3)),
-                rhs: ir::Scalar::Var(VarLocation::Local(2))
+                lhs: ir::Scalar::Var(VarLocation::Local(4)),
+                rhs: ir::Scalar::Var(VarLocation::Local(3))
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(4)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(5)),
                 width: ir::Width::Word
             })
         ]
@@ -78,25 +78,25 @@ fn test_rel_3() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 1);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
             ir::Op::Undefined(2),
+            ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::LessOrEqual,
                 dst_width: ir::Width::Word,
-                dst: VarLocation::Local(3),
+                dst: VarLocation::Local(4),
                 width: ir::Width::Word,
                 sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
-                rhs: ir::Scalar::Var(VarLocation::Local(2))
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                rhs: ir::Scalar::Var(VarLocation::Local(3))
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             })
         ]
@@ -109,25 +109,25 @@ fn test_rel_4() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
             ir::Op::Undefined(2),
+            ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::GreaterThan,
                 dst_width: ir::Width::Word,
-                dst: VarLocation::Local(3),
+                dst: VarLocation::Local(4),
                 width: ir::Width::Word,
                 sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
-                rhs: ir::Scalar::Var(VarLocation::Local(2))
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                rhs: ir::Scalar::Var(VarLocation::Local(3))
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             })
         ]
@@ -140,25 +140,25 @@ fn test_rel_5() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
             ir::Op::Undefined(2),
+            ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::Equal,
                 dst_width: ir::Width::Word,
-                dst: VarLocation::Local(3),
+                dst: VarLocation::Local(4),
                 width: ir::Width::Word,
                 sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
-                rhs: ir::Scalar::Var(VarLocation::Local(2))
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                rhs: ir::Scalar::Var(VarLocation::Local(3))
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             })
         ]
@@ -171,25 +171,25 @@ fn test_rel_6() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 1);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
             ir::Op::Undefined(2),
+            ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
                 kind: ir::CompareKind::NotEqual,
                 dst_width: ir::Width::Word,
-                dst: VarLocation::Local(3),
+                dst: VarLocation::Local(4),
                 width: ir::Width::Word,
                 sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
-                rhs: ir::Scalar::Var(VarLocation::Local(2))
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                rhs: ir::Scalar::Var(VarLocation::Local(3))
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             })
         ]

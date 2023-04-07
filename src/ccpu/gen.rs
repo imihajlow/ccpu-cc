@@ -60,6 +60,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
     match op {
         Undefined(_) => (),
         Arg(op) => (),
+        FramePointer(reg) => (),
         Copy(op) => copy::gen_copy(w, op),
         Bool(op) => (),
         BoolInv(op) => (),
@@ -111,7 +112,7 @@ fn gen_cond_jump(
 ) {
     match c {
         Scalar::ConstInt(0) => gen_jump(w, cur_idx, else_idx, function_name),
-        Scalar::ConstInt(_) | Scalar::FramePointer => gen_jump(w, cur_idx, if_idx, function_name),
+        Scalar::ConstInt(_) => gen_jump(w, cur_idx, if_idx, function_name),
         Scalar::Var(v) => {
             gen_load_var_8(w, A, v);
             w.add(A, Zero);

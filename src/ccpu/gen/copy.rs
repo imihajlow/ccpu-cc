@@ -8,9 +8,6 @@ pub fn gen_copy(w: &mut InstructionWriter, op: &generic_ir::UnaryUnsignedOp<Fram
         Scalar::ConstInt(c) => gen_copy_const(w, &op.dst, *c, op.width),
         Scalar::Var(v) => gen_copy_var(w, &op.dst, &v, op.width),
         Scalar::SymbolOffset(s, o) => gen_copy_sym(w, &op.dst, &s, *o, op.width),
-        Scalar::FramePointer => {
-            unreachable!("frame pointer expansion step should be performed before emitting code")
-        }
     }
 }
 

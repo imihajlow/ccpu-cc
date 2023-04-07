@@ -22,11 +22,6 @@ pub fn gen_conv(w: &mut InstructionWriter, op: &generic_ir::ConvOp<FrameReg>) {
             Scalar::ConstInt(_) => {
                 unreachable!("const propagation must be performed before emitting code")
             }
-            Scalar::FramePointer => {
-                unreachable!(
-                    "frame pointer expansion step should be performed before emitting code"
-                )
-            }
         }
     } else {
         let copy_op = UnaryUnsignedOp {

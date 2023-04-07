@@ -33,7 +33,6 @@ pub struct GlobalVarId(pub String, pub u32);
 pub enum Scalar<Reg> {
     ConstInt(u64),
     SymbolOffset(GlobalVarId, u16),
-    FramePointer,
     Var(VarLocation<Reg>),
 }
 
@@ -41,6 +40,7 @@ pub enum Scalar<Reg> {
 pub enum Op<Reg> {
     Undefined(Reg),
     Arg(ArgOp<Reg>),
+    FramePointer(Reg),
     Copy(UnaryUnsignedOp<Reg>),
     Bool(UnaryUnsignedOp<Reg>),
     BoolInv(UnaryUnsignedOp<Reg>),
@@ -212,6 +212,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
         match self {
             Op::Undefined(target) => Some(*target),
             Op::Arg(op) => op.get_dst_reg(),
+            Op::FramePointer(reg) => Some(*reg),
             Op::Copy(op) => op.get_dst_reg(),
             Op::Bool(op) => op.get_dst_reg(),
             Op::BoolInv(op) => op.get_dst_reg(),
@@ -242,6 +243,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
         match self {
             Op::Undefined(_) => false,
             Op::Arg(_) => false,
+            Op::FramePointer(_) => false,
             Op::Copy(op) => op.is_read_from_register(reg),
             Op::Bool(op) => op.is_read_from_register(reg),
             Op::BoolInv(op) => op.is_read_from_register(reg),
@@ -272,6 +274,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
         match self {
             Op::Undefined(_) => false,
             Op::Arg(_) => false,
+            Op::FramePointer(_) => false,
             Op::Copy(_) => false,
             Op::Bool(_) => false,
             Op::BoolInv(_) => false,
@@ -302,6 +305,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
         match self {
             Op::Undefined(_) => false,
             Op::Arg(_) => false,
+            Op::FramePointer(_) => false,
             Op::Copy(_) => false,
             Op::Bool(_) => false,
             Op::BoolInv(_) => false,
@@ -332,6 +336,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
         match self {
             Op::Undefined(_) => Some(Width::Qword),
             Op::Arg(op) => Some(op.width),
+            Op::FramePointer(_) => Some(Width::PTR_WIDTH),
             Op::Copy(op) => Some(op.width),
             Op::Bool(_) => Some(Width::Byte),
             Op::BoolInv(_) => Some(Width::Byte),
@@ -364,6 +369,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
         match self {
             Op::Undefined(_) => (),
             Op::Arg(_) => (),
+            Op::FramePointer(_) => (),
             Op::Copy(op) => op.collect_read_regs(set),
             Op::Bool(op) => op.collect_read_regs(set),
             Op::BoolInv(op) => op.collect_read_regs(set),
@@ -392,7 +398,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
 
     pub fn collect_set_regs(&self, set: &mut HashSet<Reg>) {
         match self {
-            Op::Undefined(reg) => {
+            Op::Undefined(reg) | Op::FramePointer(reg) => {
                 set.insert(*reg);
             }
             Op::Arg(op) => op.collect_set_regs(set),
@@ -433,6 +439,10 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
                 Op::Undefined(new_reg)
             }
             Op::Arg(op) => Op::Arg(op.remap_regs(map)),
+            Op::FramePointer(reg) => {
+                let new_reg = map.get(&reg).copied().unwrap();
+                Op::FramePointer(new_reg)
+            }
             Op::Copy(op) => Op::Copy(op.remap_regs(map)),
             Op::Bool(op) => Op::Bool(op.remap_regs(map)),
             Op::BoolInv(op) => Op::BoolInv(op.remap_regs(map)),
@@ -469,6 +479,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
         match self {
             Op::Undefined(_) => false,
             Op::Arg(_) => false,
+            Op::FramePointer(_) => false,
             Op::Copy(op) => op.subs_src_regs(map),
             Op::Bool(op) => op.subs_src_regs(map),
             Op::BoolInv(op) => op.subs_src_regs(map),
@@ -511,6 +522,11 @@ impl Op<VirtualReg> {
                 let new_reg = scope.alloc_reg();
                 map.insert(reg, new_reg);
                 Op::Undefined(new_reg)
+            }
+            Op::FramePointer(reg) => {
+                let new_reg = scope.alloc_reg();
+                map.insert(reg, new_reg);
+                Op::FramePointer(new_reg)
             }
             Op::Arg(op) => Op::Arg(op.remap_regs_to_new_version(map, scope)),
             Op::Copy(op) => Op::Copy(op.remap_regs_to_new_version(map, scope)),
@@ -1353,7 +1369,6 @@ impl<Reg: Copy + Eq + Hash> Scalar<Reg> {
             Scalar::Var(v) => Scalar::Var(v.remap_reg(map)),
             Scalar::ConstInt(n) => Scalar::ConstInt(n),
             Scalar::SymbolOffset(s, o) => Scalar::SymbolOffset(s, o),
-            Scalar::FramePointer => Scalar::FramePointer,
         }
     }
 
@@ -1435,8 +1450,9 @@ where
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Self::Undefined(reg) => write!(f, "undef {}", reg),
+            Self::Undefined(reg) => write!(f, "undef %{}", reg),
             Self::Arg(op) => write!(f, "arg{}", op),
+            Self::FramePointer(reg) => write!(f, "fp %{}", reg),
             Self::Copy(op) => write!(f, "copy{}", op),
             Self::Add(op) => write!(f, "add{}", op),
             Self::Sub(op) => write!(f, "sub{}", op),
@@ -1650,7 +1666,6 @@ where
             Scalar::SymbolOffset(sym, 0) => write!(f, "{}", sym),
             Scalar::SymbolOffset(sym, offs) => write!(f, "{}+0x{:x}", sym, offs),
             Scalar::Var(v) => write!(f, "{}", v),
-            Scalar::FramePointer => write!(f, "F"),
         }
     }
 }

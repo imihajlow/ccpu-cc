@@ -98,11 +98,11 @@ impl Function<ir::VirtualReg> {
                 StorageClassSpecifier::Static => GlobalStorageClass::Static,
             },
         };
-        let arg_instructions = scope.start_function(&args, &return_type);
-        let mut be = BlockEmitter::new(arg_instructions);
+        let init_instructions = scope.start_function(&args, &return_type);
+        let mut be = BlockEmitter::new(init_instructions);
         compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
         let frame = scope.end_function();
-        prepend_address_regs_initialization(&mut be, &frame);
+        init_address_regs(&mut be, &frame);
         let mut body = be.finalize(ec)?;
         flush::insert_flush_instructions(&mut body, &frame);
         Ok(Self {
@@ -172,18 +172,19 @@ impl Function<FrameReg> {
     }
 }
 
-fn prepend_address_regs_initialization(be: &mut BlockEmitter, frame: &FunctionFrame) {
-    let mut ops = Vec::new();
+fn init_address_regs(be: &mut BlockEmitter, frame: &FunctionFrame) {
     for (offset, var) in frame.address_regs_iter() {
-        ops.push(ir::Op::Add(ir::BinaryOp {
-            dst: var.clone(),
-            lhs: ir::Scalar::FramePointer,
-            rhs: ir::Scalar::ConstInt(offset as u64),
-            width: ir::Width::PTR_WIDTH,
-            sign: false,
-        }));
+        be.append_operation_to_block(
+            ir::Op::Add(ir::BinaryOp {
+                dst: var.clone(),
+                lhs: ir::Scalar::Var(ir::VarLocation::Local(frame.get_frame_pointer_reg())),
+                rhs: ir::Scalar::ConstInt(offset as u64),
+                width: ir::Width::PTR_WIDTH,
+                sign: false,
+            }),
+            0,
+        );
     }
-    be.prepend_operations(ops);
 }
 
 impl<Reg: std::fmt::Display + Eq + Hash> std::fmt::Display for Function<Reg> {

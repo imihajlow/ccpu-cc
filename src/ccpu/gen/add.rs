@@ -18,9 +18,6 @@ pub fn gen_add(w: &mut InstructionWriter, op: &generic_ir::BinaryOp<FrameReg>) {
         | (Scalar::SymbolOffset(_, _), Scalar::ConstInt(_)) => {
             unreachable!("const propagation must be performed before emitting code")
         }
-        (Scalar::FramePointer, _) | (_, Scalar::FramePointer) => {
-            unreachable!("frame pointer expansion step should be performed before emitting code")
-        }
         (Scalar::SymbolOffset(_, _), Scalar::SymbolOffset(_, _)) => {
             unimplemented!("doesn't make sense")
         }

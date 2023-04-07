@@ -56,6 +56,7 @@ pub struct FunctionFrame {
     frame_size: u32,
     fixed_regs: HashMap<ir::VirtualReg, (ir::VirtualReg, ir::Width)>, // reg -> address reg
     address_regs: Vec<(ir::VirtualReg, u32)>,
+    frame_pointer_reg: ir::VirtualReg,
     return_type: QualifiedType,
 }
 
@@ -118,7 +119,7 @@ impl NameScope {
     }
 
     /**
-     * Push scope, declare function arguments and save return type.
+     * Push scope, declare function arguments and frame pointer and save return type.
      */
     pub fn start_function(
         &mut self,
@@ -126,7 +127,7 @@ impl NameScope {
         return_type: &QualifiedType,
     ) -> Vec<ir::Op> {
         let mut defs = HashMap::new();
-        let arg_instructions = if let FunctionArgs::List(l) = args {
+        let mut init_instructions = if let FunctionArgs::List(l) = args {
             let mut ops = Vec::new();
             for (i, (t, name, span)) in l.iter().enumerate() {
                 if let Some(name) = name {
@@ -147,10 +148,12 @@ impl NameScope {
         } else {
             Vec::new()
         };
+        let fp_reg = self.alloc_reg();
+        init_instructions.push(ir::Op::FramePointer(fp_reg));
         self.defs.push(Scope::new_with_defs(defs));
         assert!(self.function_frame.is_none());
-        self.function_frame = Some(FunctionFrame::new(return_type));
-        arg_instructions
+        self.function_frame = Some(FunctionFrame::new(return_type, fp_reg));
+        init_instructions
     }
 
     /**
@@ -566,6 +569,10 @@ impl NameScope {
         r
     }
 
+    pub fn get_frame_pointer_reg(&self) -> VirtualReg {
+        self.function_frame.as_ref().unwrap().frame_pointer_reg
+    }
+
     fn get_tagged_type(&self, id: usize) -> &Tagged {
         let result = &self.tagged_types[id].0;
         result
@@ -751,16 +758,21 @@ impl FunctionFrame {
             .map(|(fixed_reg, (address_reg, width))| (*fixed_reg, *address_reg, *width))
     }
 
+    pub fn get_frame_pointer_reg(&self) -> ir::VirtualReg {
+        self.frame_pointer_reg
+    }
+
     #[cfg(test)]
     pub fn get_fixed_regs(&self) -> &HashMap<ir::VirtualReg, (ir::VirtualReg, ir::Width)> {
         &self.fixed_regs
     }
 
-    fn new(return_type: &QualifiedType) -> Self {
+    fn new(return_type: &QualifiedType, fp_reg: ir::VirtualReg) -> Self {
         FunctionFrame {
             frame_size: 0,
             fixed_regs: HashMap::new(),
             address_regs: Vec::new(),
+            frame_pointer_reg: fp_reg,
             return_type: return_type.clone(),
         }
     }

@@ -8,11 +8,11 @@ fn test_sizof_val_1() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
+            dst: VarLocation::Local(1),
             src: ir::Scalar::ConstInt(2),
             width: ir::Width::Word
         })]
@@ -25,11 +25,11 @@ fn test_sizof_ty_1() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
+            dst: VarLocation::Local(1),
             src: ir::Scalar::ConstInt(8),
             width: ir::Width::Word
         })]
@@ -42,11 +42,11 @@ fn test_sizof_ty_2() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
+            dst: VarLocation::Local(1),
             src: ir::Scalar::ConstInt(16),
             width: ir::Width::Word
         })]
@@ -59,11 +59,11 @@ fn test_alignof_1() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
+            dst: VarLocation::Local(1),
             src: ir::Scalar::ConstInt(8),
             width: ir::Width::Word
         })]
@@ -76,11 +76,11 @@ fn test_alignof_2() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
+            dst: VarLocation::Local(1),
             src: ir::Scalar::ConstInt(2),
             width: ir::Width::Word
         })]
@@ -93,11 +93,11 @@ fn test_alignof_3() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![ir::Op::Copy(ir::UnaryUnsignedOp {
-            dst: VarLocation::Local(0),
+            dst: VarLocation::Local(1),
             src: ir::Scalar::ConstInt(8),
             width: ir::Width::Word
         })]

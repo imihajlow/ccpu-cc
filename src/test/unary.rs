@@ -8,15 +8,15 @@ fn test_unary_1() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word
             })
         ]
@@ -29,28 +29,28 @@ fn test_unary_2() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Neg(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(2),
-                src: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word,
             }),
             ir::Op::Conv(ir::ConvOp {
-                dst: VarLocation::Local(3),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(4),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 dst_width: ir::Width::Dword,
                 src_width: ir::Width::Word,
                 dst_sign: true,
                 src_sign: false
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Dword
             })
         ]
@@ -63,20 +63,20 @@ fn test_unary_3() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Not(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(2),
-                src: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]
@@ -89,20 +89,20 @@ fn test_unary_4() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::BoolInv(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(2),
-                src: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]
@@ -115,27 +115,27 @@ fn test_unary_5() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Add(ir::BinaryOp {
-                dst: VarLocation::Local(2),
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
                 rhs: ir::Scalar::ConstInt(1),
                 width: ir::Width::Word,
                 sign: true,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(1),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(2),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]
@@ -148,34 +148,34 @@ fn test_unary_6() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Mul(ir::BinaryOp {
-                dst: VarLocation::Local(2),
+                dst: VarLocation::Local(3),
                 lhs: ir::Scalar::ConstInt(1),
                 rhs: ir::Scalar::ConstInt(4),
                 width: ir::Width::Word,
                 sign: true,
             }),
             ir::Op::Sub(ir::BinaryOp {
-                dst: VarLocation::Local(3),
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
-                rhs: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(4),
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                rhs: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word,
                 sign: true,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(1),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(2),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             })
         ]
@@ -188,32 +188,32 @@ fn test_unary_7() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(2),
-                src: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word
             }),
             ir::Op::Add(ir::BinaryOp {
-                dst: VarLocation::Local(3),
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(4),
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
                 rhs: ir::Scalar::ConstInt(1),
                 width: ir::Width::Word,
                 sign: true,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(1),
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(2),
+                src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]
@@ -226,39 +226,39 @@ fn test_unary_8() {
     ec.print_issues();
     assert_eq!(ec.get_warning_count(), 0);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(2),
-                src: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word
             }),
             ir::Op::Mul(ir::BinaryOp {
-                dst: VarLocation::Local(3),
+                dst: VarLocation::Local(4),
                 lhs: ir::Scalar::ConstInt(1),
                 rhs: ir::Scalar::ConstInt(4),
                 width: ir::Width::Word,
                 sign: true,
             }),
             ir::Op::Sub(ir::BinaryOp {
-                dst: VarLocation::Local(4),
-                lhs: ir::Scalar::Var(VarLocation::Local(1)),
-                rhs: ir::Scalar::Var(VarLocation::Local(3)),
+                dst: VarLocation::Local(5),
+                lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                rhs: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word,
                 sign: true,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(1),
-                src: ir::Scalar::Var(VarLocation::Local(4)),
+                dst: VarLocation::Local(2),
+                src: ir::Scalar::Var(VarLocation::Local(5)),
                 width: ir::Width::Word
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]
@@ -272,25 +272,31 @@ fn test_addr_1() {
     assert_eq!(ec.get_warning_count(), 0);
     let fun = get_first_function(&tu);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     let fixed_regs = fun.get_frame().get_fixed_regs();
     assert_eq!(fixed_regs.len(), 1);
-    assert!(fixed_regs.contains_key(&1));
+    assert!(fixed_regs.contains_key(&2));
     assert_eq!(
         body[0].ops,
         vec![
+            ir::Op::FramePointer(0),
             ir::Op::Add(ir::BinaryOp {
-                dst: VarLocation::Local(2),
-                lhs: ir::Scalar::FramePointer,
+                dst: VarLocation::Local(3),
+                lhs: ir::Scalar::Var(VarLocation::Local(0)),
                 rhs: ir::Scalar::ConstInt(0),
                 width: ir::Width::PTR_WIDTH,
                 sign: false,
-            }),
-            ir::Op::Undefined(0),
+            })
+        ]
+    );
+    assert_eq!(
+        body[1].ops,
+        vec![
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]
@@ -304,17 +310,17 @@ fn test_addr_2() {
     assert_eq!(ec.get_warning_count(), 0);
     let fun = get_first_function(&tu);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     let fixed_regs = fun.get_frame().get_fixed_regs();
     assert_eq!(fixed_regs.len(), 0);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word
             })
         ]
@@ -328,22 +334,22 @@ fn test_deref_1() {
     assert_eq!(ec.get_warning_count(), 0);
     let fun = get_first_function(&tu);
     let body = get_first_body(&tu);
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 2);
     let fixed_regs = fun.get_frame().get_fixed_regs();
     assert_eq!(fixed_regs.len(), 0);
     assert_eq!(
-        body[0].ops,
+        body[1].ops,
         vec![
-            ir::Op::Undefined(0),
             ir::Op::Undefined(1),
+            ir::Op::Undefined(2),
             ir::Op::Load(ir::LoadOp {
-                dst: VarLocation::Local(2),
-                src_addr: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: VarLocation::Local(3),
+                src_addr: ir::Scalar::Var(VarLocation::Local(2)),
                 width: ir::Width::Word,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(0),
-                src: ir::Scalar::Var(VarLocation::Local(2)),
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             })
         ]
