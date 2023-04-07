@@ -53,6 +53,7 @@ pub enum Value {
 
 #[derive(Clone)]
 pub struct FunctionFrame {
+    name: String,
     frame_size: u32,
     fixed_regs: HashMap<ir::VirtualReg, (ir::VirtualReg, ir::Width)>, // reg -> address reg
     address_regs: Vec<(ir::VirtualReg, u32)>,
@@ -123,6 +124,7 @@ impl NameScope {
      */
     pub fn start_function(
         &mut self,
+        name: &str,
         args: &FunctionArgs,
         return_type: &QualifiedType,
     ) -> Vec<ir::Op> {
@@ -152,7 +154,7 @@ impl NameScope {
         init_instructions.push(ir::Op::FramePointer(fp_reg));
         self.defs.push(Scope::new_with_defs(defs));
         assert!(self.function_frame.is_none());
-        self.function_frame = Some(FunctionFrame::new(return_type, fp_reg));
+        self.function_frame = Some(FunctionFrame::new(name, return_type, fp_reg));
         init_instructions
     }
 
@@ -278,7 +280,12 @@ impl NameScope {
                     span,
                 );
             } else {
-                let var_id = self.alloc_global_var_id(name);
+                let var_id = match storage_class {
+                    GlobalStorageClass::Static => GlobalVarId::Static(name.to_string()),
+                    GlobalStorageClass::Default | GlobalStorageClass::Extern => {
+                        GlobalVarId::Global(name.to_string())
+                    }
+                };
                 self.insert(
                     name,
                     Value::StaticVar(t, var_id, storage_class, initializer),
@@ -307,7 +314,10 @@ impl NameScope {
                         } else {
                             None
                         };
-                        let id = self.alloc_global_var_id(name);
+                        let id = GlobalVarId::LocalStatic {
+                            name: name.to_string(),
+                            function_name: self.function_frame.as_ref().unwrap().name.clone(),
+                        };
                         self.insert(
                             name,
                             Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
@@ -578,12 +588,6 @@ impl NameScope {
         result
     }
 
-    fn alloc_global_var_id(&mut self, name: &str) -> GlobalVarId {
-        let id = self.last_static_id;
-        self.last_static_id += 1;
-        GlobalVarId(name.to_string(), id)
-    }
-
     fn alloc_frame(&mut self, size: u32, align: u32) -> u32 {
         self.function_frame.as_mut().unwrap().alloc(size, align)
     }
@@ -767,8 +771,9 @@ impl FunctionFrame {
         &self.fixed_regs
     }
 
-    fn new(return_type: &QualifiedType, fp_reg: ir::VirtualReg) -> Self {
+    fn new(name: &str, return_type: &QualifiedType, fp_reg: ir::VirtualReg) -> Self {
         FunctionFrame {
+            name: name.to_string(),
             frame_size: 0,
             fixed_regs: HashMap::new(),
             address_regs: Vec::new(),

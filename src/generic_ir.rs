@@ -27,7 +27,12 @@ pub enum VarLocation<Reg> {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct GlobalVarId(pub String, pub u32);
+pub enum GlobalVarId {
+    CompilerInternal(String),
+    Global(String),
+    Static(String),
+    LocalStatic { name: String, function_name: String },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scalar<Reg> {
@@ -1685,7 +1690,15 @@ where
 
 impl std::fmt::Display for GlobalVarId {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "${}.{}", self.0, self.1)
+        match self {
+            GlobalVarId::Global(s) => write!(f, "${}", s),
+            GlobalVarId::Static(s) => write!(f, "$static({})", s),
+            GlobalVarId::CompilerInternal(s) => write!(f, "$internal({})", s),
+            GlobalVarId::LocalStatic {
+                name,
+                function_name,
+            } => write!(f, "$static({}, {})", function_name, name),
+        }
     }
 }
 

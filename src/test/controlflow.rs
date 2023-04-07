@@ -78,7 +78,9 @@ fn test_call_1() {
                 src_sign: true,
             }),
             ir::Op::Call(ir::CallOp {
-                addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId("bar".to_string(), 0))),
+                addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
+                    "bar".to_string()
+                ))),
                 dst: None,
                 args: vec![
                     (ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Word),
@@ -105,7 +107,9 @@ fn test_call_2() {
                 width: ir::Width::Word
             }),
             ir::Op::Call(ir::CallOp {
-                addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId("bar".to_string(), 0))),
+                addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
+                    "bar".to_string()
+                ))),
                 dst: Some((VarLocation::Local(3), ir::Width::Dword)),
                 args: vec![(ir::Scalar::Var(VarLocation::Local(2)), ir::Width::Word),]
             }),

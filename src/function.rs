@@ -2,7 +2,7 @@ use std::{fmt::Formatter, hash::Hash};
 
 use crate::{
     block_emitter::BlockEmitter,
-    ccpu::{self, reg::FrameReg},
+    ccpu::{self, opt::frame::resolve_frame_pointer, reg::FrameReg},
     compile, deconstruct, flush, generic_ir, ir,
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
     opt::{const_propagate::propagate_const, ssa::delete_unused_regs},
@@ -98,7 +98,7 @@ impl Function<ir::VirtualReg> {
                 StorageClassSpecifier::Static => GlobalStorageClass::Static,
             },
         };
-        let init_instructions = scope.start_function(&args, &return_type);
+        let init_instructions = scope.start_function(&name, &args, &return_type);
         let mut be = BlockEmitter::new(init_instructions);
         compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
         let frame = scope.end_function();
@@ -122,6 +122,7 @@ impl Function<ir::VirtualReg> {
     pub fn optimize_ssa(&mut self) {
         use crate::opt::blocks::*;
         let mut modified = true;
+        resolve_frame_pointer(&mut self.body, &self.name, self.is_reentrant);
         while modified {
             modified = false;
             modified |=
