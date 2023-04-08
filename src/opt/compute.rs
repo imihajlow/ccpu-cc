@@ -1,7 +1,4 @@
-use crate::{
-    generic_ir::{self, Scalar},
-    ir::*,
-};
+use crate::{generic_ir::Scalar, ir::*};
 
 pub fn compute_const(op: &mut Op) -> bool {
     let new_op = match op {

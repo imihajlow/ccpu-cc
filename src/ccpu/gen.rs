@@ -13,6 +13,7 @@ use super::{
 };
 
 mod add;
+mod boolean;
 mod conv;
 mod copy;
 
@@ -61,8 +62,8 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Undefined(_) => (),
         Arg(op) => check_arg(op),
         Copy(op) => copy::gen_copy(w, op),
-        Bool(op) => (),
-        BoolInv(op) => (),
+        Bool(op) => boolean::gen_bool(w, op),
+        BoolInv(op) => boolean::gen_bool_inv(w, op),
         Add(op) => add::gen_add(w, op),
         Sub(op) => (),
         Mul(op) => (),

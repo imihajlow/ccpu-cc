@@ -13,6 +13,7 @@ pub struct InstructionWriter {
     bss: HashMap<String, DataItem<u16>>,
     data: HashMap<String, DataItem<DataValue>>,
     last: [Option<u8>; 5],
+    next_label: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -102,12 +103,19 @@ impl InstructionWriter {
             bss: HashMap::new(),
             data: HashMap::new(),
             last: [None; 5],
+            next_label: 0,
         }
     }
 
     pub fn begin_function(&mut self, name: String) {
         self.last = [None; 5];
         self.text.push((name, Vec::new()));
+    }
+
+    pub fn alloc_label(&mut self) -> String {
+        let n = self.next_label;
+        self.next_label += 1;
+        format!("__cc_int_{}", n)
     }
 
     pub fn comment(&mut self, comment: String) {
