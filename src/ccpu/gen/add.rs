@@ -49,15 +49,15 @@ pub fn gen_add_reg_const(
     use crate::ccpu::instr::Reg::*;
     let width = width as u16;
     for offset in 0..width {
-        w.ldi_p_var_location(r, offset);
+        w.ldi_p_var_location(r, offset, offset == 0);
         w.ld(B);
-        w.ldi_const(A, (c & 0xff) as u8);
+        w.ldi_const(A, (c & 0xff) as u8, offset == 0);
         if offset == 0 {
             w.add(B, A);
         } else {
             w.adc(B, A);
         }
-        w.ldi_p_var_location(dst, offset);
+        w.ldi_p_var_location(dst, offset, offset == width - 1);
         w.st(B);
 
         c >>= 8;
@@ -78,19 +78,19 @@ pub fn gen_add_reg_sym(
     let sym = get_global_var_label(sym);
 
     for offset in 0..width {
-        w.ldi_p_var_location(r, offset);
+        w.ldi_p_var_location(r, offset, offset == 0);
         w.ld(B);
         match offset {
             0 => w.ldi_lo(A, sym.clone(), sym_offset),
             1 => w.ldi_hi(A, sym.clone(), sym_offset),
-            _ => w.mov(A, Zero),
+            _ => w.ldi_const(A, 0, false),
         }
         if offset == 0 {
             w.add(B, A);
         } else {
             w.adc(B, A);
         }
-        w.ldi_p_var_location(dst, offset);
+        w.ldi_p_var_location(dst, offset, false);
         w.st(B);
     }
 }
@@ -107,12 +107,12 @@ pub fn gen_add_reg_reg_byte(
     } else {
         (src1, src2)
     };
-    w.ldi_p_var_location(src1, 0);
+    w.ldi_p_var_location(src1, 0, true);
     w.ld(A);
-    w.ldi_p_var_location(src2, 0);
+    w.ldi_p_var_location(src2, 0, true);
     w.ld(B);
     w.add(A, B);
-    w.ldi_p_var_location(dst, 0);
+    w.ldi_p_var_location(dst, 0, true);
     w.st(A);
 }
 
@@ -128,19 +128,19 @@ pub fn gen_add_reg_reg_word(
     } else {
         (src1, src2)
     };
-    w.ldi_p_var_location(src1, 1);
+    w.ldi_p_var_location(src1, 1, true);
     w.ld(B);
     w.dec(PL);
     w.ld(A);
-    w.ldi_p_var_location(src2, 0);
+    w.ldi_p_var_location(src2, 0, true);
     w.ld(PL);
     w.add(A, PL);
-    w.ldi_p_var_location(dst, 0);
+    w.ldi_p_var_location(dst, 0, false);
     w.st(A);
-    w.ldi_p_var_location(src2, 1);
+    w.ldi_p_var_location(src2, 1, false);
     w.ld(A);
     w.adc(A, B);
-    w.ldi_p_var_location(dst, 1);
+    w.ldi_p_var_location(dst, 1, true);
     w.st(A);
 }
 
@@ -157,20 +157,20 @@ pub fn gen_add_reg_reg_long(
     } else {
         (src1, src2)
     };
-    w.ldi_p_var_location(src1, 0);
+    w.ldi_p_var_location(src1, 0, true);
     w.ld(A);
-    w.ldi_p_var_location(src2, 0);
+    w.ldi_p_var_location(src2, 0, true);
     w.ld(B);
-    w.ldi_p_var_location(dst, 0);
+    w.ldi_p_var_location(dst, 0, true);
     w.add(A, B);
     w.st(A);
     for offset in 1..width {
-        w.ldi_p_var_location(src1, offset);
+        w.ldi_p_var_location(src1, offset, false);
         w.ld(A);
-        w.ldi_p_var_location(src2, offset);
+        w.ldi_p_var_location(src2, offset, false);
         w.ld(B);
-        w.ldi_p_var_location(dst, offset);
         w.adc(A, B);
+        w.ldi_p_var_location(dst, offset, offset == width - 1);
         w.st(A);
     }
 }

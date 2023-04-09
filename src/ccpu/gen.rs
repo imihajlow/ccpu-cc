@@ -16,6 +16,7 @@ mod add;
 mod boolean;
 mod conv;
 mod copy;
+mod bitwise;
 
 pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
     let mut w = InstructionWriter::new();
@@ -32,12 +33,12 @@ fn gen_function(w: &mut InstructionWriter, f: Function<FrameReg>) {
     w.mov(A, PL);
     w.mov(B, A);
     w.mov(A, PH);
-    w.ldi_p_const(FrameReg::RetAddr.get_address_callee().unwrap());
+    w.ldi_p_const(FrameReg::RetAddr.get_address_callee().unwrap(), true);
     w.st(B);
     w.inc(PL);
     w.st(A);
     // push stack frames
-    w.ldi_p_const(stack::SP_INCDEC_ADDR);
+    w.ldi_p_const(stack::SP_INCDEC_ADDR, true);
     assert_eq!(
         stack::SP_INCDEC_INC0 & stack::SP_INCDEC_INC1,
         (stack::SP_INCDEC_ADDR >> 8) as u8
@@ -69,9 +70,9 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Mul(op) => (),
         Div(op) => (),
         Mod(op) => (),
-        BAnd(op) => (),
-        BOr(op) => (),
-        BXor(op) => (),
+        BAnd(op) => bitwise::gen_bitwise_and(w, op),
+        BOr(op) => bitwise::gen_bitwise_or(w, op),
+        BXor(op) => bitwise::gen_bitwise_xor(w, op),
         LShift(op) => (),
         RShift(op) => (),
         Neg(op) => (),
@@ -145,12 +146,12 @@ fn gen_jump(w: &mut InstructionWriter, cur_idx: usize, target_idx: usize, functi
 
 fn gen_return(w: &mut InstructionWriter) {
     // pop stack frames
-    w.ldi_p_const(stack::SP_INCDEC_ADDR);
-    w.ldi_const(A, stack::SP_INCDEC_DEC0 & stack::SP_INCDEC_DEC1);
+    w.ldi_p_const(stack::SP_INCDEC_ADDR, true);
+    w.ldi_const(A, stack::SP_INCDEC_DEC0 & stack::SP_INCDEC_DEC1, true);
     w.st(A);
 
     // restore return address and jump
-    w.ldi_p_const(FrameReg::RetAddr.get_address_callee().unwrap());
+    w.ldi_p_const(FrameReg::RetAddr.get_address_callee().unwrap(), true);
     w.ld(A);
     w.inc(PL);
     w.ld(PH);
@@ -161,7 +162,7 @@ fn gen_return(w: &mut InstructionWriter) {
 fn gen_load_var_8(w: &mut InstructionWriter, dst: Reg, v: &VarLocation<FrameReg>) {
     match v {
         VarLocation::Local(reg) => {
-            w.ldi_p_const(reg.get_address());
+            w.ldi_p_const(reg.get_address(), true);
             w.ld(dst);
         }
         VarLocation::Global(name) => {

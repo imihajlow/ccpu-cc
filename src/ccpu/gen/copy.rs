@@ -19,10 +19,10 @@ fn gen_copy_const(
 ) {
     use crate::ccpu::instr::Reg::*;
     let width = width as u16;
-    w.ldi_p_var_location(dst, 0);
+    w.ldi_p_var_location(dst, 0, true);
     for i in 0..width {
         let b = (src & 0xff) as u8;
-        w.ldi_const(A, b);
+        w.ldi_const(A, b, true);
         w.st(A);
         if i != width - 1 {
             w.inc(PL);
@@ -42,19 +42,19 @@ fn gen_copy_var(
         return;
     }
     if width == Width::Byte {
-        w.ldi_p_var_location(src, 0);
+        w.ldi_p_var_location(src, 0, true);
         w.ld(A);
-        w.ldi_p_var_location(dst, 0);
+        w.ldi_p_var_location(dst, 0, true);
         w.st(A);
     } else {
         let width = width as u16;
         let words = width / 2;
         for i in 0..words {
-            w.ldi_p_var_location(src, i * 2);
+            w.ldi_p_var_location(src, i * 2, true);
             w.ld(A);
             w.inc(PL);
             w.ld(B);
-            w.ldi_p_var_location(dst, i * 2);
+            w.ldi_p_var_location(dst, i * 2, true);
             w.st(A);
             w.inc(PL);
             w.st(B);
@@ -70,7 +70,7 @@ fn gen_copy_sym(
     width: Width,
 ) {
     use crate::ccpu::instr::Reg::*;
-    w.ldi_p_var_location(dst, 0);
+    w.ldi_p_var_location(dst, 0, true);
     w.ldi_lo(A, get_global_var_label(src_sym), offset);
     w.st(A);
     if width > Width::Byte {

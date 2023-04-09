@@ -198,13 +198,22 @@ impl InstructionWriter {
         self.push(TextItem::Op(Op::Nop));
     }
 
-    pub fn ldi_const(&mut self, reg: Reg, val: u8) {
+    pub fn ldi_const(&mut self, reg: Reg, val: u8, allow_incdec: bool) {
         if reg == Reg::Zero {
             panic!("Wrong use of zero register");
         }
         if let Some(v) = self.last[reg as usize] {
             if v == val {
                 return;
+            }
+            if allow_incdec {
+                if v.wrapping_add(1) == val {
+                    self.inc(reg);
+                    return;
+                } else if v.wrapping_sub(1) == val {
+                    self.dec(reg);
+                    return;
+                }
             }
         }
         if reg == Reg::A && val == 0 {
@@ -231,9 +240,9 @@ impl InstructionWriter {
         self.last[reg as usize] = None;
     }
 
-    pub fn ldi_p_const(&mut self, val: u16) {
-        self.ldi_const(Reg::PL, (val & 0xff) as u8);
-        self.ldi_const(Reg::PH, (val >> 8) as u8);
+    pub fn ldi_p_const(&mut self, val: u16, allow_incdec: bool) {
+        self.ldi_const(Reg::PL, (val & 0xff) as u8, allow_incdec);
+        self.ldi_const(Reg::PH, (val >> 8) as u8, allow_incdec);
     }
 
     pub fn ldi_p_sym(&mut self, sym: String, offset: u16) {
@@ -241,11 +250,11 @@ impl InstructionWriter {
         self.ldi_hi(Reg::PH, sym, offset);
     }
 
-    pub fn ldi_p_var_location(&mut self, v: &VarLocation<FrameReg>, offset: u16) {
+    pub fn ldi_p_var_location(&mut self, v: &VarLocation<FrameReg>, offset: u16, allow_incdec: bool) {
         match v {
             VarLocation::Local(reg) => {
                 let addr = reg.get_address();
-                self.ldi_p_const(addr + offset);
+                self.ldi_p_const(addr + offset, allow_incdec);
             }
             VarLocation::Global(g) => {
                 self.ldi_p_sym(global::get_global_var_label(g), offset);

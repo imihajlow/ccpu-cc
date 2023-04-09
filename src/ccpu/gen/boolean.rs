@@ -18,7 +18,7 @@ fn gen_bool_common(
 ) {
     use crate::ccpu::instr::Reg::*;
     if let Scalar::Var(v) = &op.src {
-        w.ldi_p_var_location(v, 0);
+        w.ldi_p_var_location(v, 0, true);
     } else {
         unreachable!("const propagation must be performed before emitting code");
     }
@@ -36,16 +36,16 @@ fn gen_bool_common(
         let label_zero = w.alloc_label();
         w.ldi_p_sym(label_zero.clone(), 0);
         w.jz();
-        w.ldi_const(A, 0xff);
+        w.ldi_const(A, 0xff, true);
         w.label(label_zero);
         w.inc(A);
     } else {
         let label = w.alloc_label();
         w.ldi_p_sym(label.clone(), 0);
         w.jz();
-        w.ldi_const(A, 1);
+        w.ldi_const(A, 1, true);
         w.label(label);
     }
-    w.ldi_p_var_location(&op.dst, 0);
+    w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
 }

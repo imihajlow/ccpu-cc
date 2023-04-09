@@ -45,18 +45,18 @@ fn gen_conv_var_widen(
     if dst != src {
         let src_width = info.src_width as u16;
         if src_width == 1 {
-            w.ldi_p_var_location(src, 0);
+            w.ldi_p_var_location(src, 0, true);
             w.ld(A);
-            w.ldi_p_var_location(dst, 0);
+            w.ldi_p_var_location(dst, 0, true);
             w.st(A);
         } else {
             let words = src_width / 2;
             for i in 0..words {
-                w.ldi_p_var_location(src, i * 2);
+                w.ldi_p_var_location(src, i * 2, true);
                 w.ld(B);
                 w.inc(PL);
                 w.ld(A);
-                w.ldi_p_var_location(dst, i * 2);
+                w.ldi_p_var_location(dst, i * 2, true);
                 w.st(B);
                 w.inc(PL);
                 w.st(A);
@@ -70,7 +70,7 @@ fn gen_conv_var_widen(
     if sign_extend {
         if dst == src {
             let offset = info.src_width as u16 - 1;
-            w.ldi_p_var_location(dst, offset);
+            w.ldi_p_var_location(dst, offset, true);
             w.ld(A);
         }
         w.shl(A);
@@ -78,7 +78,7 @@ fn gen_conv_var_widen(
     } else {
         if dst == src {
             let offset = info.src_width as u16;
-            w.ldi_p_var_location(dst, offset);
+            w.ldi_p_var_location(dst, offset, true);
         }
         w.mov(A, Zero);
     }
@@ -102,7 +102,7 @@ fn gen_conv_sym_widen(
     use crate::ccpu::instr::Reg::*;
 
     let src_width = info.src_width as u16;
-    w.ldi_p_var_location(dst, 0);
+    w.ldi_p_var_location(dst, 0, true);
     w.ldi_lo(A, get_global_var_label(src), offset);
     w.st(A);
     if src_width > 1 {
