@@ -19,6 +19,57 @@ pub fn gen_bitwise_xor(w: &mut InstructionWriter, op: &generic_ir::BinaryUnsigne
     gen_bitwise_common(w, op, BitwiseOpKind::Xor)
 }
 
+pub fn gen_bitwise_not(w: &mut InstructionWriter, op: &generic_ir::UnaryUnsignedOp<FrameReg>) {
+    match &op.src {
+        Scalar::Var(src) => gen_bitwise_not_var(w, &op.dst, src, op.width),
+        Scalar::ConstInt(_) => {
+            unreachable!("const propagation must be performed before emitting code")
+        }
+        Scalar::SymbolOffset(_, _) => unimplemented!("wtf"),
+    }
+}
+
+fn gen_bitwise_not_var(
+    w: &mut InstructionWriter,
+    dst: &generic_ir::VarLocation<FrameReg>,
+    src: &generic_ir::VarLocation<FrameReg>,
+    width: Width,
+) {
+    use crate::ccpu::instr::Reg::*;
+    if dst == src {
+        w.ldi_p_var_location(dst, 0, true);
+        for i in 0..(width as u16) {
+            if i != 0 {
+                w.inc(PL);
+            }
+            w.ld(A);
+            w.not(A);
+            w.st(A);
+        }
+    } else {
+        if width == Width::Byte {
+            w.ldi_p_var_location(src, 0, true);
+            w.ld(A);
+            w.not(A);
+            w.ldi_p_var_location(dst, 0, true);
+            w.st(A);
+        } else {
+            for i in 0..(width as u16 / 2) {
+                w.ldi_p_var_location(src, i * 2, true);
+                w.ld(A);
+                w.inc(PL);
+                w.ld(B);
+                w.not(A);
+                w.not(B);
+                w.ldi_p_var_location(dst, i * 2 + 1, true);
+                w.st(B);
+                w.dec(PL);
+                w.st(A);
+            }
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 enum BitwiseOpKind {
     And,

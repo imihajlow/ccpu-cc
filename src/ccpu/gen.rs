@@ -76,7 +76,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         LShift(op) => (),
         RShift(op) => (),
         Neg(op) => (),
-        Not(op) => (),
+        Not(op) => bitwise::gen_bitwise_not(w, op),
         Compare(op) => (),
         Conv(op) => conv::gen_conv(w, op),
         Store(op) => (),
