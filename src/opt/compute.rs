@@ -244,6 +244,13 @@ fn compute_rshift(op: &ShiftOp) -> Option<Op> {
                 width: op.lhs_width,
             }))
         }
+        (_, Scalar::ConstInt(rhs)) if !op.lhs_sign && *rhs >= (op.lhs_width as u64) * 8 => {
+            Some(Op::Copy(UnaryUnsignedOp {
+                dst: op.dst.clone(),
+                src: Scalar::ConstInt(0),
+                width: op.lhs_width,
+            }))
+        }
         _ => None,
     }
 }
