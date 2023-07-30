@@ -202,16 +202,19 @@ impl InstructionWriter {
         if reg == Reg::Zero {
             panic!("Wrong use of zero register");
         }
-        if let Some(v) = self.last[reg as usize] {
+        let last_val = self.last[reg as usize];
+        if let Some(v) = last_val {
             if v == val {
                 return;
             }
             if allow_incdec {
                 if v.wrapping_add(1) == val {
                     self.inc(reg);
+                    self.last[reg as usize] = Some(val);
                     return;
                 } else if v.wrapping_sub(1) == val {
                     self.dec(reg);
+                    self.last[reg as usize] = Some(val);
                     return;
                 }
             }
@@ -250,7 +253,12 @@ impl InstructionWriter {
         self.ldi_hi(Reg::PH, sym, offset);
     }
 
-    pub fn ldi_p_var_location(&mut self, v: &VarLocation<FrameReg>, offset: u16, allow_incdec: bool) {
+    pub fn ldi_p_var_location(
+        &mut self,
+        v: &VarLocation<FrameReg>,
+        offset: u16,
+        allow_incdec: bool,
+    ) {
         match v {
             VarLocation::Local(reg) => {
                 let addr = reg.get_address();

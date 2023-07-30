@@ -17,6 +17,7 @@ mod boolean;
 mod conv;
 mod copy;
 mod bitwise;
+mod shift;
 
 pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
     let mut w = InstructionWriter::new();
@@ -73,8 +74,8 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         BAnd(op) => bitwise::gen_bitwise_and(w, op),
         BOr(op) => bitwise::gen_bitwise_or(w, op),
         BXor(op) => bitwise::gen_bitwise_xor(w, op),
-        LShift(op) => (),
-        RShift(op) => (),
+        LShift(op) => shift::gen_lshift(w, op),
+        RShift(op) => shift::gen_rshift(w, op),
         Neg(op) => (),
         Not(op) => bitwise::gen_bitwise_not(w, op),
         Compare(op) => (),
