@@ -13,11 +13,12 @@ use super::{
 };
 
 mod add;
+mod bitwise;
 mod boolean;
 mod conv;
 mod copy;
-mod bitwise;
 mod shift;
+mod sub;
 
 pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
     let mut w = InstructionWriter::new();
@@ -67,23 +68,23 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Bool(op) => boolean::gen_bool(w, op),
         BoolInv(op) => boolean::gen_bool_inv(w, op),
         Add(op) => add::gen_add(w, op),
-        Sub(op) => (),
-        Mul(op) => (),
-        Div(op) => (),
-        Mod(op) => (),
+        Sub(op) => sub::gen_sub(w, op),
+        Mul(op) => todo!(),
+        Div(op) => todo!(),
+        Mod(op) => todo!(),
         BAnd(op) => bitwise::gen_bitwise_and(w, op),
         BOr(op) => bitwise::gen_bitwise_or(w, op),
         BXor(op) => bitwise::gen_bitwise_xor(w, op),
         LShift(op) => shift::gen_lshift(w, op),
         RShift(op) => shift::gen_rshift(w, op),
-        Neg(op) => (),
+        Neg(op) => todo!(),
         Not(op) => bitwise::gen_bitwise_not(w, op),
-        Compare(op) => (),
+        Compare(op) => todo!(),
         Conv(op) => conv::gen_conv(w, op),
-        Store(op) => (),
-        Load(op) => (),
-        Call(op) => (),
-        Memcpy(op) => (),
+        Store(op) => todo!(),
+        Load(op) => todo!(),
+        Call(op) => todo!(),
+        Memcpy(op) => todo!(),
         FramePointer(_) => {
             unreachable!("Frame pointer expansion step must be performed before generating code")
         }

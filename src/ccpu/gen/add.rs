@@ -64,7 +64,7 @@ pub fn gen_add_reg_const(
     }
 }
 
-pub fn gen_add_reg_sym(
+fn gen_add_reg_sym(
     w: &mut InstructionWriter,
     dst: &VarLocation<FrameReg>,
     r: &VarLocation<FrameReg>,
@@ -95,7 +95,7 @@ pub fn gen_add_reg_sym(
     }
 }
 
-pub fn gen_add_reg_reg_byte(
+fn gen_add_reg_reg_byte(
     w: &mut InstructionWriter,
     dst: &VarLocation<FrameReg>,
     src1: &VarLocation<FrameReg>,
@@ -116,7 +116,7 @@ pub fn gen_add_reg_reg_byte(
     w.st(A);
 }
 
-pub fn gen_add_reg_reg_word(
+fn gen_add_reg_reg_word(
     w: &mut InstructionWriter,
     dst: &VarLocation<FrameReg>,
     src1: &VarLocation<FrameReg>,
@@ -144,7 +144,7 @@ pub fn gen_add_reg_reg_word(
     w.st(A);
 }
 
-pub fn gen_add_reg_reg_long(
+fn gen_add_reg_reg_long(
     w: &mut InstructionWriter,
     dst: &VarLocation<FrameReg>,
     src1: &VarLocation<FrameReg>,
