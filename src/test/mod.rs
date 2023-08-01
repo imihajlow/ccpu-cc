@@ -1,5 +1,6 @@
 mod add;
 mod assign;
+mod cast;
 mod constant;
 mod controlflow;
 mod deconstruct;

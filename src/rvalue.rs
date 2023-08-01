@@ -12,7 +12,7 @@ pub enum RValue {
     Object(ObjectLocation),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TypedRValue {
     pub src: RValue,
     pub t: QualifiedType,

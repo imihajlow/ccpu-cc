@@ -8,6 +8,7 @@ use lang_c::{
 use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
 use crate::lvalue::TypedLValue;
+use crate::object_location::ObjectLocation;
 use crate::{
     block_emitter::BlockEmitter,
     constant,
@@ -220,7 +221,29 @@ pub fn cast(
                 },
             })
         } else {
-            Ok(src)
+            // Pull scalar out of object pointer
+            if src.t.t.is_dereferencable() {
+                if let RValue::Object(o) = src.src {
+                    match o {
+                        ObjectLocation::PointedBy(s) => {
+                            return Ok(TypedRValue {
+                                src: RValue::Scalar(s),
+                                t: QualifiedType {
+                                    t: target_type.clone(),
+                                    qualifiers: Qualifiers::empty(),
+                                },
+                            })
+                        }
+                    }
+                }
+            }
+            Ok(TypedRValue {
+                src: src.src,
+                t: QualifiedType {
+                    t: target_type.clone(),
+                    qualifiers: Qualifiers::empty(),
+                },
+            })
         }
     }
 }
