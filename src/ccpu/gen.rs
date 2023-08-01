@@ -18,7 +18,9 @@ mod conv;
 mod copy;
 mod load;
 mod shift;
+mod store;
 mod sub;
+mod util;
 
 pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
     let mut w = InstructionWriter::new();
@@ -81,7 +83,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Not(op) => bitwise::gen_bitwise_not(w, op),
         Compare(op) => todo!(),
         Conv(op) => conv::gen_conv(w, op),
-        Store(op) => todo!(),
+        Store(op) => store::gen_store(w, op),
         Load(op) => load::gen_load(w, op),
         Call(op) => todo!(),
         Memcpy(op) => todo!(),
