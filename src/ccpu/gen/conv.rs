@@ -75,6 +75,7 @@ fn gen_conv_var_widen(
         }
         w.shl(A);
         w.exp(A);
+        w.inc(PL);
     } else {
         if dst == src {
             let offset = info.src_width as u16;

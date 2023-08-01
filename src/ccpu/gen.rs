@@ -1,7 +1,6 @@
 use crate::{
     function::Function,
     generic_ir::{self, ArgOp, Scalar, VarLocation},
-    opt::blocks,
     translation_unit::TranslationUnit,
 };
 
@@ -17,6 +16,7 @@ mod bitwise;
 mod boolean;
 mod conv;
 mod copy;
+mod load;
 mod shift;
 mod sub;
 
@@ -82,7 +82,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Compare(op) => todo!(),
         Conv(op) => conv::gen_conv(w, op),
         Store(op) => todo!(),
-        Load(op) => todo!(),
+        Load(op) => load::gen_load(w, op),
         Call(op) => todo!(),
         Memcpy(op) => todo!(),
         FramePointer(_) => {
