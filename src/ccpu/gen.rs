@@ -18,6 +18,7 @@ mod call;
 mod conv;
 mod copy;
 mod load;
+mod neg;
 mod shift;
 mod store;
 mod sub;
@@ -80,7 +81,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         BXor(op) => bitwise::gen_bitwise_xor(w, op),
         LShift(op) => shift::gen_lshift(w, op),
         RShift(op) => shift::gen_rshift(w, op),
-        Neg(op) => todo!(),
+        Neg(op) => neg::gen_neg(w, op),
         Not(op) => bitwise::gen_bitwise_not(w, op),
         Compare(op) => todo!(),
         Conv(op) => conv::gen_conv(w, op),
