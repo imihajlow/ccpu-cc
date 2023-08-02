@@ -31,7 +31,7 @@ fn gen_copy_const(
     }
 }
 
-fn gen_copy_var(
+pub fn gen_copy_var(
     w: &mut InstructionWriter,
     dst: &VarLocation<FrameReg>,
     src: &VarLocation<FrameReg>,

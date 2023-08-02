@@ -1197,6 +1197,8 @@ impl<Reg: Copy + Eq + Hash> CallOp<Reg> {
         for (a, _) in &self.args {
             a.collect_regs(regs);
         }
+
+        self.addr.collect_regs(regs);
     }
 
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
@@ -1241,7 +1243,8 @@ impl CallOp<VirtualReg> {
             dst: self
                 .dst
                 .map(|(dst, w)| (dst.remap_reg_to_new_version(map, scope), w)),
-            ..self
+
+            addr: self.addr.remap_reg(map),
         }
     }
 }

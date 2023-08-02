@@ -14,6 +14,7 @@ use super::{
 mod add;
 mod bitwise;
 mod boolean;
+mod call;
 mod conv;
 mod copy;
 mod load;
@@ -85,7 +86,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Conv(op) => conv::gen_conv(w, op),
         Store(op) => store::gen_store(w, op),
         Load(op) => load::gen_load(w, op),
-        Call(op) => todo!(),
+        Call(op) => call::gen_call(w, op),
         Memcpy(op) => todo!(),
         FramePointer(_) => {
             unreachable!("Frame pointer expansion step must be performed before generating code")

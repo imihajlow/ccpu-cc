@@ -78,9 +78,7 @@ fn test_call_1() {
                 src_sign: true,
             }),
             ir::Op::Call(ir::CallOp {
-                addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
-                    "bar".to_string()
-                ))),
+                addr: ir::Scalar::SymbolOffset(ir::GlobalVarId::Global("bar".to_string()), 0),
                 dst: None,
                 args: vec![
                     (ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Word),
@@ -107,9 +105,7 @@ fn test_call_2() {
                 width: ir::Width::Word
             }),
             ir::Op::Call(ir::CallOp {
-                addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
-                    "bar".to_string()
-                ))),
+                addr: ir::Scalar::SymbolOffset(ir::GlobalVarId::Global("bar".to_string()), 0),
                 dst: Some((VarLocation::Local(3), ir::Width::Dword)),
                 args: vec![(ir::Scalar::Var(VarLocation::Local(2)), ir::Width::Word),]
             }),
@@ -125,6 +121,63 @@ fn test_call_2() {
                 dst: VarLocation::Local(1),
                 src: ir::Scalar::Var(VarLocation::Local(4)),
                 width: ir::Width::Word
+            }),
+        ]
+    );
+}
+
+#[test]
+fn test_call_3() {
+    let (tu, ec) = compile("void (*bar)(int x); void foo(void) { bar(10); }");
+    ec.print_issues();
+    assert_eq!(ec.get_warning_count(), 0);
+    let body = get_first_body(&tu);
+    assert_eq!(body.len(), 2);
+    assert_eq!(
+        body[1].ops,
+        vec![
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(1),
+                src: ir::Scalar::ConstInt(10),
+                width: ir::Width::Word
+            }),
+            ir::Op::Call(ir::CallOp {
+                addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
+                    "bar".to_string()
+                ))),
+                dst: None,
+                args: vec![(ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Word),]
+            }),
+        ]
+    );
+}
+
+#[test]
+fn test_call_4() {
+    let (tu, ec) = compile("void (*bar)(int x); void foo(void) { (*bar)(10); }");
+    ec.print_issues();
+    assert_eq!(ec.get_warning_count(), 0);
+    let body = get_first_body(&tu);
+    assert_eq!(body.len(), 2);
+    assert_eq!(
+        body[1].ops,
+        vec![
+            ir::Op::Load(ir::LoadOp {
+                dst: VarLocation::Local(1),
+                src_addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
+                    "bar".to_string()
+                ))),
+                width: ir::Width::Word,
+            }),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Local(2),
+                src: ir::Scalar::ConstInt(10),
+                width: ir::Width::Word
+            }),
+            ir::Op::Call(ir::CallOp {
+                addr: ir::Scalar::Var(VarLocation::Local(1)),
+                dst: None,
+                args: vec![(ir::Scalar::Var(VarLocation::Local(2)), ir::Width::Word),]
             }),
         ]
     );

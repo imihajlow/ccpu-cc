@@ -8,6 +8,7 @@ use crate::{
     ctype::{EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind},
     enums::Enum,
     error::{CompileError, CompileWarning, ErrorCollector},
+    generic_ir::Scalar,
     ir,
     lvalue::{LValue, TypedLValue},
     object_location::ObjectLocation,
@@ -465,10 +466,19 @@ impl NameScope {
                     t: t.clone(),
                     src: RValue::new_var(VarLocation::Local(*r)),
                 }),
-                Value::StaticVar(t, id, _, _) => Ok(TypedRValue {
-                    t: t.clone(),
-                    src: RValue::new_var(VarLocation::Global(id.clone())),
-                }),
+                Value::StaticVar(t, id, _, _) => {
+                    if t.t.is_function() {
+                        Ok(TypedRValue {
+                            t: t.clone(),
+                            src: RValue::Function(Scalar::SymbolOffset(id.clone(), 0)),
+                        })
+                    } else {
+                        Ok(TypedRValue {
+                            t: t.clone(),
+                            src: RValue::new_var(VarLocation::Global(id.clone())),
+                        })
+                    }
+                }
                 Value::Type(_) => {
                     ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
                     unreachable!();

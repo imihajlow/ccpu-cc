@@ -7,6 +7,7 @@ use lang_c::{
 
 use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
+use crate::generic_ir::{Scalar, VarLocation};
 use crate::lvalue::TypedLValue;
 use crate::object_location::ObjectLocation;
 use crate::{
@@ -501,13 +502,13 @@ fn compile_call(
         args_srcs.push((rvalue, span));
     }
     let callee = compile_expression(*c.node.callee, scope, be, ec)?;
-    let (result_type, arg_types, vararg) = if let CType::Function {
+    let (result_type, arg_types, vararg, address) = if let CType::Function {
         result,
         args,
         vararg,
     } = callee.t.t.clone()
     {
-        (*result, args, vararg)
+        (*result, args, vararg, callee.src.unwrap_function_address())
     } else if let Ok(QualifiedType {
         t: CType::Function {
             result,
@@ -517,7 +518,7 @@ fn compile_call(
         ..
     }) = callee.t.clone().dereference()
     {
-        (*result, args, vararg)
+        (*result, args, vararg, callee.src.unwrap_scalar())
     } else {
         ec.record_error(CompileError::NotAFunction(callee.t), callee_span)?;
         unreachable!();
@@ -592,7 +593,7 @@ fn compile_call(
 
     be.append_operation(ir::Op::Call(ir::CallOp {
         dst: result_location.clone(),
-        addr: callee.unwrap_scalar(),
+        addr: address,
         args: arg_locations,
     }));
 

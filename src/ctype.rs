@@ -378,6 +378,14 @@ impl CType {
         }
     }
 
+    pub fn is_function(&self) -> bool {
+        if let CType::Function { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_same_struct_union(&self, other: &Self) -> bool {
         use CType::*;
         match (self, other) {

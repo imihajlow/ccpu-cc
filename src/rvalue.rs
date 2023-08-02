@@ -10,6 +10,7 @@ pub enum RValue {
     Void,
     Scalar(ir::Scalar),
     Object(ObjectLocation),
+    Function(ir::Scalar),
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +44,14 @@ impl RValue {
         }
     }
 
+    pub fn unwrap_function_address(self) -> ir::Scalar {
+        if let RValue::Function(l) = self {
+            l
+        } else {
+            panic!("not a function")
+        }
+    }
+
     pub fn unwrap_object_location(self) -> ObjectLocation {
         if let RValue::Object(l) = self {
             l
@@ -56,6 +65,7 @@ impl RValue {
             RValue::Object(o) => Some(o.get_address()),
             RValue::Void => None,
             RValue::Scalar(_) => None,
+            RValue::Function(_) => None,
         }
     }
 
@@ -64,6 +74,7 @@ impl RValue {
             RValue::Void => None,
             RValue::Scalar(s) => Some(s),
             RValue::Object(o) => Some(o.get_address()),
+            RValue::Function(_) => None,
         }
     }
 }
@@ -115,6 +126,7 @@ impl std::fmt::Display for RValue {
             RValue::Void => f.write_str("(void)"),
             RValue::Scalar(s) => s.fmt(f),
             RValue::Object(l) => write!(f, "obj@{}", l),
+            RValue::Function(l) => write!(f, "fun@{}", l),
         }
     }
 }
