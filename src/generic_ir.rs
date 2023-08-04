@@ -1496,6 +1496,32 @@ fn get_sign_char(sign: bool) -> char {
     }
 }
 
+impl CompareKind {
+    pub fn flip(self) -> Self {
+        use CompareKind::*;
+        match self {
+            Equal => Equal,
+            NotEqual => NotEqual,
+            LessThan => GreaterThan,
+            LessOrEqual => GreaterOrEqual,
+            GreaterThan => LessThan,
+            GreaterOrEqual => LessOrEqual,
+        }
+    }
+
+    pub fn inverse(self) -> Self {
+        use CompareKind::*;
+        match self {
+            Equal => NotEqual,
+            NotEqual => Equal,
+            LessThan => GreaterOrEqual,
+            LessOrEqual => GreaterThan,
+            GreaterThan => LessOrEqual,
+            GreaterOrEqual => LessThan,
+        }
+    }
+}
+
 impl<Reg> std::fmt::Display for ArgOp<Reg>
 where
     Reg: std::fmt::Display,

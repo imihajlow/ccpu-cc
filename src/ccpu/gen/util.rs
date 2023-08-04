@@ -30,3 +30,30 @@ pub fn load_addr(w: &mut InstructionWriter, addr: &generic_ir::Scalar<FrameReg>,
         }
     }
 }
+
+/**
+ * Load a byte from scalar into destination register.
+ */
+pub fn load_scalar(
+    w: &mut InstructionWriter,
+    dst: crate::ccpu::instr::Reg,
+    s: &Scalar<FrameReg>,
+    offset: u16,
+    allow_incdec: bool,
+) {
+    match s {
+        Scalar::ConstInt(x) => w.ldi_const(dst, (x >> (offset * 8)) as u8, allow_incdec),
+        Scalar::SymbolOffset(id, o) => {
+            let sym = get_global_var_label(id);
+            match offset {
+                0 => w.ldi_lo(dst, sym, *o),
+                1 => w.ldi_hi(dst, sym, *o),
+                _ => w.ldi_const(dst, 0, allow_incdec),
+            }
+        }
+        Scalar::Var(v) => {
+            w.ldi_p_var_location(v, offset, allow_incdec);
+            w.ld(dst);
+        }
+    }
+}
