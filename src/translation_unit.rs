@@ -65,6 +65,12 @@ impl TranslationUnit<ir::VirtualReg> {
         }
     }
 
+    pub fn enforce_call_regs(&mut self) {
+        for f in self.functions.iter_mut() {
+            f.enforce_call_regs(&mut self.scope);
+        }
+    }
+
     pub fn deconstruct_ssa(self) -> TranslationUnit<FrameReg> {
         TranslationUnit {
             scope: self.scope,

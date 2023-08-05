@@ -620,7 +620,7 @@ fn compile_argument(
 ) -> Result<(ir::Scalar, ir::Width), ()> {
     if let Some(arg_type) = arg_type {
         if arg_type.t.is_scalar() {
-            let dst = cast(arg_src, &arg_type.t, true, span, scope, be, ec)?;
+            let dst = cast(arg_src, &arg_type.t, false, span, scope, be, ec)?;
             let (s, t) = dst.unwrap_scalar_and_type();
             let w = t.t.get_scalar_width().unwrap();
             Ok((s, w))

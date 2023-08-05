@@ -1,9 +1,15 @@
+use std::collections::HashSet;
 use std::{fmt::Formatter, hash::Hash};
 
+use crate::generic_ir::UnaryUnsignedOp;
+use crate::ir::VarLocation;
+use crate::regalloc::get_live_ranges;
 use crate::{
     block_emitter::BlockEmitter,
     ccpu::{self, opt::frame::resolve_frame_pointer, reg::FrameReg},
-    compile, deconstruct, flush, generic_ir, ir,
+    compile, deconstruct, flush,
+    generic_ir::{self, Op},
+    ir::{self, Scalar},
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
     opt::{const_propagate::propagate_const, ssa::delete_unused_regs},
     regalloc, ssa,
@@ -12,6 +18,7 @@ use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
 };
+use replace_with::replace_with_or_abort;
 
 use crate::{
     ctype::{CType, FunctionArgs, QualifiedType},
@@ -136,7 +143,75 @@ impl Function<ir::VirtualReg> {
 
     pub fn enforce_ssa(&mut self, scope: &mut NameScope) {
         ssa::enforce_ssa(&mut self.body, scope);
-        println!("{}", self);
+    }
+
+    /**
+     * 1. Replace constants with registers in call arguments.
+     * 2. Insert copies such that no register used as a call argument is live across any call.
+     */
+    pub fn enforce_call_regs(&mut self, scope: &mut NameScope) {
+        for block_index in 0..self.body.len() {
+            let barriers = {
+                let mut barriers = Vec::new();
+                for (i, op) in self.body[block_index].ops.iter().enumerate() {
+                    if let Op::Call(_) = op {
+                        barriers.push(i);
+                    }
+                }
+                barriers
+            };
+            let live = get_live_ranges(&self.body, block_index);
+            let mut copy_ops = Vec::new();
+            for (i, op) in self.body[block_index].ops.iter_mut().enumerate() {
+                if let Op::Call(c) = op {
+                    let mut used_regs = HashSet::new();
+                    for (s, w) in &mut c.args {
+                        replace_with_or_abort(s, |s| {
+                            let need_copy = if let Scalar::Var(v) = &s {
+                                match v {
+                                    VarLocation::Local(r) => {
+                                        let (begin, end) = live.get(&r).unwrap();
+                                        let mut crosses = false;
+                                        for b in &barriers {
+                                            if crosses_barrier(begin, end, *b) {
+                                                crosses = true;
+                                                break;
+                                            }
+                                        }
+                                        if crosses {
+                                            true
+                                        } else {
+                                            !used_regs.insert(*r)
+                                        }
+                                    }
+                                    VarLocation::Global(_) | VarLocation::Return => true,
+                                }
+                            } else {
+                                true
+                            };
+                            if need_copy {
+                                let tmp = scope.alloc_temp();
+                                copy_ops.push((
+                                    i,
+                                    Op::Copy(UnaryUnsignedOp {
+                                        dst: tmp.clone(),
+                                        src: s,
+                                        width: *w,
+                                    }),
+                                ));
+                                Scalar::Var(tmp)
+                            } else {
+                                s
+                            }
+                        });
+                    }
+                }
+            }
+
+            for (i, op) in copy_ops.into_iter().rev() {
+                self.body[block_index].ops.insert(i, op);
+            }
+        }
     }
 }
 
@@ -186,6 +261,21 @@ fn init_address_regs(be: &mut BlockEmitter, frame: &FunctionFrame) {
             0,
         );
     }
+}
+
+fn crosses_barrier(begin: &Option<usize>, end: &Option<usize>, barrier: usize) -> bool {
+    // begin < barrier && end > barrier
+    let begin_before_barrier = if let Some(begin) = begin {
+        *begin < barrier
+    } else {
+        true
+    };
+    let end_after_barrier = if let Some(end) = end {
+        *end > barrier
+    } else {
+        true
+    };
+    begin_before_barrier && end_after_barrier
 }
 
 impl<Reg: std::fmt::Display + Eq + Hash> std::fmt::Display for Function<Reg> {

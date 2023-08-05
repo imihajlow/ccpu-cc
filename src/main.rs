@@ -47,49 +47,40 @@ fn main() {
     let p = parse_preprocessed(
         &cfg,
         "
-void swap(int* a, int* b) {
-    int t = *a;
-    *a = *b;
-    *b = t;
-}
-
-int partition(int arr[], int low, int high) {
-    int pivot = arr[high];
-    int i = (low - 1);
-
-    for (int j = low; j <= high - 1; j++) {
-        if (arr[j] < pivot) {
-            i++;
-            swap(&arr[i], &arr[j]);
+        void bar(int x, int y);
+        int foo(int x, int y) {
+            int z = x + y;
+            bar(x, y);
+            bar(z, x - y);
+            return (x < y);
         }
-    }
-    swap(&arr[i + 1], &arr[high]);
-    return (i + 1);
-}
-
-void quickSort(int arr[], int low, int high) {
-    if (low < high) {
-        int pi = partition(arr, low, high);
-        quickSort(arr, low, pi - 1);
-        quickSort(arr, pi + 1, high);
-    }
-}
     "
         .to_string(),
     )
     .unwrap();
     // println!("{:#?}", p);
     let mut ec = ErrorCollector::new();
+    println!("========== TRANSLATE ===========");
     let tu = TranslationUnit::translate(p.unit, &mut ec);
     ec.print_issues();
     if let Ok(mut tu) = tu {
-        println!("<{}>", tu);
+        println!("{}", tu);
+        println!("========== ENFORCE SSA ===========");
         tu.enforce_ssa();
+        println!("{}", tu);
+        println!("========== OPTIMIZE SSA ===========");
         tu.optimize_ssa();
-        println!("<{}>", tu);
+        println!("{}", tu);
+        println!("========== ENFORCE CALL REGS ===========");
+        tu.enforce_call_regs();
+        println!("{}", tu);
+        println!("========== DECONSTRUCT SSA ===========");
         let mut tu = tu.deconstruct_ssa();
+        println!("{}", tu);
+        println!("========== OPTIMIZE DECONSTRUCTED ===========");
         tu.optimize_deconstructed();
-        println!("<{}>", tu);
+        println!("{}", tu);
+        println!("========== GENERATE ===========");
         let w = ccpu::gen::gen_tu(tu);
         println!("{}", w);
     }

@@ -41,6 +41,64 @@ pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::VirtualReg, FrameRe
     allocations
 }
 
+/**
+ * For each operation in a block return a set of registers which are not used after this operation.
+ */
+pub fn get_kill_sets(body: &[ir::Block], block_index: usize) -> Vec<HashSet<ir::VirtualReg>> {
+    let block = &body[block_index];
+    let mut kill = vec![HashSet::<ir::VirtualReg>::new(); block.ops.len()];
+    let mut live_regs = HashSet::new();
+    for child_id in block.tail.get_connections() {
+        body[child_id].phi.collect_read_regs(&mut live_regs);
+    }
+    block.tail.collect_read_regs(&mut live_regs);
+    for (i, op) in block.ops.iter().enumerate().rev() {
+        let mut op_read_regs = HashSet::new();
+        op.collect_read_regs(&mut op_read_regs);
+        kill[i].extend(op_read_regs.difference(&live_regs));
+        live_regs.extend(op_read_regs.into_iter());
+    }
+    kill
+}
+
+/**
+ * Find live ranges of registers used in a block.
+ * None in the range begin means register is set in phi.
+ * None in the range end means register is used in tail or in block children.
+ */
+pub fn get_live_ranges(
+    body: &[ir::Block],
+    block_index: usize,
+) -> HashMap<ir::VirtualReg, (Option<usize>, Option<usize>)> {
+    let kill_positions = {
+        let kill = get_kill_sets(body, block_index);
+        let mut kill_positions = HashMap::new();
+        for (i, regs) in kill.into_iter().enumerate() {
+            for reg in regs {
+                let r = kill_positions.insert(reg, i);
+                assert!(r.is_none());
+            }
+        }
+        kill_positions
+    };
+
+    let mut result = HashMap::new();
+    let block = &body[block_index];
+    for (reg, _) in &block.phi.srcs {
+        let kill = kill_positions.get(&reg).copied();
+        let r = result.insert(*reg, (None, kill));
+        assert!(r.is_none());
+    }
+    for (i, op) in block.ops.iter().enumerate() {
+        if let Some(reg) = op.get_dst_reg() {
+            let kill = kill_positions.get(&reg).copied();
+            let r = result.insert(reg, (Some(i), kill));
+            assert!(r.is_none());
+        }
+    }
+    result
+}
+
 fn allocate_registers_for_block(
     body: &[ir::Block],
     block_index: usize,
@@ -53,22 +111,7 @@ fn allocate_registers_for_block(
     let block = &body[block_index];
 
     // Determine kill positions
-    let kill = {
-        let mut kill = vec![HashSet::<ir::VirtualReg>::new(); block.ops.len()];
-
-        let mut live_regs = HashSet::new();
-        for child_id in block.tail.get_connections() {
-            body[child_id].phi.collect_read_regs(&mut live_regs);
-        }
-        block.tail.collect_read_regs(&mut live_regs);
-        for (i, op) in block.ops.iter().enumerate().rev() {
-            let mut op_read_regs = HashSet::new();
-            op.collect_read_regs(&mut op_read_regs);
-            kill[i].extend(op_read_regs.difference(&live_regs));
-            live_regs.extend(op_read_regs.into_iter());
-        }
-        kill
-    };
+    let kill = get_kill_sets(body, block_index);
 
     let set_regs = {
         let mut set_regs = HashSet::new();
