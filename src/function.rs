@@ -1,30 +1,29 @@
-use std::collections::HashSet;
-use std::{fmt::Formatter, hash::Hash};
-
 use crate::generic_ir::UnaryUnsignedOp;
-use crate::ir::VarLocation;
+use crate::ir::{Op, VarLocation};
 use crate::regalloc::get_live_ranges;
 use crate::{
     block_emitter::BlockEmitter,
     ccpu::{self, opt::frame::resolve_frame_pointer, reg::FrameReg},
     compile, deconstruct, flush,
-    generic_ir::{self, Op},
+    generic_ir::{self},
     ir::{self, Scalar},
     name_scope::{FunctionFrame, GlobalStorageClass, NameScope},
     opt::{const_propagate::propagate_const, ssa::delete_unused_regs},
     regalloc, ssa,
 };
-use lang_c::{
-    ast::{FunctionDefinition, StorageClassSpecifier},
-    span::Node,
-};
-use replace_with::replace_with_or_abort;
-
 use crate::{
     ctype::{CType, FunctionArgs, QualifiedType},
     error::{CompileError, ErrorCollector},
     type_builder::TypeBuilder,
 };
+use ir::Width;
+use lang_c::{
+    ast::{FunctionDefinition, StorageClassSpecifier},
+    span::Node,
+};
+use replace_with::replace_with_or_abort;
+use std::collections::HashSet;
+use std::{fmt::Formatter, hash::Hash};
 
 pub struct Function<Reg: Eq + Hash> {
     is_inline: bool,
@@ -145,73 +144,186 @@ impl Function<ir::VirtualReg> {
         ssa::enforce_ssa(&mut self.body, scope);
     }
 
+    pub fn utilise_intrin_calls(&mut self) {
+        for block in &mut self.body {
+            for op in &mut block.ops {
+                ccpu::intrin::replace_with_intrinsic(op);
+            }
+        }
+    }
+
     /**
      * 1. Replace constants with registers in call arguments.
      * 2. Insert copies such that no register used as a call argument is live across any call.
+     * 3. Insert copies for call arguments to separate them from incoming arguments.
      */
-    pub fn enforce_call_regs(&mut self, scope: &mut NameScope) {
-        for block_index in 0..self.body.len() {
-            let barriers = {
-                let mut barriers = Vec::new();
-                for (i, op) in self.body[block_index].ops.iter().enumerate() {
-                    if let Op::Call(_) = op {
-                        barriers.push(i);
-                    }
-                }
-                barriers
-            };
-            let live = get_live_ranges(&self.body, block_index);
-            let mut copy_ops = Vec::new();
-            for (i, op) in self.body[block_index].ops.iter_mut().enumerate() {
-                if let Op::Call(c) = op {
-                    let mut used_regs = HashSet::new();
-                    for (s, w) in &mut c.args {
-                        replace_with_or_abort(s, |s| {
-                            let need_copy = if let Scalar::Var(v) = &s {
-                                match v {
-                                    VarLocation::Local(r) => {
-                                        let (begin, end) = live.get(&r).unwrap();
-                                        let mut crosses = false;
-                                        for b in &barriers {
-                                            if crosses_barrier(begin, end, *b) {
-                                                crosses = true;
-                                                break;
-                                            }
-                                        }
-                                        if crosses {
-                                            true
-                                        } else {
-                                            !used_regs.insert(*r)
-                                        }
-                                    }
-                                    VarLocation::Global(_) | VarLocation::Return => true,
-                                }
-                            } else {
-                                true
-                            };
-                            if need_copy {
-                                let tmp = scope.alloc_temp();
-                                copy_ops.push((
-                                    i,
-                                    Op::Copy(UnaryUnsignedOp {
-                                        dst: tmp.clone(),
-                                        src: s,
-                                        width: *w,
-                                    }),
-                                ));
-                                Scalar::Var(tmp)
-                            } else {
-                                s
-                            }
-                        });
-                    }
+    pub fn enforce_special_regs(&mut self, scope: &mut NameScope) {
+        let is_call_barrier = |op: &Op| {
+            if let Op::Call(_) = op {
+                true
+            } else {
+                false
+            }
+        };
+        let foreach_arg_call = |op: &mut Op, callback: &mut dyn FnMut(&mut Width, &mut Scalar)| {
+            if let Op::Call(c) = op {
+                for (s, w) in &mut c.args {
+                    callback(w, s);
                 }
             }
+        };
 
+        let is_intrin_barrier = |op: &Op| {
+            if let Op::Call(_) = op {
+                true
+            } else if let Op::IntrinCall(_) = op {
+                true
+            } else {
+                false
+            }
+        };
+        let foreach_arg_intrin =
+            |op: &mut Op, callback: &mut dyn FnMut(&mut Width, &mut Scalar)| {
+                if let Op::IntrinCall(c) = op {
+                    c.foreach_arg_mut(callback);
+                }
+            };
+
+        for block_index in 0..self.body.len() {
+            let mut copy_ops = Vec::new();
+            {
+                let mut ops = self.enforce_call_regs_common(
+                    block_index,
+                    scope,
+                    is_call_barrier,
+                    foreach_arg_call,
+                );
+                copy_ops.append(&mut ops);
+            }
+            {
+                let mut ops = self.enforce_call_regs_common(
+                    block_index,
+                    scope,
+                    is_intrin_barrier,
+                    foreach_arg_intrin,
+                );
+                copy_ops.append(&mut ops);
+            }
+            copy_ops.sort_by(|(ia, _), (ib, _)| ia.cmp(ib));
+            let ops = &mut self.body[block_index].ops;
             for (i, op) in copy_ops.into_iter().rev() {
-                self.body[block_index].ops.insert(i, op);
+                ops.insert(i, op);
             }
         }
+
+        let arg_regs = {
+            let mut arg_regs = HashSet::new();
+            let first_block = &self.body[0];
+            for op in &first_block.ops {
+                if let Op::Arg(op) = op {
+                    arg_regs.insert(op.dst_reg);
+                }
+            }
+            arg_regs
+        };
+        for block_index in 0..self.body.len() {
+            let mut copy_ops = Vec::new();
+            {
+                let block = &mut self.body[block_index];
+                for (i, op) in block.ops.iter_mut().enumerate() {
+                    let mut copy_arg = |w: &mut Width, s: &mut Scalar| {
+                        if let Some(reg) = s.get_reg() {
+                            if arg_regs.contains(&reg) {
+                                replace_with_or_abort(s, |s| {
+                                    let tmp = scope.alloc_temp();
+                                    copy_ops.push((
+                                        i,
+                                        Op::Copy(UnaryUnsignedOp {
+                                            dst: tmp.clone(),
+                                            src: s,
+                                            width: *w,
+                                        }),
+                                    ));
+                                    Scalar::Var(tmp)
+                                });
+                            }
+                        }
+                    };
+                    foreach_arg_intrin(op, &mut copy_arg);
+                    foreach_arg_call(op, &mut copy_arg);
+                }
+            }
+            let ops = &mut self.body[block_index].ops;
+            for (i, op) in copy_ops.into_iter().rev() {
+                ops.insert(i, op);
+            }
+        }
+    }
+
+    fn enforce_call_regs_common<FIsBarrier, FForeachArg>(
+        &mut self,
+        block_index: usize,
+        scope: &mut NameScope,
+        is_barrier: FIsBarrier,
+        foreach_arg: FForeachArg,
+    ) -> Vec<(usize, Op)>
+    where
+        FIsBarrier: Fn(&Op) -> bool,
+        FForeachArg: Fn(&mut Op, &mut dyn FnMut(&mut Width, &mut Scalar)),
+    {
+        let mut barriers = Vec::new();
+        for (i, op) in self.body[block_index].ops.iter().enumerate() {
+            if is_barrier(op) {
+                barriers.push(i);
+            }
+        }
+
+        let live = get_live_ranges(&self.body, block_index);
+        let mut copy_ops = Vec::new();
+        for (i, op) in self.body[block_index].ops.iter_mut().enumerate() {
+            let mut used_regs = HashSet::new();
+            foreach_arg(op, &mut |w: &mut Width, s: &mut Scalar| {
+                replace_with_or_abort(s, |s| {
+                    let need_copy = if let Scalar::Var(v) = &s {
+                        match v {
+                            VarLocation::Local(r) => {
+                                let (begin, end) = live.get(&r).unwrap();
+                                let mut crosses = false;
+                                for b in &barriers {
+                                    if crosses_barrier(begin, end, *b) {
+                                        crosses = true;
+                                        break;
+                                    }
+                                }
+                                if crosses {
+                                    true
+                                } else {
+                                    !used_regs.insert(*r)
+                                }
+                            }
+                            VarLocation::Global(_) | VarLocation::Return => true,
+                        }
+                    } else {
+                        true
+                    };
+                    if need_copy {
+                        let tmp = scope.alloc_temp();
+                        copy_ops.push((
+                            i,
+                            Op::Copy(UnaryUnsignedOp {
+                                dst: tmp.clone(),
+                                src: s,
+                                width: *w,
+                            }),
+                        ));
+                        Scalar::Var(tmp)
+                    } else {
+                        s
+                    }
+                });
+            });
+        }
+        copy_ops
     }
 }
 
@@ -265,17 +377,12 @@ fn init_address_regs(be: &mut BlockEmitter, frame: &FunctionFrame) {
 
 fn crosses_barrier(begin: &Option<usize>, end: &Option<usize>, barrier: usize) -> bool {
     // begin < barrier && end > barrier
-    let begin_before_barrier = if let Some(begin) = begin {
-        *begin < barrier
-    } else {
+    if begin.is_none() || end.is_none() {
+        // crosses the block barrier
         true
-    };
-    let end_after_barrier = if let Some(end) = end {
-        *end > barrier
     } else {
-        true
-    };
-    begin_before_barrier && end_after_barrier
+        begin.unwrap() < barrier && end.unwrap() > barrier
+    }
 }
 
 impl<Reg: std::fmt::Display + Eq + Hash> std::fmt::Display for Function<Reg> {

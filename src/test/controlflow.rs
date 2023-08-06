@@ -64,13 +64,8 @@ fn test_call_1() {
     assert_eq!(
         body[1].ops,
         vec![
-            ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(1),
-                src: ir::Scalar::ConstInt(10),
-                width: ir::Width::Word
-            }),
             ir::Op::Conv(ir::ConvOp {
-                dst: VarLocation::Local(2),
+                dst: VarLocation::Local(1),
                 dst_width: ir::Width::Byte,
                 dst_sign: false,
                 src: ir::Scalar::ConstInt(20),
@@ -81,8 +76,8 @@ fn test_call_1() {
                 addr: ir::Scalar::SymbolOffset(ir::GlobalVarId::Global("bar".to_string()), 0),
                 dst: None,
                 args: vec![
-                    (ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Word),
-                    (ir::Scalar::Var(VarLocation::Local(2)), ir::Width::Byte)
+                    (ir::Scalar::ConstInt(10), ir::Width::Word),
+                    (ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Byte)
                 ]
             })
         ]
@@ -99,27 +94,22 @@ fn test_call_2() {
     assert_eq!(
         body[1].ops,
         vec![
-            ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(2),
-                src: ir::Scalar::ConstInt(10),
-                width: ir::Width::Word
-            }),
             ir::Op::Call(ir::CallOp {
                 addr: ir::Scalar::SymbolOffset(ir::GlobalVarId::Global("bar".to_string()), 0),
-                dst: Some((VarLocation::Local(3), ir::Width::Dword)),
-                args: vec![(ir::Scalar::Var(VarLocation::Local(2)), ir::Width::Word),]
+                dst: Some((VarLocation::Local(2), ir::Width::Dword)),
+                args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),]
             }),
             ir::Op::Conv(ir::ConvOp {
-                dst: VarLocation::Local(4),
+                dst: VarLocation::Local(3),
                 dst_width: ir::Width::Word,
                 dst_sign: true,
-                src: ir::Scalar::Var(VarLocation::Local(3)),
+                src: ir::Scalar::Var(VarLocation::Local(2)),
                 src_width: ir::Width::Dword,
                 src_sign: true,
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(1),
-                src: ir::Scalar::Var(VarLocation::Local(4)),
+                src: ir::Scalar::Var(VarLocation::Local(3)),
                 width: ir::Width::Word
             }),
         ]
@@ -135,20 +125,13 @@ fn test_call_3() {
     assert_eq!(body.len(), 2);
     assert_eq!(
         body[1].ops,
-        vec![
-            ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(1),
-                src: ir::Scalar::ConstInt(10),
-                width: ir::Width::Word
-            }),
-            ir::Op::Call(ir::CallOp {
-                addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
-                    "bar".to_string()
-                ))),
-                dst: None,
-                args: vec![(ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Word),]
-            }),
-        ]
+        vec![ir::Op::Call(ir::CallOp {
+            addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
+                "bar".to_string()
+            ))),
+            dst: None,
+            args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),]
+        }),]
     );
 }
 
@@ -169,15 +152,10 @@ fn test_call_4() {
                 ))),
                 width: ir::Width::Word,
             }),
-            ir::Op::Copy(ir::UnaryUnsignedOp {
-                dst: VarLocation::Local(2),
-                src: ir::Scalar::ConstInt(10),
-                width: ir::Width::Word
-            }),
             ir::Op::Call(ir::CallOp {
                 addr: ir::Scalar::Var(VarLocation::Local(1)),
                 dst: None,
-                args: vec![(ir::Scalar::Var(VarLocation::Local(2)), ir::Width::Word),]
+                args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),]
             }),
         ]
     );

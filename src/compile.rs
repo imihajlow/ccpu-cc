@@ -7,7 +7,6 @@ use lang_c::{
 
 use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
-use crate::generic_ir::{Scalar, VarLocation};
 use crate::lvalue::TypedLValue;
 use crate::object_location::ObjectLocation;
 use crate::{

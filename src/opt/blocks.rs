@@ -3,7 +3,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use replace_with::replace_with_or_abort;
 
-use crate::{generic_ir, ir};
+use crate::generic_ir;
 
 /**
  * Find and delete unreachable blocks.
@@ -195,7 +195,7 @@ fn adjust_block_ids<Reg: Copy + Hash + Eq>(
 
 #[cfg(test)]
 mod test {
-    use crate::ir::Phi;
+    use crate::ir::{self, Phi};
 
     use super::*;
 

@@ -5,12 +5,12 @@ use crate::block_emitter::BlockEmitter;
 use crate::ctype::{self, QualifiedType, Qualifiers};
 use crate::error::{CompileError, ErrorCollector};
 use crate::generic_ir::Scalar;
+use crate::ir;
 use crate::ir::Width;
 use crate::lvalue::{LValue, TypedLValue};
 use crate::name_scope::NameScope;
 use crate::object_location::ObjectLocation;
 use crate::rvalue::{RValue, TypedRValue};
-use crate::{ir, machine};
 
 use super::assign::compile_assign_to_lval;
 use super::compile_expression;

@@ -121,7 +121,7 @@ fn test_deconstruct_2() {
             loop_depth: 0,
         },
     ];
-    let mut map = HashMap::from([
+    let map = HashMap::from([
         (10, FrameReg::FrameA(0)),
         (38, FrameReg::FrameA(0)),
         (39, FrameReg::FrameA(1)),

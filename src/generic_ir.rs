@@ -67,6 +67,7 @@ pub enum Op<Reg> {
     Load(LoadOp<Reg>),
     Call(CallOp<Reg>),
     Memcpy(MemcpyOp<Reg>),
+    IntrinCall(IntrinCallOp<Reg>),
     #[cfg(test)]
     Dummy(usize),
 }
@@ -171,6 +172,26 @@ pub struct MemcpyOp<Reg> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntrinCallOp<Reg> {
+    pub name: String,
+    pub variant: IntrinCallVariant<Reg>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IntrinCallVariant<Reg> {
+    Call2R(
+        (Width, VarLocation<Reg>),
+        (Width, Scalar<Reg>),
+        (Width, Scalar<Reg>),
+    ),
+    Call3(
+        (Width, Scalar<Reg>),
+        (Width, Scalar<Reg>),
+        (Width, Scalar<Reg>),
+    ),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tail<Reg> {
     Jump(BlockNumber),
     Cond(Scalar<Reg>, BlockNumber, BlockNumber),
@@ -239,6 +260,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Load(op) => op.get_dst_reg(),
             Op::Call(op) => op.get_dst_reg(),
             Op::Memcpy(_) => None,
+            Op::IntrinCall(op) => op.get_dst_reg(),
             #[cfg(test)]
             Op::Dummy(_) => None,
         }
@@ -269,6 +291,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Store(op) => op.is_read_from_register(reg),
             Op::Load(op) => op.is_read_from_register(reg),
             Op::Call(op) => op.is_read_from_register(reg),
+            Op::IntrinCall(op) => op.is_read_from_register(reg),
             Op::Memcpy(op) => op.is_read_from_register(reg),
             #[cfg(test)]
             Op::Dummy(_) => false,
@@ -300,6 +323,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Store(_) => false,
             Op::Load(_) => true,
             Op::Call(_) => true,
+            Op::IntrinCall(_) => true,
             Op::Memcpy(_) => true,
             #[cfg(test)]
             Op::Dummy(_) => false,
@@ -331,6 +355,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Store(_) => true,
             Op::Load(_) => false,
             Op::Call(_) => true,
+            Op::IntrinCall(_) => true,
             Op::Memcpy(_) => true,
             #[cfg(test)]
             Op::Dummy(_) => false,
@@ -362,6 +387,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Store(_) => None,
             Op::Load(op) => Some(op.width),
             Op::Call(op) => op.dst.as_ref().map(|(_, w)| w).copied(),
+            Op::IntrinCall(op) => op.get_dst_data_width(),
             Op::Memcpy(_) => None,
             #[cfg(test)]
             Op::Dummy(_) => None,
@@ -395,6 +421,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Store(op) => op.collect_read_regs(set),
             Op::Load(op) => op.collect_read_regs(set),
             Op::Call(op) => op.collect_read_regs(set),
+            Op::IntrinCall(op) => op.collect_read_regs(set),
             Op::Memcpy(op) => op.collect_read_regs(set),
             #[cfg(test)]
             Op::Dummy(_) => (),
@@ -427,6 +454,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Store(op) => op.collect_set_regs(set),
             Op::Load(op) => op.collect_set_regs(set),
             Op::Call(op) => op.collect_set_regs(set),
+            Op::IntrinCall(op) => op.collect_set_regs(set),
             Op::Memcpy(op) => op.collect_set_regs(set),
             #[cfg(test)]
             Op::Dummy(_) => (),
@@ -468,6 +496,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Store(op) => Op::Store(op.remap_regs(map)),
             Op::Load(op) => Op::Load(op.remap_regs(map)),
             Op::Call(op) => Op::Call(op.remap_regs(map)),
+            Op::IntrinCall(op) => Op::IntrinCall(op.remap_regs(map)),
             Op::Memcpy(op) => Op::Memcpy(op.remap_regs(map)),
             #[cfg(test)]
             Op::Dummy(x) => Op::Dummy(x),
@@ -505,9 +534,10 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Store(op) => op.subs_src_regs(map),
             Op::Load(op) => op.subs_src_regs(map),
             Op::Call(op) => op.subs_src_regs(map),
+            Op::IntrinCall(op) => op.subs_src_regs(map),
             Op::Memcpy(op) => op.subs_src_regs(map),
             #[cfg(test)]
-            Op::Dummy(x) => false,
+            Op::Dummy(_) => false,
         }
     }
 }
@@ -554,6 +584,7 @@ impl Op<VirtualReg> {
             Op::Store(op) => Op::Store(op.remap_regs(map)),
             Op::Load(op) => Op::Load(op.remap_regs_to_new_version(map, scope)),
             Op::Call(op) => Op::Call(op.remap_regs_to_new_version(map, scope)),
+            Op::IntrinCall(op) => Op::IntrinCall(op.remap_regs_to_new_version(map, scope)),
             Op::Memcpy(op) => Op::Memcpy(op.remap_regs(map)),
             #[cfg(test)]
             Op::Dummy(x) => Op::Dummy(x),
@@ -1249,6 +1280,181 @@ impl CallOp<VirtualReg> {
     }
 }
 
+impl<Reg: Copy + Eq> IntrinCallOp<Reg> {
+    pub fn foreach_arg_mut<F: FnMut(&mut Width, &mut Scalar<Reg>)>(&mut self, mut f: F) {
+        match &mut self.variant {
+            IntrinCallVariant::Call2R(_, (a1w, a1s), (a2w, a2s)) => {
+                f(a1w, a1s);
+                f(a2w, a2s);
+            }
+            IntrinCallVariant::Call3((a1w, a1s), (a2w, a2s), (a3w, a3s)) => {
+                f(a1w, a1s);
+                f(a2w, a2s);
+                f(a3w, a3s);
+            }
+        }
+    }
+
+    pub fn get_result_location(&self) -> Option<(&Width, &VarLocation<Reg>)> {
+        match &self.variant {
+            IntrinCallVariant::Call2R((rw, rl), _, _) => Some((rw, rl)),
+            IntrinCallVariant::Call3(_, _, _) => None,
+        }
+    }
+}
+
+impl<Reg: Copy + Eq> IntrinCallOp<Reg> {
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.variant.get_dst_reg()
+    }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.variant.is_read_from_register(reg)
+    }
+
+    fn get_dst_data_width(&self) -> Option<Width> {
+        self.variant.get_dst_data_width()
+    }
+}
+
+impl<Reg: Copy + Eq + Hash> IntrinCallOp<Reg> {
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.variant.collect_read_regs(regs)
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.variant.collect_set_regs(regs)
+    }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> IntrinCallOp<TargetReg> {
+        IntrinCallOp {
+            name: self.name,
+            variant: self.variant.remap_regs(map),
+        }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.variant.subs_src_regs(map)
+    }
+}
+
+impl IntrinCallOp<VirtualReg> {
+    fn remap_regs_to_new_version(
+        self,
+        map: &mut HashMap<VirtualReg, VirtualReg>,
+        scope: &mut NameScope,
+    ) -> Self {
+        Self {
+            name: self.name,
+            variant: self.variant.remap_regs_to_new_version(map, scope),
+        }
+    }
+}
+
+impl<Reg: Copy + Eq> IntrinCallVariant<Reg> {
+    fn get_dst_reg(&self) -> Option<Reg> {
+        match self {
+            IntrinCallVariant::Call2R((_, dst), _, _) => dst.get_reg(),
+            IntrinCallVariant::Call3(_, _, _) => None,
+        }
+    }
+
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        match self {
+            IntrinCallVariant::Call2R(_, (_, a1), (_, a2)) => a1.is_reg(reg) || a2.is_reg(reg),
+            IntrinCallVariant::Call3((_, a1), (_, a2), (_, a3)) => {
+                a1.is_reg(reg) || a2.is_reg(reg) || a3.is_reg(reg)
+            }
+        }
+    }
+
+    fn get_dst_data_width(&self) -> Option<Width> {
+        match self {
+            IntrinCallVariant::Call2R((rw, _), _, _) => Some(*rw),
+            IntrinCallVariant::Call3(_, _, _) => None,
+        }
+    }
+}
+
+impl<Reg: Copy + Eq + Hash> IntrinCallVariant<Reg> {
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        match self {
+            IntrinCallVariant::Call2R(_, (_, a1), (_, a2)) => {
+                a1.collect_regs(regs);
+                a2.collect_regs(regs);
+            }
+            IntrinCallVariant::Call3((_, a1), (_, a2), (_, a3)) => {
+                a1.collect_regs(regs);
+                a2.collect_regs(regs);
+                a3.collect_regs(regs);
+            }
+        }
+    }
+
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        match self {
+            IntrinCallVariant::Call2R((_, r), _, _) => r.collect_regs(regs),
+            IntrinCallVariant::Call3(_, _, _) => (),
+        }
+    }
+
+    fn remap_regs<TargetReg: Copy>(
+        self,
+        map: &HashMap<Reg, TargetReg>,
+    ) -> IntrinCallVariant<TargetReg> {
+        match self {
+            IntrinCallVariant::Call2R((rw, rr), (a1w, a1r), (a2w, a2r)) => {
+                IntrinCallVariant::Call2R(
+                    (rw, rr.remap_reg(map)),
+                    (a1w, a1r.remap_reg(map)),
+                    (a2w, a2r.remap_reg(map)),
+                )
+            }
+            IntrinCallVariant::Call3((a1w, a1r), (a2w, a2r), (a3w, a3r)) => {
+                IntrinCallVariant::Call3(
+                    (a1w, a1r.remap_reg(map)),
+                    (a2w, a2r.remap_reg(map)),
+                    (a3w, a3r.remap_reg(map)),
+                )
+            }
+        }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        match self {
+            IntrinCallVariant::Call2R(_, (_, a1), (_, a2)) => a1.subs_reg(map) | a2.subs_reg(map),
+            IntrinCallVariant::Call3((_, a1), (_, a2), (_, a3)) => {
+                a1.subs_reg(map) | a2.subs_reg(map) | a3.subs_reg(map)
+            }
+        }
+    }
+}
+
+impl IntrinCallVariant<VirtualReg> {
+    fn remap_regs_to_new_version(
+        self,
+        map: &mut HashMap<VirtualReg, VirtualReg>,
+        scope: &mut NameScope,
+    ) -> Self {
+        match self {
+            IntrinCallVariant::Call2R((rw, rr), (a1w, a1r), (a2w, a2r)) => {
+                IntrinCallVariant::Call2R(
+                    (rw, rr.remap_reg_to_new_version(map, scope)),
+                    (a1w, a1r.remap_reg(map)),
+                    (a2w, a2r.remap_reg(map)),
+                )
+            }
+            IntrinCallVariant::Call3((a1w, a1r), (a2w, a2r), (a3w, a3r)) => {
+                IntrinCallVariant::Call3(
+                    (a1w, a1r.remap_reg(map)),
+                    (a2w, a2r.remap_reg(map)),
+                    (a3w, a3r.remap_reg(map)),
+                )
+            }
+        }
+    }
+}
+
 impl<Reg: Copy + Eq> MemcpyOp<Reg> {
     fn is_read_from_register(&self, reg: Reg) -> bool {
         self.src_addr.is_reg(reg) || self.dst_addr.is_reg(reg)
@@ -1481,6 +1687,7 @@ where
             Self::Store(op) => write!(f, "st{}", op),
             Self::Load(op) => write!(f, "ld{}", op),
             Self::Call(op) => write!(f, "call{}", op),
+            Self::IntrinCall(op) => write!(f, "intrin{}", op),
             Self::Memcpy(op) => write!(f, "memcpy{}", op),
             #[cfg(test)]
             Self::Dummy(n) => write!(f, "dummy {}", n),
@@ -1676,6 +1883,31 @@ where
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, " [{}], [{}], {}", self.dst_addr, self.src_addr, self.len)
+    }
+}
+
+impl<Reg> std::fmt::Display for IntrinCallOp<Reg>
+where
+    Reg: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, " {}{}", self.name, self.variant)
+    }
+}
+
+impl<Reg> std::fmt::Display for IntrinCallVariant<Reg>
+where
+    Reg: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            IntrinCallVariant::Call2R((rw, rr), (a1w, a1r), (a2w, a2r)) => {
+                write!(f, "{} {}, {} {}, {} {}", rw, rr, a1w, a1r, a2w, a2r)
+            }
+            IntrinCallVariant::Call3((a1w, a1r), (a2w, a2r), (a3w, a3r)) => {
+                write!(f, " {} {}, {} {}, {} {}", a1w, a1r, a2w, a2r, a3w, a3r)
+            }
+        }
     }
 }
 

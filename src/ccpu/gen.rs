@@ -18,6 +18,7 @@ mod call;
 mod compare;
 mod conv;
 mod copy;
+mod intrin;
 mod load;
 mod neg;
 mod shift;
@@ -64,7 +65,7 @@ fn gen_function(w: &mut InstructionWriter, f: Function<FrameReg>) {
     }
 }
 
-fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_name: &str) {
+fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, _function_name: &str) {
     use generic_ir::Op::*;
     match op {
         Undefined(_) => (),
@@ -90,6 +91,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, function_nam
         Load(op) => load::gen_load(w, op),
         Call(op) => call::gen_call(w, op),
         Memcpy(op) => todo!(),
+        IntrinCall(op) => intrin::gen_intrin_call(w, op),
         FramePointer(_) => {
             unreachable!("Frame pointer expansion step must be performed before generating code")
         }

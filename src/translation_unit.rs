@@ -65,9 +65,15 @@ impl TranslationUnit<ir::VirtualReg> {
         }
     }
 
-    pub fn enforce_call_regs(&mut self) {
+    pub fn utilise_intrin_calls(&mut self) {
         for f in self.functions.iter_mut() {
-            f.enforce_call_regs(&mut self.scope);
+            f.utilise_intrin_calls();
+        }
+    }
+
+    pub fn enforce_special_regs(&mut self) {
+        for f in self.functions.iter_mut() {
+            f.enforce_special_regs(&mut self.scope);
         }
     }
 

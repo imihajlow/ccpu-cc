@@ -71,8 +71,11 @@ fn main() {
         println!("========== OPTIMIZE SSA ===========");
         tu.optimize_ssa();
         println!("{}", tu);
+        println!("========== UTILISE INTRINSIC CALLS ===========");
+        tu.utilise_intrin_calls();
+        println!("{}", tu);
         println!("========== ENFORCE CALL REGS ===========");
-        tu.enforce_call_regs();
+        tu.enforce_special_regs();
         println!("{}", tu);
         println!("========== DECONSTRUCT SSA ===========");
         let mut tu = tu.deconstruct_ssa();
