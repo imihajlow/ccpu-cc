@@ -1,7 +1,7 @@
 use crate::{
     ccpu::gen::util::load_addr,
-    ccpu::{global::get_global_var_label, instr::InstructionWriter, reg::FrameReg},
-    generic_ir::{self, Scalar, Width},
+    ccpu::{instr::InstructionWriter, reg::FrameReg},
+    generic_ir::{self, Width},
 };
 
 pub fn gen_load(w: &mut InstructionWriter, op: &generic_ir::LoadOp<FrameReg>) {

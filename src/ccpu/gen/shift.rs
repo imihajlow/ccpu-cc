@@ -1,5 +1,3 @@
-use std::todo;
-
 use crate::{
     ccpu::{instr::InstructionWriter, reg::FrameReg},
     generic_ir::{Scalar, ShiftOp, VarLocation, Width},
@@ -9,12 +7,12 @@ pub fn gen_lshift(w: &mut InstructionWriter, op: &ShiftOp<FrameReg>) {
     match &op.rhs {
         Scalar::ConstInt(c) => match &op.lhs {
             Scalar::Var(lhs) => gen_lshift_var_by_const(w, &op.dst, lhs, *c, op.lhs_width),
-            Scalar::SymbolOffset(_, _) => todo!(),
+            Scalar::SymbolOffset(_, _) => panic!("shifts by a symbol must be replaced by intrinsic calls"),
             Scalar::ConstInt(_) => {
                 unreachable!("const propagation must be performed before emitting code")
             }
         },
-        Scalar::Var(_) => todo!(),
+        Scalar::Var(_) => panic!("shifts by a variable must be replaced by intrinsic calls"),
         Scalar::SymbolOffset(_, _) => unimplemented!("wtf"),
     }
 }
@@ -25,12 +23,12 @@ pub fn gen_rshift(w: &mut InstructionWriter, op: &ShiftOp<FrameReg>) {
             Scalar::Var(lhs) => {
                 gen_rshift_var_by_const(w, &op.dst, lhs, *c, op.lhs_width, op.lhs_sign)
             }
-            Scalar::SymbolOffset(_, _) => todo!(),
+            Scalar::SymbolOffset(_, _) => panic!("shifts by a symbol must be replaced by intrinsic calls"),
             Scalar::ConstInt(_) => {
                 unreachable!("const propagation must be performed before emitting code")
             }
         },
-        Scalar::Var(_) => todo!(),
+        Scalar::Var(_) => panic!("shifts by a variable must be replaced by intrinsic calls"),
         Scalar::SymbolOffset(_, _) => unimplemented!("wtf"),
     }
 }
