@@ -41,13 +41,13 @@ extern crate static_assertions;
 
 use std::fs::File;
 use std::io::Write;
-use std::{fs, path::PathBuf, process::exit};
+use std::{path::PathBuf, process::exit};
 
 use crate::{error::ErrorCollector, translation_unit::TranslationUnit};
 
-use lang_c::driver::{parse, Config, Flavor};
+use lang_c::driver::{parse, Flavor};
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 #[derive(Parser)]
 #[command(name = "CCPU compiler")]
@@ -64,8 +64,41 @@ struct Cli {
     #[arg(short = 'D')]
     define: Vec<String>,
 
+    /// Add directory to the end of the list of include search paths
+    #[arg(short = 'I')]
+    include: Vec<String>,
+
+    /// Add directory to SYSTEM include search path
+    #[arg(long = "isystem")]
+    isystem: Vec<String>,
+
+    /// Add directory to QUOTE include search path
+    #[arg(long = "iquote")]
+    iquote: Vec<String>,
+
+    /// C dialect
+    #[arg(long = "std")]
+    std: Option<Standard>,
+
     /// Input file name
     input: PathBuf,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum Standard {
+    C11,
+    Gnu11,
+    Clang11,
+}
+
+impl From<Standard> for Flavor {
+    fn from(s: Standard) -> Self {
+        match s {
+            Standard::C11 => Flavor::StdC11,
+            Standard::Gnu11 => Flavor::GnuC11,
+            Standard::Clang11 => Flavor::ClangC11,
+        }
+    }
 }
 
 fn main() {
@@ -73,7 +106,13 @@ fn main() {
 
     println!("{:?}", cli.define);
 
-    let cfg = preprocess::get_config(cli.define);
+    let cfg = preprocess::get_config(
+        cli.std.unwrap_or(Standard::C11).into(),
+        cli.define,
+        cli.include,
+        cli.isystem,
+        cli.iquote,
+    );
 
     let output_path = if let Some(output) = cli.output {
         output

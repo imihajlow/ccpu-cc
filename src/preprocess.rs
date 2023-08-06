@@ -1,3 +1,4 @@
+use lang_c::driver::Flavor;
 use static_assertions::const_assert;
 
 use crate::machine;
@@ -9,8 +10,15 @@ const_assert!(machine::LONG_SIZE == 4);
 const_assert!(machine::LLONG_SIZE == 8);
 const_assert!(machine::PTR_SIZE == 2);
 
-pub fn get_config(defines: Vec<String>) -> lang_c::driver::Config {
+pub fn get_config(
+    flavor: Flavor,
+    defines: Vec<String>,
+    include: Vec<String>,
+    isystem: Vec<String>,
+    iquote: Vec<String>,
+) -> lang_c::driver::Config {
     let mut options = Vec::new();
+    options.push("-E".to_string());
     options.push("-std=c11".to_string());
     options.push("-undef".to_string());
     options.push("-nostdinc".to_string());
@@ -140,9 +148,21 @@ pub fn get_config(defines: Vec<String>) -> lang_c::driver::Config {
         options.push(format!("-D{}", s));
     }
 
+    for s in include {
+        options.push(format!("-I{}", s));
+    }
+
+    for s in isystem {
+        options.push(format!("-isystem {}", s));
+    }
+
+    for s in iquote {
+        options.push(format!("-iquote {}", s));
+    }
+
     lang_c::driver::Config {
-        cpp_command: "cpp".to_string(),
+        cpp_command: "clang".to_string(),
         cpp_options: options,
-        flavor: lang_c::driver::Flavor::StdC11,
+        flavor,
     }
 }
