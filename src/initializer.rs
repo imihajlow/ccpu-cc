@@ -21,7 +21,7 @@ pub enum Constant {
  *
  * Invariant: for int types, contents of the val fits into the type.
  */
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TypedConstant {
     pub t: QualifiedType,
     pub val: Constant,

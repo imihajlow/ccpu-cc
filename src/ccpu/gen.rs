@@ -1,3 +1,4 @@
+use crate::ccpu::global::get_global_var_label;
 use crate::{
     function::Function,
     generic_ir::{self, ArgOp, Scalar, VarLocation},
@@ -29,6 +30,16 @@ mod util;
 pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
     let mut w = InstructionWriter::new();
     w.import(global::RET_VALUE_REG_SYMBOL.to_string());
+    intrin::gen_intrin_imports(&mut w);
+
+    for sym in tu.scope.get_import_symbols() {
+        w.import(get_global_var_label(&sym));
+    }
+
+    for sym in tu.scope.get_export_symbols() {
+        w.export(get_global_var_label(&sym));
+    }
+
     for f in tu.functions.into_iter() {
         gen_function(&mut w, f);
     }

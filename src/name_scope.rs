@@ -2,7 +2,7 @@ use lang_c::{
     ast::StorageClassSpecifier,
     span::{Node, Span},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ctype::{EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind},
@@ -37,9 +37,11 @@ pub struct NameScope {
     static_initializers: HashMap<GlobalVarId, TypedConstant>,
     tagged_types: Vec<(Tagged, Span)>,
     function_frame: Option<FunctionFrame>,
+    local_statics: Vec<GlobalVarId>,
+    defined_functions: HashSet<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Type(QualifiedType),
     AutoVar(QualifiedType, VirtualReg),
@@ -93,6 +95,8 @@ impl NameScope {
             static_initializers: HashMap::new(),
             tagged_types: Vec::new(),
             function_frame: None,
+            local_statics: Vec::new(),
+            defined_functions: HashSet::new(),
         }
     }
 
@@ -129,6 +133,7 @@ impl NameScope {
         args: &FunctionArgs,
         return_type: &QualifiedType,
     ) -> Vec<ir::Op> {
+        self.defined_functions.insert(name.to_string());
         let mut defs = HashMap::new();
         let mut init_instructions = if let FunctionArgs::List(l) = args {
             let mut ops = Vec::new();
@@ -319,6 +324,7 @@ impl NameScope {
                             name: name.to_string(),
                             function_name: self.function_frame.as_ref().unwrap().name.clone(),
                         };
+                        self.local_statics.push(id.clone());
                         self.insert(
                             name,
                             Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
@@ -591,6 +597,51 @@ impl NameScope {
 
     pub fn get_frame_pointer_reg(&self) -> VirtualReg {
         self.function_frame.as_ref().unwrap().frame_pointer_reg
+    }
+
+    pub fn get_import_symbols(&self) -> Vec<GlobalVarId> {
+        let mut result = Vec::new();
+        for (name, (val, _)) in &self.defs[0].default {
+            if val.is_var() {
+                if val.get_type().t.is_function() {
+                    match val.unwrap_storage_class() {
+                        GlobalStorageClass::Static => (),
+                        GlobalStorageClass::Default | GlobalStorageClass::Extern => {
+                            if !self.defined_functions.contains(name) {
+                                result.push(GlobalVarId::Global(name.clone()));
+                            }
+                        }
+                    }
+                } else if let GlobalStorageClass::Extern = val.unwrap_storage_class() {
+                    result.push(GlobalVarId::Global(name.clone()));
+                }
+            }
+        }
+        result
+    }
+
+    pub fn get_export_symbols(&self) -> Vec<GlobalVarId> {
+        let mut result = Vec::new();
+        for (name, (val, _)) in &self.defs[0].default {
+            if val.is_var() {
+                if val.get_type().t.is_function() {
+                    match val.unwrap_storage_class() {
+                        GlobalStorageClass::Static => (),
+                        GlobalStorageClass::Default | GlobalStorageClass::Extern => {
+                            if self.defined_functions.contains(name) {
+                                result.push(GlobalVarId::Global(name.clone()));
+                            }
+                        }
+                    }
+                } else if let GlobalStorageClass::Default = val.unwrap_storage_class() {
+                    result.push(GlobalVarId::Global(name.clone()));
+                }
+            }
+        }
+        for id in &self.local_statics {
+            result.push(id.clone());
+        }
+        result
     }
 
     fn get_tagged_type(&self, id: usize) -> &Tagged {
