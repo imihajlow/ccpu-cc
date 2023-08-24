@@ -2,8 +2,8 @@ use lang_c::span::Span;
 
 use crate::ccpu::global::get_global_var_label;
 use crate::error::{CompileError, ErrorCollector};
-use crate::generic_ir::GlobalVarId;
-use crate::initializer::TypedConstant;
+use crate::generic_ir::{GlobalVarId, Width};
+use crate::initializer::{Constant, TypedConstant};
 use crate::name_scope::NameScope;
 use crate::{
     function::Function,
@@ -206,7 +206,15 @@ fn gen_static_data(
     if val.is_bss() {
         w.bss(label, size, align as usize);
     } else {
-        todo!()
+        match val.val {
+            Constant::Void => (),
+            Constant::Int(x) => {
+                let width = Width::new(size as u8);
+                w.data_int(label, x as u64, width, align as usize);
+            }
+            Constant::Array(_) => todo!(),
+            Constant::Struct(_) => todo!(),
+        }
     }
     Ok(())
 }
