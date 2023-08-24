@@ -48,7 +48,7 @@ pub fn compile_member_expression(
         lhs: obj_addr,
         rhs: ir::Scalar::ConstInt(field_offset as u64),
     }));
-    if field_type.t.is_scalar() {
+    if field_type.t.is_scalar_or_array() {
         let target_var = scope.alloc_temp();
         let width = field_type.t.get_scalar_width().unwrap();
         be.append_operation(ir::Op::Load(ir::LoadOp {

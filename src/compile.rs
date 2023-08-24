@@ -152,7 +152,7 @@ pub fn convert_to_bool(
     be: &mut BlockEmitter,
     ec: &mut ErrorCollector,
 ) -> Result<TypedRValue, ()> {
-    if !src.t.t.is_scalar() {
+    if !src.t.t.is_scalar_or_array() {
         ec.record_error(CompileError::ScalarTypeRequired, span)?;
         unreachable!();
     }
@@ -182,7 +182,7 @@ pub fn cast(
     _ec: &mut ErrorCollector,
 ) -> Result<TypedRValue, ()> {
     assert!(target_type.is_scalar());
-    assert!(src.t.t.is_scalar());
+    assert!(src.t.t.is_scalar_or_array());
     if target_type.is_any_float() || src.t.t.is_any_float() {
         todo!()
     }
@@ -464,7 +464,7 @@ fn compile_cast(
             t: target_type,
         })
     } else if target_type.t.is_arithmetic() || target_type.t.is_pointer() {
-        if !val.t.t.is_scalar() {
+        if !val.t.t.is_scalar_or_array() {
             ec.record_error(CompileError::ScalarTypeRequired, expr_span)?;
             unreachable!();
         }
@@ -587,6 +587,7 @@ fn compile_call(
         let dst = scope.alloc_temp();
         Some((dst, result_type.t.get_scalar_width().unwrap()))
     } else {
+        assert!(result_type.t.is_object());
         todo!("return struct")
     };
 

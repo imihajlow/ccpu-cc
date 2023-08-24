@@ -124,7 +124,7 @@ fn compile_unary_lnot(
 ) -> Result<TypedRValue, ()> {
     let span = operand.span;
     let operand = compile_expression(operand, scope, be, ec)?;
-    if !operand.t.t.is_scalar() {
+    if !operand.t.t.is_scalar_or_array() {
         ec.record_error(CompileError::ScalarTypeRequired, span)?;
         unreachable!();
     }

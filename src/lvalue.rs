@@ -130,7 +130,7 @@ impl TypedLValue {
                         t: self.t,
                     })
                 } else {
-                    assert!(!self.t.t.is_scalar());
+                    assert!(!self.t.t.is_scalar_or_array());
                     todo!()
                 }
             }

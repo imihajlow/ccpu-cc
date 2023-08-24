@@ -139,7 +139,7 @@ fn process_condition_expression_node(
     let cond_val = compute_constant_expr(*node.node.condition, allow_var, scope, ec)?;
     let then_val = compute_constant_expr(*node.node.then_expression, allow_var, scope, ec)?;
     let else_val = compute_constant_expr(*node.node.else_expression, allow_var, scope, ec)?;
-    if !cond_val.t.t.is_scalar() {
+    if !cond_val.t.t.is_scalar_or_array() {
         ec.record_error(CompileError::ScalarTypeRequired, cond_span)?;
         unreachable!()
     }
@@ -499,14 +499,14 @@ fn logical_op<F>(
 where
     F: FnOnce(bool, bool) -> bool,
 {
-    if lhs.t.t.is_scalar() && rhs.t.t.is_scalar() {
+    if lhs.t.t.is_scalar_or_array() && rhs.t.t.is_scalar_or_array() {
         let (lhs, rhs) = TypedConstant::usual_arithmetic_convert(lhs, rhs);
         let lhs_zero = lhs.is_zero();
         let rhs_zero = rhs.is_zero();
         let r = f(!lhs_zero, !rhs_zero);
         Ok(TypedConstant::new_integer(if r { 1 } else { 0 }, lhs.t.t))
     } else {
-        let span = if !lhs.t.t.is_scalar() {
+        let span = if !lhs.t.t.is_scalar_or_array() {
             lhs_span
         } else {
             rhs_span
@@ -559,7 +559,7 @@ fn process_unary_operator_expression_node(
             Ok(val.promote().complement())
         }
         UnaryOperator::Negate => {
-            if !val.t.t.is_scalar() {
+            if !val.t.t.is_scalar_or_array() {
                 ec.record_error(CompileError::ScalarTypeRequired, span)?;
                 unreachable!();
             }

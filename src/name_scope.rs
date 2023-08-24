@@ -369,7 +369,7 @@ impl NameScope {
                 | Some(StorageClassSpecifier::Auto)
                 | Some(StorageClassSpecifier::Register) => {
                     assert!(initializer.is_none());
-                    if t.t.is_scalar() && !t.t.is_array() {
+                    if t.t.is_scalar() {
                         let id = self.alloc_reg();
                         self.insert(name, Value::AutoVar(t, id), span);
                     } else if t.t.is_object() || t.t.is_array() {

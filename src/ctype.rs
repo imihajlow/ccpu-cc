@@ -320,7 +320,20 @@ impl CType {
         }
     }
 
+    // Arithmetic types and pointer types are collectively called scalar types.
     pub fn is_scalar(&self) -> bool {
+        use CType::*;
+        match self {
+            Int(_, _) => true,
+            Bool => true,
+            Float(_) => true,
+            Enum(_) => true,
+            Pointer(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_scalar_or_array(&self) -> bool {
         use CType::*;
         match self {
             Int(_, _) => true,
@@ -333,6 +346,7 @@ impl CType {
         }
     }
 
+    // Array and structure types are collectively called aggregate types.
     pub fn is_aggregate(&self) -> bool {
         use CType::*;
         match self {
