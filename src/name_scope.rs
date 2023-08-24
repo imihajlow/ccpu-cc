@@ -2,7 +2,11 @@ use lang_c::{
     ast::StorageClassSpecifier,
     span::{Node, Span},
 };
-use std::collections::{HashMap, HashSet};
+use replace_with::replace_with_or_abort;
+use std::{
+    collections::{HashMap, HashSet},
+    unreachable,
+};
 
 use crate::{
     ctype::{EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind},
@@ -34,7 +38,7 @@ pub struct NameScope {
     last_reg: VirtualReg,
     last_static_id: u32,
     defs: Vec<Scope>,
-    static_initializers: HashMap<GlobalVarId, TypedConstant>,
+    pub static_initializers: HashMap<GlobalVarId, (TypedConstant, Span)>,
     tagged_types: Vec<(Tagged, Span)>,
     function_frame: Option<FunctionFrame>,
     local_statics: Vec<GlobalVarId>,
@@ -112,14 +116,41 @@ impl NameScope {
      * All initializers for the static variables at the popped level are collected.
      */
     pub fn pop_and_collect_initializers(&mut self) {
-        let mut m = self.defs.pop().unwrap();
+        let m = self.defs.pop().unwrap();
         if self.defs.len() == 0 {
             panic!("NameScope is popped above the global level");
         }
-        for (_key, (val, _span)) in m.default.drain() {
+        for (_key, (val, span)) in m.default {
             if let Value::StaticVar(t, id, _, initializer) = val {
                 let initializer = initializer.unwrap_or_else(|| TypedConstant::new_default(t));
-                self.static_initializers.insert(id, initializer);
+                self.static_initializers.insert(id, (initializer, span));
+            }
+        }
+    }
+
+    /**
+     * Collect top-level initializers.
+     */
+    pub fn finalize_initializers(&mut self) {
+        assert_eq!(self.defs.len(), 1);
+        for (_key, (val, span)) in &self.defs.first().unwrap().default {
+            match val {
+                Value::StaticVar(t, id, _, initializer) => {
+                    if !t.t.is_function() {
+                        let initializer = initializer
+                            .clone()
+                            .unwrap_or_else(|| TypedConstant::new_default(t.clone()));
+                        self.static_initializers
+                            .insert(id.clone(), (initializer, *span));
+                    }
+                }
+                Value::Object(_, _) => {
+                    unreachable!("No objects at top level");
+                }
+                Value::AutoVar(_, _) => {
+                    unreachable!("No auto vars at top level");
+                }
+                Value::Type(_) => (),
             }
         }
     }

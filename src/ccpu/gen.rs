@@ -1,4 +1,10 @@
+use lang_c::span::Span;
+
 use crate::ccpu::global::get_global_var_label;
+use crate::error::{CompileError, ErrorCollector};
+use crate::generic_ir::GlobalVarId;
+use crate::initializer::TypedConstant;
+use crate::name_scope::NameScope;
 use crate::{
     function::Function,
     generic_ir::{self, ArgOp, Scalar, VarLocation},
@@ -27,7 +33,10 @@ mod store;
 mod sub;
 mod util;
 
-pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
+pub fn gen_tu(
+    tu: TranslationUnit<FrameReg>,
+    ec: &mut ErrorCollector,
+) -> Result<InstructionWriter, ()> {
     let mut w = InstructionWriter::new();
     w.import(global::RET_VALUE_REG_SYMBOL.to_string());
     intrin::gen_intrin_imports(&mut w);
@@ -43,7 +52,11 @@ pub fn gen_tu(tu: TranslationUnit<FrameReg>) -> InstructionWriter {
     for f in tu.functions.into_iter() {
         gen_function(&mut w, f);
     }
-    w
+
+    for (id, (val, span)) in &tu.scope.static_initializers {
+        gen_static_data(&mut w, id, val, *span, &tu.scope, ec)?;
+    }
+    Ok(w)
 }
 
 fn gen_function(w: &mut InstructionWriter, f: Function<FrameReg>) {
@@ -177,6 +190,36 @@ fn gen_return(w: &mut InstructionWriter) {
     w.ld(PH);
     w.mov(PL, A);
     w.jmp();
+}
+
+fn gen_static_data(
+    w: &mut InstructionWriter,
+    id: &GlobalVarId,
+    val: &TypedConstant,
+    span: Span,
+    scope: &NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<(), ()> {
+    let label = get_global_var_label(id);
+    let size = check_16bit(val.t.t.sizeof(scope, span, ec)?, span, ec)?;
+    let align = check_16bit(val.t.t.alignof(scope, span, ec)?, span, ec)?;
+    if val.is_bss() {
+        w.bss(label, size, align as usize);
+    } else {
+        todo!()
+    }
+    Ok(())
+}
+
+fn check_16bit(val: u32, span: Span, ec: &mut ErrorCollector) -> Result<u16, ()> {
+    let v = val.try_into();
+    match v {
+        Ok(v) => Ok(v),
+        Err(_) => {
+            ec.record_error(CompileError::ObjectTooLarge(val as usize), span)?;
+            unreachable!();
+        }
+    }
 }
 
 fn gen_load_var_8(w: &mut InstructionWriter, dst: Reg, v: &VarLocation<FrameReg>) {

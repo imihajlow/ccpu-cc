@@ -284,6 +284,10 @@ impl TypedConstant {
         }
     }
 
+    pub fn is_bss(&self) -> bool {
+        self.val.is_bss()
+    }
+
     pub fn negate(self) -> Self {
         let negated = match self.val {
             Constant::Int(x) => Self {
@@ -317,6 +321,17 @@ impl TypedConstant {
                 ..self
             },
             _ => panic!(),
+        }
+    }
+}
+
+impl Constant {
+    pub fn is_bss(&self) -> bool {
+        match self {
+            Constant::Void => true,
+            Constant::Int(x) => *x == 0,
+            Constant::Array(v) => v.iter().all(|c| c.is_bss()),
+            Constant::Struct(m) => m.iter().all(|(_k, v)| v.is_bss()),
         }
     }
 }

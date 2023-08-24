@@ -12,6 +12,7 @@ pub enum CompileError {
     Unimplemented(String),
     UnknownIdentifier(String),
     StaticAssertionFailed(String),
+    ObjectTooLarge(usize),
     // Errors concerning types in declarations
     MultipleStorageClasses,
     WrongStorageClass,
@@ -157,6 +158,7 @@ impl std::fmt::Display for CompileError {
             CompileError::StaticAssertionFailed(s) => {
                 write!(f, "static assertion failed, message: {}", s)
             }
+            CompileError::ObjectTooLarge(s) => write!(f, "object is too large ({} bytes)", s),
             CompileError::WrongStorageClass => f.write_str("wrong storage class"),
             CompileError::MultipleStorageClasses => {
                 write!(f, "multiple storage classes in declaration specifiers")

@@ -171,7 +171,14 @@ fn main() {
             println!("{}", tu);
             println!("========== GENERATE ===========");
         }
-        let w = ccpu::gen::gen_tu(tu);
+        let mut ec = ErrorCollector::new();
+        let w = ccpu::gen::gen_tu(tu, &mut ec);
+        ec.print_issues();
+        let w = if let Ok(w) = w {
+            w
+        } else {
+            exit(1);
+        };
         if cli.verbose {
             println!("{}", w);
         }
