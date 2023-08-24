@@ -46,10 +46,10 @@ impl TranslationUnit<ir::VirtualReg> {
                 }
             }
         }
-        r.scope.finalize_initializers();
         if has_error {
             Err(())
         } else {
+            r.scope.finalize_initializers();
             Ok(r)
         }
     }
