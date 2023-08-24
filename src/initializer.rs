@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use lang_c::{ast::IntegerSuffix, span::Span};
 
 use crate::{
@@ -11,9 +9,16 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum Constant {
     Void,
+    Zero,
     Int(i128),
-    Struct(HashMap<String, Constant>),
+    Struct(Vec<FieldInitializer>),
     Array(Vec<Constant>),
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldInitializer {
+    offset: usize,
+    value: TypedConstant,
 }
 
 /**
@@ -44,13 +49,9 @@ impl TypedConstant {
     }
 
     pub fn new_default(t: QualifiedType) -> Self {
-        if t.t.is_scalar() {
-            Self {
-                t,
-                val: Constant::Int(0),
-            }
-        } else {
-            todo!()
+        Self {
+            t,
+            val: Constant::Zero
         }
     }
 
@@ -279,6 +280,7 @@ impl TypedConstant {
 
     pub fn is_zero(&self) -> bool {
         match self.val {
+            Constant::Zero => true,
             Constant::Int(x) => x == 0,
             _ => false,
         }
@@ -329,9 +331,10 @@ impl Constant {
     pub fn is_bss(&self) -> bool {
         match self {
             Constant::Void => true,
+            Constant::Zero => true,
             Constant::Int(x) => *x == 0,
             Constant::Array(v) => v.iter().all(|c| c.is_bss()),
-            Constant::Struct(m) => m.iter().all(|(_k, v)| v.is_bss()),
+            Constant::Struct(m) => m.iter().all(|f| f.value.is_bss()),
         }
     }
 }

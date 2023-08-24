@@ -207,13 +207,16 @@ fn gen_static_data(
         w.bss(label, size, align as usize);
     } else {
         match val.val {
-            Constant::Void => (),
             Constant::Int(x) => {
                 let width = Width::new(size as u8);
                 w.data_int(label, x as u64, width, align as usize);
             }
             Constant::Array(_) => todo!(),
             Constant::Struct(_) => todo!(),
+            Constant::Void | Constant::Zero => {
+                // is_bss
+                unreachable!()
+            }
         }
     }
     Ok(())
