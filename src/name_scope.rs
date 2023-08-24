@@ -669,9 +669,6 @@ impl NameScope {
                 }
             }
         }
-        for id in &self.local_statics {
-            result.push(id.clone());
-        }
         result
     }
 
