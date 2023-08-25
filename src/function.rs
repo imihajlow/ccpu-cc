@@ -106,8 +106,9 @@ impl Function<ir::VirtualReg> {
         };
         let init_instructions = scope.start_function(&name, &args, &return_type);
         let mut be = BlockEmitter::new(init_instructions);
-        compile::compile_statement(node.node.statement, scope, &mut be, ec)?;
+        let compile_result = compile::compile_statement(node.node.statement, scope, &mut be, ec);
         let frame = scope.end_function();
+        compile_result?;
         init_address_regs(&mut be, &frame);
         let mut body = be.finalize(ec)?;
         flush::insert_flush_instructions(&mut body, &frame);

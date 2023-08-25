@@ -326,15 +326,25 @@ fn compile_block(
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     scope.push();
-    for item in block {
-        match item.node {
-            BlockItem::Statement(stat) => compile_statement(stat, scope, be, ec)?,
-            BlockItem::Declaration(decl) => compile_declaration(decl, scope, be, ec)?,
-            BlockItem::StaticAssert(sa) => constant::check_static_assert(sa, scope, ec)?,
+
+    fn compile_block_inner(
+        block: Vec<Node<BlockItem>>,
+        scope: &mut NameScope,
+        be: &mut BlockEmitter,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        for item in block {
+            match item.node {
+                BlockItem::Statement(stat) => compile_statement(stat, scope, be, ec)?,
+                BlockItem::Declaration(decl) => compile_declaration(decl, scope, be, ec)?,
+                BlockItem::StaticAssert(sa) => constant::check_static_assert(sa, scope, ec)?,
+            }
         }
+        Ok(())
     }
+    let r = compile_block_inner(block, scope, be, ec);
     scope.pop_and_collect_initializers();
-    Ok(())
+    r
 }
 
 pub fn compile_declaration(

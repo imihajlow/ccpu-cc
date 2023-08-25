@@ -345,15 +345,15 @@ impl NameScope {
 
             match storage_class {
                 Some(StorageClassSpecifier::Static) => {
+                    let id = GlobalVarId::LocalStatic {
+                        name: name.to_string(),
+                        function_name: self.function_frame.as_ref().unwrap().name.clone(),
+                    };
                     if t.t.is_scalar() {
                         let initializer = if let Some(tv) = initializer {
                             Some(tv.implicit_cast(&t, span, ec)?)
                         } else {
                             None
-                        };
-                        let id = GlobalVarId::LocalStatic {
-                            name: name.to_string(),
-                            function_name: self.function_frame.as_ref().unwrap().name.clone(),
                         };
                         self.local_statics.push(id.clone());
                         self.insert(
@@ -361,8 +361,15 @@ impl NameScope {
                             Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
                             span,
                         );
+                    } else if t.t.is_object() || t.t.is_array() {
+                        self.local_statics.push(id.clone());
+                        self.insert(
+                            name,
+                            Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
+                            span,
+                        );
                     } else {
-                        todo!()
+                        unreachable!()
                     }
                 }
                 None
