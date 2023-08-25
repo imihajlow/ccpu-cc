@@ -51,7 +51,7 @@ impl TypedConstant {
     pub fn new_default(t: QualifiedType) -> Self {
         Self {
             t,
-            val: Constant::Zero
+            val: Constant::Zero,
         }
     }
 

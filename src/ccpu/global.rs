@@ -10,7 +10,8 @@ pub fn get_global_var_label(id: &GlobalVarId) -> String {
         GlobalVarId::LocalStatic {
             name,
             function_name,
-        } => format!("__static_{}_{}", function_name, name),
+            index,
+        } => format!("__static_{}_{}_{}", function_name, index, name),
         GlobalVarId::CompilerInternal(s) => format!("__cc_{}", s),
     }
 }

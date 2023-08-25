@@ -43,6 +43,7 @@ pub struct NameScope {
     function_frame: Option<FunctionFrame>,
     local_statics: Vec<GlobalVarId>,
     defined_functions: HashSet<String>,
+    static_index: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -101,6 +102,7 @@ impl NameScope {
             function_frame: None,
             local_statics: Vec::new(),
             defined_functions: HashSet::new(),
+            static_index: 0,
         }
     }
 
@@ -348,7 +350,9 @@ impl NameScope {
                     let id = GlobalVarId::LocalStatic {
                         name: name.to_string(),
                         function_name: self.function_frame.as_ref().unwrap().name.clone(),
+                        index: self.static_index,
                     };
+                    self.static_index += 1;
                     if t.t.is_scalar() {
                         let initializer = if let Some(tv) = initializer {
                             Some(tv.implicit_cast(&t, span, ec)?)

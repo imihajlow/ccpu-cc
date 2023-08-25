@@ -31,7 +31,11 @@ pub enum GlobalVarId {
     CompilerInternal(String),
     Global(String),
     Static(String),
-    LocalStatic { name: String, function_name: String },
+    LocalStatic {
+        name: String,
+        function_name: String,
+        index: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1958,7 +1962,8 @@ impl std::fmt::Display for GlobalVarId {
             GlobalVarId::LocalStatic {
                 name,
                 function_name,
-            } => write!(f, "$static({}, {})", function_name, name),
+                index,
+            } => write!(f, "$static({}, {}, {})", function_name, name, index),
         }
     }
 }
