@@ -137,15 +137,18 @@ impl NameScope {
         assert_eq!(self.defs.len(), 1);
         for (_key, (val, span)) in &self.defs.first().unwrap().default {
             match val {
-                Value::StaticVar(t, id, _, initializer) => {
-                    if !t.t.is_function() {
-                        let initializer = initializer
-                            .clone()
-                            .unwrap_or_else(|| TypedConstant::new_default(t.clone()));
-                        self.static_initializers
-                            .insert(id.clone(), (initializer, *span));
+                Value::StaticVar(t, id, stclass, initializer) => match stclass {
+                    GlobalStorageClass::Default | GlobalStorageClass::Static => {
+                        if !t.t.is_function() {
+                            let initializer = initializer
+                                .clone()
+                                .unwrap_or_else(|| TypedConstant::new_default(t.clone()));
+                            self.static_initializers
+                                .insert(id.clone(), (initializer, *span));
+                        }
                     }
-                }
+                    GlobalStorageClass::Extern => (),
+                },
                 Value::Object(_, _) => {
                     unreachable!("No objects at top level");
                 }

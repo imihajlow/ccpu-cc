@@ -31,8 +31,6 @@ pub fn deconstruct_ssa(
         block.phi = generic_ir::Phi::new();
     }
 
-    println!("copies = {:#?}", copies);
-
     // Insert copies to the ends of corresponding blocks
     for (block_id, copies) in copies.into_iter() {
         let mut tail_regs = HashSet::new();
