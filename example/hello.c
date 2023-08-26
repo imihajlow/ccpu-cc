@@ -27,7 +27,7 @@
 #define VGA_CHAR_SEG ((unsigned char*)0xe000)
 #define VGA_COLOR_SEG ((unsigned char*)0xd000)
 
-static void vga_clear(unsigned char color) {
+static int vga_clear(unsigned char color) {
     unsigned char *pchar = VGA_CHAR_SEG;
     unsigned char *pcolor = VGA_COLOR_SEG;
     for (int i = 0; i != VGA_ROWS * 128; ++i) {
@@ -36,6 +36,7 @@ static void vga_clear(unsigned char color) {
         ++pchar;
         ++pcolor;
     }
+    return 1;
 }
 
 static void putstring(unsigned char col, unsigned char row, const char *s) {
@@ -47,8 +48,32 @@ static void putstring(unsigned char col, unsigned char row, const char *s) {
     }
 }
 
+static void itoa(char *buf, unsigned int x) {
+    if (x == 0) {
+        *buf = '0';
+        ++buf;
+    } else {
+        char tmp[5];
+        char *p = tmp;
+        while (x) {
+            *p = (x % 10) + '0';
+            x /= 10;
+            ++p;
+        }
+        while (p != tmp) {
+            --p;
+            *buf = *p;
+            ++buf;
+        }
+    }
+    *buf = 0;
+}
+
 void main(void) {
-    vga_clear(COLOR(COLOR_GRAY, COLOR_BLACK));
-    putstring(0,0, "Hello World!");
+    int x = vga_clear(COLOR(COLOR_GRAY, COLOR_BLACK));
+    putstring(0, 0, "Hello World!");
+    char buf[10];
+    itoa(buf, 239);
+    putstring(0, 1, buf);
     while (1) ;
 }

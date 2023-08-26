@@ -18,6 +18,7 @@ use crate::{
     type_builder::TypeBuilder,
 };
 use ir::{GlobalVarId, Width};
+use lang_c::span::Span;
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
@@ -37,6 +38,7 @@ pub struct Function<Reg: Eq + Hash> {
     args: FunctionArgs,
     body: Vec<generic_ir::Block<Reg>>,
     frame: FunctionFrame,
+    span: Span,
 }
 
 impl<Reg: Hash + Eq> Function<Reg> {
@@ -54,6 +56,10 @@ impl<Reg: Hash + Eq> Function<Reg> {
 
     pub fn get_name(&self) -> &str {
         &self.name
+    }
+
+    pub fn get_span(&self) -> Span {
+        self.span
     }
 
     pub fn get_id(&self) -> GlobalVarId {
@@ -133,6 +139,7 @@ impl Function<ir::VirtualReg> {
             name,
             body,
             frame,
+            span: node.span,
         })
     }
 
@@ -354,6 +361,7 @@ impl Function<ir::VirtualReg> {
             args: self.args,
             body,
             frame: self.frame,
+            span: self.span,
         }
     }
 }

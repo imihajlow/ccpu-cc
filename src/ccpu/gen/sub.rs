@@ -54,7 +54,7 @@ pub fn gen_sub_reg_const(
         w.ld(A);
         let cur_byte = (c & 0xff) as u8;
         if cur_byte == 1 && offset == 0 {
-            w.dec(B);
+            w.dec(A);
         } else if cur_byte == 0 && offset == 0 {
             w.sub(A, Zero);
         } else if cur_byte == 0 && offset != 0 {

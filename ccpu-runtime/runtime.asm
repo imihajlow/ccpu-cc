@@ -992,8 +992,8 @@ __cc_div_word:
     ld  a
     inc pl
     ld  b
-    ldi pl, lo(__cc_ret)
-    ldi ph, hi(__cc_ret)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     st  a
     inc pl
     st  b
@@ -1026,8 +1026,8 @@ __cc_mod_word:
     ld  a
     inc pl
     ld  b
-    ldi pl, lo(__cc_ret)
-    ldi ph, hi(__cc_ret)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     st  a
     inc pl
     st  b
@@ -1252,8 +1252,8 @@ __cc_udiv_word:
     ld  a
     inc pl
     ld  b
-    ldi pl, lo(__cc_ret)
-    ldi ph, hi(__cc_ret)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     st  a
     inc pl
     st  b
@@ -1286,8 +1286,8 @@ __cc_umod_word:
     ld  a
     inc pl
     ld  b
-    ldi pl, lo(__cc_ret)
-    ldi ph, hi(__cc_ret)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     st  a
     inc pl
     st  b
@@ -1351,16 +1351,19 @@ divide_word_loop_1:
     ldi pl, lo(remainder)
     ld a
     shl a
+    ldi ph, hi(numerator + 1)
     ldi pl, lo(numerator + 1)
     ld b
     shl b
     st b
     adc a, 0
+    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     st a
 
     ; R >= D?
     ; hi(R) is still 0
+    ldi ph, hi(denominator + 1)
     ldi pl, lo(denominator + 1)
     ld a
     add a, 0
@@ -1371,6 +1374,7 @@ divide_word_loop_1:
     ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld a
+    ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld b
     sub a, b ; lo(R) - lo(D)
@@ -1384,6 +1388,7 @@ divide_word_loop_1:
     ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld a
+    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld b
     sub b, a
@@ -1428,17 +1433,21 @@ divide_word_loop_2:
     adc a, 0
     st a
     mov a, b
+    ldi ph, hi(numerator)
     ldi pl, lo(numerator)
     ld b
     shl b
     st b
     adc a, 0
+    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     st a
 
     ; R >= D?
+    ldi ph, hi(denominator + 1)
     ldi pl, lo(denominator + 1)
     ld a
+    ldi ph, hi(remainder + 1)
     ldi pl, lo(remainder + 1)
     ld b
     sub b, a
@@ -1453,6 +1462,7 @@ divide_word_loop_2:
     ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld a
+    ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld b
     sub a, b ; lo(R) - lo(D)
@@ -1466,12 +1476,15 @@ divide_word_loop_2_r_gt_d:
     ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld a
+    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld b
     sub b, a
     st b
+    ldi ph, hi(denominator + 1)
     ldi pl, lo(denominator + 1)
     ld a
+    ldi ph, hi(remainder + 1)
     ldi pl, lo(remainder + 1)
     ld b
     sbb b, a
@@ -1521,8 +1534,8 @@ __cc_div_byte:
     ldi pl, lo(quotient)
     ldi ph, hi(quotient)
     ld  a
-    ldi pl, lo(__cc_ret)
-    ldi ph, hi(__cc_ret)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     st  a
 
     ldi pl, lo(wrapper_ret)
@@ -1551,8 +1564,8 @@ __cc_mod_byte:
     ldi pl, lo(remainder)
     ldi ph, hi(remainder)
     ld  a
-    ldi pl, lo(__cc_ret)
-    ldi ph, hi(__cc_ret)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     st  a
 
     ldi pl, lo(wrapper_ret)
@@ -1585,6 +1598,7 @@ divide_byte_signed:
     st a
 
     ; test D
+    ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld a
     add a, 0
@@ -1630,6 +1644,7 @@ __cc_div_byte_positive:
     st a
 
     ; R == 0?
+    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld a
     add a, 0
@@ -1657,6 +1672,7 @@ __cc_div_byte_d_minus_r:
     ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld b
+    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld a
     sub b, a
@@ -1707,6 +1723,7 @@ __cc_div_byte_neg_nom:
     neg b
     st b
 
+    ldi ph, hi(tmp)
     ldi pl, lo(tmp)
     ld a
     ldi b, 0x01 ; negative numerator
@@ -1736,8 +1753,8 @@ __cc_udiv_byte:
     ldi pl, lo(quotient)
     ldi ph, hi(quotient)
     ld  a
-    ldi pl, lo(__cc_ret)
-    ldi ph, hi(__cc_ret)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     st  a
 
     ldi pl, lo(wrapper_ret)
@@ -1766,8 +1783,8 @@ __cc_umod_byte:
     ldi pl, lo(remainder)
     ldi ph, hi(remainder)
     ld  a
-    ldi pl, lo(__cc_ret)
-    ldi ph, hi(__cc_ret)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     st  a
 
     ldi pl, lo(wrapper_ret)
@@ -1822,15 +1839,18 @@ divide_byte_loop:
     ldi pl, lo(remainder)
     ld a
     shl a
+    ldi ph, hi(numerator)
     ldi pl, lo(numerator)
     ld b
     shl b
     st b
     adc a, 0
+    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     st a
 
     ; R >= D?
+    ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld b
     sub a, b

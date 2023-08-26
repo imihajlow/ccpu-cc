@@ -1,6 +1,6 @@
 use lang_c::span::Span;
 
-use crate::ccpu::global::get_global_var_label;
+use crate::ccpu::global::{get_global_var_label, get_static_frame_symbol};
 use crate::error::{CompileError, ErrorCollector};
 use crate::generic_ir::{GlobalVarId, Width};
 use crate::initializer::{Constant, TypedConstant};
@@ -50,7 +50,7 @@ pub fn gen_tu(
     }
 
     for f in tu.functions.into_iter() {
-        gen_function(&mut w, f);
+        gen_function(&mut w, f, ec);
     }
 
     for (id, (val, span)) in &tu.scope.static_initializers {
@@ -63,7 +63,11 @@ pub fn gen_tu(
     Ok(w)
 }
 
-fn gen_function(w: &mut InstructionWriter, f: Function<FrameReg>) {
+fn gen_function(
+    w: &mut InstructionWriter,
+    f: Function<FrameReg>,
+    ec: &mut ErrorCollector,
+) -> Result<(), ()> {
     let name = f.get_id();
     w.begin_function(&name);
     // save return address
@@ -92,6 +96,15 @@ fn gen_function(w: &mut InstructionWriter, f: Function<FrameReg>) {
         w.comment(format!("{}", block.tail));
         gen_tail(w, &block.tail, i, f.get_name());
     }
+
+    // allocate static frame
+    let frame_size = check_16bit(f.get_frame_size(), f.get_span(), ec)?;
+    if frame_size != 0 {
+        let id = get_static_frame_symbol(f.get_name());
+        let label = get_global_var_label(&id);
+        w.bss(label, frame_size, 8);
+    }
+    Ok(())
 }
 
 fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, _function_name: &str) {

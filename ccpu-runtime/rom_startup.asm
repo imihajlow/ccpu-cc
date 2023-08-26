@@ -11,10 +11,10 @@
     .global __seg_bss_end
 
     .global memcpy
-    .global memcpy_arg0
-    .global memcpy_arg1
-    .global memcpy_arg2
-    .global memcpy_ret
+    ; arguments for normal calls on frame B
+    .const frameb_arg1 = 0xc800 + 8 * 0
+    .const frameb_arg2 = 0xc800 + 8 * 1
+    .const frameb_arg3 = 0xc800 + 8 * 2
 
     .global main
 
@@ -42,24 +42,24 @@
     st a
 
     ; populate ramtext secion
-    ldi pl, lo(memcpy_arg0)
-    ldi ph, hi(memcpy_arg0)
+    ldi pl, lo(frameb_arg1)
+    ldi ph, hi(frameb_arg1)
     ldi a, lo(__seg_ramtext_begin)
     ldi b, hi(__seg_ramtext_begin)
     st a
     inc pl
     st b
 
-    ldi pl, lo(memcpy_arg1)
-    ldi ph, hi(memcpy_arg1)
+    ldi pl, lo(frameb_arg2)
+    ldi ph, hi(frameb_arg2)
     ldi a, lo(__seg_ramtext_origin_begin)
     ldi b, hi(__seg_ramtext_origin_begin)
     st a
     inc pl
     st b
 
-    ldi pl, lo(memcpy_arg2)
-    ldi ph, hi(memcpy_arg2)
+    ldi pl, lo(frameb_arg3)
+    ldi ph, hi(frameb_arg3)
     ldi a, lo(__seg_ramtext_end - __seg_ramtext_begin)
     ldi b, hi(__seg_ramtext_end - __seg_ramtext_begin)
     st a
