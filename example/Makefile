@@ -2,10 +2,10 @@ all: hello.bin
 
 .PHONY: ../target/debug/ccpu-cc
 
-hello.bin: hello.o ../ccpu-runtime/runtime.o ../ccpu-runtime/rom_startup.o
+hello.bin: hello.o ../ccpu-runtime/runtime.o ../ccpu-runtime/memcpy.o ../ccpu-runtime/rom_startup.o
 	../../ccpu/tools/link.py -o $@ --slim --layout rom.yaml -m $(@:.bin=.map) $^
 
-hello.app: hello.o ../ccpu-runtime/runtime.o ../ccpu-runtime/app_startup.o
+hello.app: hello.o ../ccpu-runtime/runtime.o ../ccpu-runtime/memcpy.o ../ccpu-runtime/app_startup.o
 	../../ccpu/tools/link.py -o $@ --slim --layout app.yaml -m $(@:.app=.map) $^
 
 %.o: %.c ../target/debug/ccpu-cc

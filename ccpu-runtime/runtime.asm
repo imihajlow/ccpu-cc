@@ -1,43 +1,36 @@
-    .export __cc_r_sp
     .export __cc_asr
     .export __cc_lsr_dword
     .export __cc_asl
     .export __cc_asl_dword
     .export __cc_lsr
-    .export __cc_sh_val
-    .export __cc_sh_count
-
-    .export __cc_push
-    .export __cc_pop
-    .export __cc_from
-    .export __cc_to
-    .export __cc_r_a
-    .export __cc_r_b
-    .export __cc_r_r
     .export __cc_mul_byte
     .export __cc_mul_word
     .export __cc_mul_dword
     .export __cc_div_byte
     .export __cc_div_word
+    .export __cc_mod_byte
+    .export __cc_mod_word
     .export __cc_udiv_byte
     .export __cc_udiv_word
-    .export __cc_r_quotient
-    .export __cc_r_remainder
+    .export __cc_umod_byte
+    .export __cc_umod_word
 
-    .export memcpy
-    .export memcpy_arg0
-    .export memcpy_arg1
-    .export memcpy_arg2
-    .export memcpy_ret
+    .export __cc_ret
 
-    .export __cc_int_sh_val_zeroes_before
-    .export __cc_int_sh_val_zeroes_after
+    ; arguments for intrinsic calls
+    .const intrin_arg1 = 0xc800 - 8 * 4
+    .const intrin_arg2 = 0xc800 - 8 * 5
+    .const intrin_arg3 = 0xc800 - 8 * 6
+    .const intrin_result = 0xc800 - 8 * 3
 
+    .const numerator = 0xc800 - 8 * 4
+    .const denominator = 0xc800 - 8 * 5
 
-    .section text
-; bit shifts of word values
-; __cc_sh_val = __cc_sh_val >> __cc_sh_count
-    ; .section text.__cc_asr
+    .const shift_rhs = 0xc800 - 8 * 5
+
+    ; bit shifts of word values
+    ; rhs (bit count) is one byte
+    .section text.__cc_asr
 __cc_asr:
     mov a, pl
     mov b, a
@@ -48,18 +41,27 @@ __cc_asr:
     inc pl
     st a
 
-    ldi pl, lo(__cc_sh_count)
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
     ld b
-    inc pl
-    ld a
     ldi pl, lo(return_val_sign)
     ldi ph, hi(return_val_sign)
-    add a, 0
-    jnz ; count >= 256
     ldi a, 15
-    sub a, b ; 15 - lo(count)
-    jc ; 15 < lo(count)
+    sub a, b ; 15 - count
+    jc ; 15 < count
 
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(shift_lhs)
+    ldi ph, hi(shift_lhs)
+    st  a
+    inc pl
+    st  b
+
+    ; shift_lhs = shift_lhs >> shift_rhs
     ldi a, 8
     sub b, a ; lo(count) - 8
     ldi pl, lo(__cc_asr_count_lt_8)
@@ -70,8 +72,8 @@ __cc_asr:
 
     ; lo(val) := hi(val)
     ; hi(val) := sign(val)
-    ldi pl, lo(__cc_sh_val + 1)
-    ldi ph, hi(__cc_sh_val)
+    ldi pl, lo(shift_lhs + 1)
+    ldi ph, hi(shift_lhs)
     ld a
     dec pl
     st a
@@ -84,14 +86,14 @@ __cc_asr_count_lt_8:
 
     ldi a, 8
     add b, a
-    ldi pl, lo(exit)
-    ldi ph, hi(exit)
+    ldi pl, lo(shift_exit)
+    ldi ph, hi(shift_exit)
     jz ; count == 0
 
     ; b = count
 __cc_asr_loop:
-    ldi ph, hi(__cc_sh_val)
-    ldi pl, lo(__cc_sh_val)
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs)
     ld a
     shr a
     st a
@@ -102,12 +104,12 @@ __cc_asr_loop:
     ldi pl, lo(__cc_asr_loop_end)
     ldi ph, hi(__cc_asr_loop_end)
     jnc
-    ldi ph, hi(__cc_sh_val)
-    ldi pl, lo(__cc_sh_val)
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs)
     ld a
     ldi pl, 0x80
     or a, pl
-    ldi pl, lo(__cc_sh_val)
+    ldi pl, lo(shift_lhs)
     st a
 __cc_asr_loop_end:
     ldi pl, lo(__cc_asr_loop)
@@ -115,13 +117,13 @@ __cc_asr_loop_end:
     dec b
     jnz ; count != 0
 
-    ldi pl, lo(exit)
-    ldi ph, hi(exit)
+    ldi pl, lo(shift_exit)
+    ldi ph, hi(shift_exit)
     jmp
 
 return_val_sign:
-    ldi pl, lo(__cc_sh_val + 1)
-    ldi ph, hi(__cc_sh_val)
+    ldi pl, lo(intrin_result + 1)
+    ldi ph, hi(intrin_result)
     ld a
     shl a ; sign -> carry
     exp a
@@ -132,8 +134,7 @@ return_val_sign:
     ldi ph, hi(exit)
     jmp
 
-    ; __cc_sh_val = __cc_sh_val >> __cc_sh_count
-    ; .section text.__cc_lsr
+    .section text.__cc_lsr
 __cc_lsr:
     mov a, pl
     mov b, a
@@ -144,18 +145,27 @@ __cc_lsr:
     inc pl
     st a
 
-    ldi pl, lo(__cc_sh_count)
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
     ld b
-    inc pl
-    ld a
     ldi pl, lo(return_0)
     ldi ph, hi(return_0)
-    add a, 0
-    jnz ; count >= 256
     ldi a, 15
-    sub a, b ; 15 - lo(count)
-    jc ; 15 < lo(count)
+    sub a, b ; 15 - count
+    jc ; 15 < count
 
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(shift_lhs)
+    ldi ph, hi(shift_lhs)
+    st  a
+    inc pl
+    st  b
+
+    ; shift_lhs = shift_lhs >> shift_rhs
     ldi a, 8
     sub b, a ; lo(count) - 8
     ldi pl, lo(__cc_lsr_count_lt_8)
@@ -166,8 +176,8 @@ __cc_lsr:
 
     ; lo(val) := hi(val)
     ; hi(val) := 0
-    ldi pl, lo(__cc_sh_val + 1)
-    ldi ph, hi(__cc_sh_val)
+    ldi pl, lo(shift_lhs + 1)
+    ldi ph, hi(shift_lhs)
     ld a
     dec pl
     st a
@@ -179,14 +189,14 @@ __cc_lsr_count_lt_8:
 
     ldi a, 8
     add b, a
-    ldi pl, lo(exit)
-    ldi ph, hi(exit)
+    ldi pl, lo(shift_exit)
+    ldi ph, hi(shift_exit)
     jz ; count == 0
 
     ; b = count
 __cc_lsr_loop:
-    ldi ph, hi(__cc_sh_val)
-    ldi pl, lo(__cc_sh_val)
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs)
     ld a
     shr a
     st a
@@ -197,12 +207,12 @@ __cc_lsr_loop:
     ldi pl, lo(__cc_lsr_loop_end)
     ldi ph, hi(__cc_lsr_loop_end)
     jnc
-    ldi ph, hi(__cc_sh_val)
-    ldi pl, lo(__cc_sh_val)
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs)
     ld a
     ldi pl, 0x80
     or a, pl
-    ldi pl, lo(__cc_sh_val)
+    ldi pl, lo(shift_lhs)
     st a
 __cc_lsr_loop_end:
     ldi pl, lo(__cc_asr_loop)
@@ -210,13 +220,13 @@ __cc_lsr_loop_end:
     dec b
     jnz ; count != 0
 
-    ldi pl, lo(exit)
-    ldi ph, hi(exit)
+    ldi pl, lo(shift_exit)
+    ldi ph, hi(shift_exit)
     jmp
 
 
-    ; __cc_sh_val = __cc_sh_val << __cc_sh_count
-    ; .section text.__cc_asl
+    ; shift_lhs = shift_lhs << shift_rhs
+    .section text.__cc_asl
 __cc_asl:
     mov a, pl
     mov b, a
@@ -227,17 +237,25 @@ __cc_asl:
     inc pl
     st a
 
-    ldi pl, lo(__cc_sh_count)
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
     ld b
-    inc pl
-    ld a
     ldi pl, lo(return_0)
     ldi ph, hi(return_0)
-    add a, 0
-    jnz ; count >= 256
     ldi a, 15
-    sub a, b ; 15 - lo(count)
-    jc ; 15 < lo(count)
+    sub a, b ; 15 - count
+    jc ; 15 < count
+
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(shift_lhs)
+    ldi ph, hi(shift_lhs)
+    st  a
+    inc pl
+    st  b
 
     ldi a, 8
     sub b, a ; lo(count) - 8
@@ -249,8 +267,8 @@ __cc_asl:
 
     ; hi(val) := lo(val)
     ; lo(val) := 0
-    ldi pl, lo(__cc_sh_val)
-    ldi ph, hi(__cc_sh_val)
+    ldi pl, lo(shift_lhs)
+    ldi ph, hi(shift_lhs)
     ld a
     inc pl
     st a
@@ -262,14 +280,14 @@ __cc_asl_count_lt_8:
 
     ldi a, 8
     add b, a
-    ldi pl, lo(exit)
-    ldi ph, hi(exit)
+    ldi pl, lo(shift_exit)
+    ldi ph, hi(shift_exit)
     jz ; count == 0
 
     ; b = count
 __cc_asl_loop:
-    ldi ph, hi(__cc_sh_val)
-    ldi pl, lo(__cc_sh_val + 1)
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs + 1)
     ld a
     shl a
     st a
@@ -280,12 +298,12 @@ __cc_asl_loop:
     ldi pl, lo(__cc_asl_loop_end)
     ldi ph, hi(__cc_asl_loop_end)
     jnc
-    ldi ph, hi(__cc_sh_val)
-    ldi pl, lo(__cc_sh_val + 1)
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs + 1)
     ld a
     ldi pl, 0x01
     or a, pl
-    ldi pl, lo(__cc_sh_val + 1)
+    ldi pl, lo(shift_lhs + 1)
     st a
 __cc_asl_loop_end:
     ldi pl, lo(__cc_asl_loop)
@@ -293,18 +311,32 @@ __cc_asl_loop_end:
     dec b
     jnz ; count != 0
 
-    ldi pl, lo(exit)
-    ldi ph, hi(exit)
+    ldi pl, lo(shift_exit)
+    ldi ph, hi(shift_exit)
     jmp
 
     .section text
 return_0:
-    ldi pl, lo(__cc_sh_val)
-    ldi ph, hi(__cc_sh_val)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     mov a, 0
     st a
     inc pl
     st a
+    ldi pl, lo(exit)
+    ldi ph, hi(exit)
+    jmp
+shift_exit:
+    ldi pl, lo(shift_lhs)
+    ldi ph, hi(shift_lhs)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
+    st  a
+    inc pl
+    st  b
 exit:
     ldi pl, lo(int_ret)
     ldi ph, hi(int_ret)
@@ -315,8 +347,8 @@ exit:
     jmp
 
 return_0_dword:
-    ldi pl, lo(__cc_sh_val)
-    ldi ph, hi(__cc_sh_val)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     mov a, 0
     st a
     inc pl
@@ -328,8 +360,32 @@ return_0_dword:
     ldi pl, lo(exit)
     ldi ph, hi(exit)
     jmp
+shift_dword_exit:
+    ldi pl, lo(shift_lhs)
+    ldi ph, hi(shift_lhs)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
+    st  a
+    inc pl
+    st  b
+    ldi pl, lo(shift_lhs + 2)
+    ldi ph, hi(shift_lhs)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result + 2)
+    ldi ph, hi(intrin_result)
+    st  a
+    inc pl
+    st  b
+    ldi pl, lo(exit)
+    ldi ph, hi(exit)
+    jmp
 
-; __cc_sh_val = __cc_sh_val << __cc_sh_count
+; shift_lhs = shift_lhs << shift_rhs
     ; .section text.__cc_asl_dword
 __cc_asl_dword:
     mov a, pl
@@ -341,17 +397,39 @@ __cc_asl_dword:
     inc pl
     st a
 
-    ldi pl, lo(__cc_sh_count)
-    ld a
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
+    ld  a
     ldi pl, lo(return_0_dword)
     ldi ph, hi(return_0_dword)
     ldi b, 31
     sub b, a ; 31 - count
     jc ; 31 < count
-    ldi pl, lo(exit)
-    ldi ph, hi(exit)
+    ldi pl, lo(shift_dword_exit)
+    ldi ph, hi(shift_dword_exit)
     add a, 0
     jz
+
+    ldi ph, hi(intrin_arg1)
+    ldi pl, lo(intrin_arg1)
+    ld  a
+    inc pl
+    ld  b
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs)
+    st  a
+    inc pl
+    st  b
+    ldi ph, hi(intrin_arg1)
+    ldi pl, lo(intrin_arg1 + 2)
+    ld  a
+    inc pl
+    ld  b
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs + 2)
+    st  a
+    inc pl
+    st  b
 
     mov b, a
     ldi pl, 0x7
@@ -364,10 +442,10 @@ __cc_asl_dword:
     ldi ph, hi(bit_shift)
     st a
 
-    ; there are three zero bytes in memory before __cc_sh_val
+    ; there are three zero bytes in memory before shift_lhs
     mov a, b
 
-    ldi pl, lo(__cc_sh_val + 3)
+    ldi pl, lo(shift_lhs + 3)
     sub pl, a
     ld b
     add pl, a
@@ -397,12 +475,12 @@ asl_dword_loop:
         ld a
         dec a
         st a
-        ldi pl, lo(exit)
-        ldi ph, hi(exit)
+        ldi pl, lo(shift_dword_exit)
+        ldi ph, hi(shift_dword_exit)
         jc
 
-        ldi ph, hi(__cc_sh_val)
-        ldi pl, lo(__cc_sh_val + 3)
+        ldi ph, hi(shift_lhs)
+        ldi pl, lo(shift_lhs + 3)
         ld a
         dec pl
         ld b
@@ -412,14 +490,14 @@ asl_dword_loop:
         inc pl
         st a
         mov a, b
-        ldi pl, lo(__cc_sh_val + 1)
+        ldi pl, lo(shift_lhs + 1)
         ld b
         shl b
         adc a, 0
         inc pl
         st a
         mov a, b
-        ldi pl, lo(__cc_sh_val)
+        ldi pl, lo(shift_lhs)
         ld b
         shl b
         adc a, 0
@@ -431,7 +509,7 @@ asl_dword_loop:
         ldi ph, hi(asl_dword_loop)
         jmp
 
-; __cc_sh_val = __cc_sh_val >> __cc_sh_count
+; shift_lhs = shift_lhs >> shift_rhs
     ; .section text.__cc_lsr_dword
 __cc_lsr_dword:
     mov a, pl
@@ -443,17 +521,39 @@ __cc_lsr_dword:
     inc pl
     st a
 
-    ldi pl, lo(__cc_sh_count)
+    ldi pl, lo(shift_rhs)
+    ldi ph, hi(shift_rhs)
     ld a
     ldi pl, lo(return_0_dword)
     ldi ph, hi(return_0_dword)
     ldi b, 31
     sub b, a ; 31 - count
     jc ; 31 < count
-    ldi pl, lo(exit)
-    ldi ph, hi(exit)
+    ldi pl, lo(shift_dword_exit)
+    ldi ph, hi(shift_dword_exit)
     add a, 0
     jz
+
+    ldi ph, hi(intrin_arg1)
+    ldi pl, lo(intrin_arg1)
+    ld  a
+    inc pl
+    ld  b
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs)
+    st  a
+    inc pl
+    st  b
+    ldi ph, hi(intrin_arg1)
+    ldi pl, lo(intrin_arg1 + 2)
+    ld  a
+    inc pl
+    ld  b
+    ldi ph, hi(shift_lhs)
+    ldi pl, lo(shift_lhs + 2)
+    st  a
+    inc pl
+    st  b
 
     mov b, a
     ldi pl, 0x7
@@ -466,10 +566,10 @@ __cc_lsr_dword:
     ldi ph, hi(bit_shift)
     st a
 
-    ; there are three zero bytes in memory after __cc_sh_val
+    ; there are three zero bytes in memory after shift_lhs
     mov a, b
 
-    ldi pl, lo(__cc_sh_val)
+    ldi pl, lo(shift_lhs)
     add pl, a
     ld b
     sub pl, a
@@ -499,12 +599,12 @@ lsr_dword_loop:
         ld a
         dec a
         st a
-        ldi pl, lo(exit)
-        ldi ph, hi(exit)
+        ldi pl, lo(shift_dword_exit)
+        ldi ph, hi(shift_dword_exit)
         jc
 
-        ldi ph, hi(__cc_sh_val)
-        ldi pl, lo(__cc_sh_val)
+        ldi ph, hi(shift_lhs)
+        ldi pl, lo(shift_lhs)
         ld b
         shr b
         inc pl
@@ -514,7 +614,7 @@ lsr_dword_loop:
         ldi pl, 0x80
         and a, pl
         or b, a
-        ldi pl, lo(__cc_sh_val)
+        ldi pl, lo(shift_lhs)
         st b
 
         inc pl
@@ -527,7 +627,7 @@ lsr_dword_loop:
         ldi pl, 0x80
         and a, pl
         or b, a
-        ldi pl, lo(__cc_sh_val + 1)
+        ldi pl, lo(shift_lhs + 1)
         st b
 
         inc pl
@@ -540,7 +640,7 @@ lsr_dword_loop:
         ldi pl, 0x80
         and a, pl
         or b, a
-        ldi pl, lo(__cc_sh_val + 2)
+        ldi pl, lo(shift_lhs + 2)
         st b
 
         inc pl
@@ -552,250 +652,8 @@ lsr_dword_loop:
         ldi ph, hi(lsr_dword_loop)
         jmp
 
-
-    ; push onto stack values in range [__cc_from, __cc_to)
-    ; .section text.__cc_push
-__cc_push:
-    mov a, pl
-    mov b, a
-    mov a, ph
-    ldi pl, lo(int_ret)
-    ldi ph, hi(int_ret)
-    st b
-    inc pl
-    st a
-
-    ; SP -= (to - from)
-    ; SP -= to
-    ldi pl, lo(__cc_to)
-    ld b
-    ldi pl, lo(__cc_r_sp)
-    ld a
-    sub a, b
-    st a
-    ldi pl, lo(__cc_to + 1)
-    ld b
-    ldi pl, lo(__cc_r_sp + 1)
-    ld a
-    sbb a, b
-    st a
-    ; SP += from
-    ldi pl, lo(__cc_from)
-    ld b
-    ldi pl, lo(__cc_r_sp)
-    ld a
-    add a, b
-    st a
-    ldi pl, lo(__cc_from + 1)
-    ld b
-    ldi pl, lo(__cc_r_sp + 1)
-    ld a
-    adc a, b
-    st a
-
-    ; src_from := from
-    ldi pl, lo(__cc_from)
-    ld a
-    inc pl
-    ld b
-    ldi pl, lo(src_from)
-    st a
-    inc pl
-    st b
-    ; src_to := to
-    ldi pl, lo(__cc_to)
-    ld a
-    inc pl
-    ld b
-    ldi pl, lo(src_to)
-    st a
-    inc pl
-    st b
-    ; dst_from := SP
-    ldi pl, lo(__cc_r_sp)
-    ld a
-    inc pl
-    ld b
-    ldi pl, lo(dst_from)
-    st a
-    inc pl
-    st b
-
-    ldi pl, lo(copy)
-    ldi ph, hi(copy)
-    jmp
-
-    ; pop from stack values into range [__cc_from, __cc_to)
-    ; .section text.__cc_pop
-__cc_pop:
-    mov a, pl
-    mov b, a
-    mov a, ph
-    ldi pl, lo(int_ret)
-    ldi ph, hi(int_ret)
-    st b
-    inc pl
-    st a
-
-    ; src_from := SP
-    ldi pl, lo(__cc_r_sp)
-    ld a
-    inc pl
-    ld b
-    ldi pl, lo(src_from)
-    st a
-    inc pl
-    st b
-
-    ; SP += (to - from)
-    ; SP += to
-    ldi pl, lo(__cc_to)
-    ld b
-    ldi pl, lo(__cc_r_sp)
-    ld a
-    add a, b
-    st a
-    ldi pl, lo(__cc_to + 1)
-    ld b
-    ldi pl, lo(__cc_r_sp + 1)
-    ld a
-    adc a, b
-    st a
-    ; SP -= from
-    ldi pl, lo(__cc_from)
-    ld b
-    ldi pl, lo(__cc_r_sp)
-    ld a
-    sub a, b
-    st a
-    ldi pl, lo(__cc_from + 1)
-    ld b
-    ldi pl, lo(__cc_r_sp + 1)
-    ld a
-    sbb a, b
-    st a
-
-    ; src_to := SP
-    ldi pl, lo(__cc_r_sp)
-    ld a
-    inc pl
-    ld b
-    ldi pl, lo(src_to)
-    st a
-    inc pl
-    st b
-    ; dst_from := from
-    ldi pl, lo(__cc_from)
-    ld a
-    inc pl
-    ld b
-    ldi pl, lo(dst_from)
-    st a
-    inc pl
-    st b
-
-    ; copy [src_from, src_to) into [dst_from, ...)
-copy:
-
-copy_loop:
-        ldi ph, hi(src_from)
-        ldi pl, lo(src_from)
-        ld b
-        ldi pl, lo(src_to)
-        ld a
-        sub b, a
-        ldi pl, lo(copy_loop_neq)
-        ldi ph, hi(copy_loop_neq)
-        jnz
-        ldi ph, hi(src_from + 1)
-        ldi pl, lo(src_from + 1)
-        ld b
-        ldi pl, lo(src_to + 1)
-        ld a
-        sub b, a
-        ldi pl, lo(exit)
-        ldi ph, hi(exit)
-        jz ; src_to == src_from
-    copy_loop_neq:
-        ; *dst_from := *src_from
-        ldi pl, lo(src_from)
-        ldi ph, hi(src_from)
-        ld a
-        inc pl
-        ld ph
-        mov pl, a
-        ld b
-        ldi ph, hi(dst_from)
-        ldi pl, lo(dst_from)
-        ld a
-        inc pl
-        ld ph
-        mov pl, a
-        st b
-        ; src_from -= 1
-        ldi pl, lo(src_from)
-        ldi ph, hi(src_from)
-        ld b
-        inc pl
-        ld a
-        inc b
-        adc a, 0
-        st a
-        dec pl
-        st b
-        ; dst_from -= 1
-        ldi pl, lo(dst_from)
-        ld b
-        inc pl
-        ld a
-        inc b
-        adc a, 0
-        st a
-        dec pl
-        st b
-
-        ldi pl, lo(copy_loop)
-        ldi ph, hi(copy_loop)
-        jmp
-
-memcpy:
-    mov a, pl
-    mov b, a
-    mov a, ph
-    ldi pl, lo(int_ret)
-    ldi ph, hi(int_ret)
-    st b
-    inc pl
-    st a
-
-    ldi pl, lo(memcpy_arg2)
-    ldi ph, hi(memcpy_arg2)
-    ld a
-    inc pl
-    ld b
-    ldi pl, lo(memcpy_arg1)
-    ldi ph, hi(memcpy_arg1)
-    ld pl
-    add a, pl
-    ldi pl, lo(memcpy_arg1 + 1)
-    ld ph
-    mov pl, a
-    mov a, b
-    adc a, ph
-    mov b, a
-    mov a, pl
-    ldi pl, lo(src_to)
-    ldi ph, hi(src_to)
-    st a
-    inc pl
-    st b
-
-    ldi pl, lo(copy)
-    ldi ph, hi(copy)
-    jmp
-
-; multiply A and B, result into R
-    ; .section text.__cc_mul_byte
+; multiply A and B, intrin_result into R
+    .section text.__cc_mul_byte
 __cc_mul_byte:
     mov a, pl
     mov b, a
@@ -807,15 +665,15 @@ __cc_mul_byte:
     st a
 
 ; R := 0
-    ldi pl, lo(__cc_r_r)
-    ldi ph, hi(__cc_r_r)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     mov a, 0
     st a
 
 __cc_mul_byte_loop:
     ; B >>= 1
-    ldi pl, lo(__cc_r_b)
-    ldi ph, hi(__cc_r_b)
+    ldi pl, lo(intrin_arg2)
+    ldi ph, hi(intrin_arg2)
     ld a
     shr a
     st a
@@ -823,24 +681,24 @@ __cc_mul_byte_loop:
     ldi ph, hi(__cc_mul_byte_added)
     jnc ; no need to add
     ; R += A
-    ldi pl, lo(__cc_r_a)
-    ldi ph, hi(__cc_r_a)
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
     ld a
-    ldi pl, lo(__cc_r_r)
+    ldi pl, lo(intrin_result)
     ld b
     add b, a
     st b
 __cc_mul_byte_added:
     ; A <<= 1
-    ldi ph, hi(__cc_r_a)
-    ldi pl, lo(__cc_r_a)
+    ldi ph, hi(intrin_arg1)
+    ldi pl, lo(intrin_arg1)
     ld a
     shl a
     st a
 
     ; A | B == 0?
     ; a = A
-    ldi pl, lo(__cc_r_b)
+    ldi pl, lo(intrin_arg2)
     ld b
     or a, b
     ldi pl, lo(__cc_mul_byte_loop)
@@ -851,8 +709,8 @@ __cc_mul_byte_added:
     ldi ph, hi(exit)
     jmp
 
-; multiply A and B, result into R
-    ; .section text.__cc_mul_word
+; multiply A and B, intrin_result into R
+    .section text.__cc_mul_word
 __cc_mul_word:
     mov a, pl
     mov b, a
@@ -864,8 +722,8 @@ __cc_mul_word:
     st a
 
     ; R := 0
-    ldi pl, lo(__cc_r_r)
-    ldi ph, hi(__cc_r_r)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     mov a, 0
     st a
     inc pl
@@ -873,8 +731,8 @@ __cc_mul_word:
 
 __cc_mul_word_loop:
     ; lo(B) >>= 1
-    ldi pl, lo(__cc_r_b)
-    ldi ph, hi(__cc_r_b)
+    ldi pl, lo(intrin_arg2)
+    ldi ph, hi(intrin_arg2)
     ld a
     shr a
     st a
@@ -882,23 +740,23 @@ __cc_mul_word_loop:
     ldi ph, hi(__cc_mul_word_added)
     jnc ; no need to add
     ; R += A
-    ldi pl, lo(__cc_r_a)
-    ldi ph, hi(__cc_r_a)
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
     ld a
-    ldi pl, lo(__cc_r_r)
+    ldi pl, lo(intrin_result)
     ld b
     add b, a
     st b
-    ldi pl, lo(__cc_r_a + 1)
+    ldi pl, lo(intrin_arg1 + 1)
     ld a
-    ldi pl, lo(__cc_r_r + 1)
+    ldi pl, lo(intrin_result + 1)
     ld b
     adc b, a
     st b
 __cc_mul_word_added:
     ; hi(B) >>= 1
-    ldi pl, lo(__cc_r_b + 1)
-    ldi ph, hi(__cc_r_b)
+    ldi pl, lo(intrin_arg2 + 1)
+    ldi ph, hi(intrin_arg2)
     ld b
     shr b
     st b
@@ -911,7 +769,7 @@ __cc_mul_word_added:
     or a, b
     st a
     ; A <<= 1
-    ldi pl, lo(__cc_r_a)
+    ldi pl, lo(intrin_arg1)
     ld a
     shl a
     st a
@@ -929,7 +787,7 @@ __cc_mul_word_added:
     dec pl
     ld b
     or a, b
-    ldi pl, lo(__cc_r_b)
+    ldi pl, lo(intrin_arg2)
     ld b
     or a, b
     inc pl
@@ -943,7 +801,7 @@ __cc_mul_word_added:
     ldi ph, hi(exit)
     jmp
 
-; multiply A and B, result into R
+; multiply A and B, intrin_result into R
     .section text.__cc_mul_dword
 __cc_mul_dword:
     mov a, pl
@@ -956,8 +814,8 @@ __cc_mul_dword:
     st a
 
     ; R := 0
-    ldi pl, lo(__cc_r_r)
-    ldi ph, hi(__cc_r_r)
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
     mov a, 0
     st a
     inc pl
@@ -969,8 +827,8 @@ __cc_mul_dword:
 
 __cc_mul_dword_loop:
     ; lo(B) >>= 1
-    ldi pl, lo(__cc_r_b)
-    ldi ph, hi(__cc_r_b)
+    ldi pl, lo(intrin_arg2)
+    ldi ph, hi(intrin_arg2)
     ld a
     shr a
     st a
@@ -978,35 +836,35 @@ __cc_mul_dword_loop:
     ldi ph, hi(__cc_mul_dword_added)
     jnc ; no need to add
     ; R += A
-    ldi pl, lo(__cc_r_a)
-    ldi ph, hi(__cc_r_a)
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
     ld a
-    ldi pl, lo(__cc_r_r)
+    ldi pl, lo(intrin_result)
     ld b
     add b, a
     st b
-    ldi pl, lo(__cc_r_a + 1)
+    ldi pl, lo(intrin_arg1 + 1)
     ld a
-    ldi pl, lo(__cc_r_r + 1)
+    ldi pl, lo(intrin_result + 1)
     ld b
     adc b, a
     st b
-    ldi pl, lo(__cc_r_a + 2)
+    ldi pl, lo(intrin_arg1 + 2)
     ld a
-    ldi pl, lo(__cc_r_r + 2)
+    ldi pl, lo(intrin_result + 2)
     ld b
     adc b, a
     st b
-    ldi pl, lo(__cc_r_a + 3)
+    ldi pl, lo(intrin_arg1 + 3)
     ld a
-    ldi pl, lo(__cc_r_r + 3)
+    ldi pl, lo(intrin_result + 3)
     ld b
     adc b, a
     st b
 __cc_mul_dword_added:
     ; B[1] >>= 1
-    ldi pl, lo(__cc_r_b + 1)
-    ldi ph, hi(__cc_r_b)
+    ldi pl, lo(intrin_arg2 + 1)
+    ldi ph, hi(intrin_arg2)
     ld b
     shr b
     st b
@@ -1020,8 +878,8 @@ __cc_mul_dword_added:
     st a
 
     ; B[2] >>= 1
-    ldi pl, lo(__cc_r_b + 2)
-    ldi ph, hi(__cc_r_b)
+    ldi pl, lo(intrin_arg2 + 2)
+    ldi ph, hi(intrin_arg2)
     ld b
     shr b
     st b
@@ -1035,8 +893,8 @@ __cc_mul_dword_added:
     st a
 
     ; B[3] >>= 1
-    ldi pl, lo(__cc_r_b + 3)
-    ldi ph, hi(__cc_r_b)
+    ldi pl, lo(intrin_arg2 + 3)
+    ldi ph, hi(intrin_arg2)
     ld b
     shr b
     st b
@@ -1050,7 +908,7 @@ __cc_mul_dword_added:
     st a
 
     ; A <<= 1
-    ldi pl, lo(__cc_r_a)
+    ldi pl, lo(intrin_arg1)
     ld a
     shl a
     st a
@@ -1062,7 +920,7 @@ __cc_mul_dword_added:
     shl pl
     exp b
     or a, pl
-    ldi pl, lo(__cc_r_a + 1)
+    ldi pl, lo(intrin_arg1 + 1)
     st a
     ldi a, 1
     and a, b
@@ -1072,7 +930,7 @@ __cc_mul_dword_added:
     shl pl
     exp b
     or a, pl
-    ldi pl, lo(__cc_r_a + 2)
+    ldi pl, lo(intrin_arg1 + 2)
     st a
     ldi a, 1
     and a, b
@@ -1094,7 +952,7 @@ __cc_mul_dword_added:
     dec pl
     ld b
     or a, b
-    ldi pl, lo(__cc_r_b)
+    ldi pl, lo(intrin_arg2)
     ld b
     or a, b
     inc pl
@@ -1114,10 +972,79 @@ __cc_mul_dword_added:
     ldi ph, hi(exit)
     jmp
 
-; A / B
-; __cc_r_a / __cc_r_b -> __cc_r_quotient, __cc_r_remainder
-    ; .section text.__cc_div_word
+    .section text.__cc_div_word
 __cc_div_word:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    st b
+    inc pl
+    st a
+
+    ldi pl, lo(divide_word_signed)
+    ldi ph, hi(divide_word_signed)
+    jmp
+
+    ldi pl, lo(quotient)
+    ldi ph, hi(quotient)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(__cc_ret)
+    ldi ph, hi(__cc_ret)
+    st  a
+    inc pl
+    st  b
+
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+    .section text.__cc_mod_word
+__cc_mod_word:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    st b
+    inc pl
+    st a
+
+    ldi pl, lo(divide_word_signed)
+    ldi ph, hi(divide_word_signed)
+    jmp
+
+    ldi pl, lo(remainder)
+    ldi ph, hi(remainder)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(__cc_ret)
+    ldi ph, hi(__cc_ret)
+    st  a
+    inc pl
+    st  b
+
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+
+; A / B
+; intrin_arg1 / intrin_arg2 -> intrin_result, remainder
+    .section text.__cc_div_word
+divide_word_signed:
     mov a, pl
     mov b, a
     mov a, ph
@@ -1305,10 +1232,77 @@ __cc_div_word_neg_nom:
     ldi ph, hi(__cc_div_word_positive)
     jmp
 
-    ; A (=N) / B (=D)
-    ; preserve B
-    ; .section text.__cc_udiv_word
+    .section text.__cc_udiv_word
 __cc_udiv_word:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    st b
+    inc pl
+    st a
+
+    ldi pl, lo(divide_word)
+    ldi ph, hi(divide_word)
+    jmp
+
+    ldi pl, lo(quotient)
+    ldi ph, hi(quotient)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(__cc_ret)
+    ldi ph, hi(__cc_ret)
+    st  a
+    inc pl
+    st  b
+
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+    .section text.__cc_umod_word
+__cc_umod_word:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    st b
+    inc pl
+    st a
+
+    ldi pl, lo(divide_word)
+    ldi ph, hi(divide_word)
+    jmp
+
+    ldi pl, lo(remainder)
+    ldi ph, hi(remainder)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(__cc_ret)
+    ldi ph, hi(__cc_ret)
+    st  a
+    inc pl
+    st  b
+
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+    .section text.divide_word
+    ; unsigned N / D
+    ; preserve D
 divide_word:
     mov a, pl
     mov b, a
@@ -1509,11 +1503,70 @@ divide_word_loop_2_r_lt_d:
     mov pl, a
     jmp
 
+    .section text.__cc_div_byte
+__cc_div_byte:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    st b
+    inc pl
+    st a
+
+    ldi pl, lo(divide_byte_signed)
+    ldi ph, hi(divide_byte_signed)
+    jmp
+
+    ldi pl, lo(quotient)
+    ldi ph, hi(quotient)
+    ld  a
+    ldi pl, lo(__cc_ret)
+    ldi ph, hi(__cc_ret)
+    st  a
+
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+    .section text.__cc_mod_byte
+__cc_mod_byte:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    st b
+    inc pl
+    st a
+
+    ldi pl, lo(divide_byte_signed)
+    ldi ph, hi(divide_byte_signed)
+    jmp
+
+    ldi pl, lo(remainder)
+    ldi ph, hi(remainder)
+    ld  a
+    ldi pl, lo(__cc_ret)
+    ldi ph, hi(__cc_ret)
+    st  a
+
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
 
     ; A / B
-    ; __cc_r_a / __cc_r_b -> __cc_r_quotient, __cc_r_remainder
-    ; .section text.__cc_div_byte
-__cc_div_byte:
+    ; intrin_arg1 / intrin_arg2 -> __cc_r_quotient, __cc_r_remainder
+    .section text.divide_byte_signed
+divide_byte_signed:
     mov a, pl
     mov b, a
     mov a, ph
@@ -1665,10 +1718,70 @@ __cc_div_byte_neg_nom:
     jmp
 
 
+    .section text.__cc_udiv_byte
+__cc_udiv_byte:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    st b
+    inc pl
+    st a
+
+    ldi pl, lo(divide_byte)
+    ldi ph, hi(divide_byte)
+    jmp
+
+    ldi pl, lo(quotient)
+    ldi ph, hi(quotient)
+    ld  a
+    ldi pl, lo(__cc_ret)
+    ldi ph, hi(__cc_ret)
+    st  a
+
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+    .section text.__cc_umod_byte
+__cc_umod_byte:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    st b
+    inc pl
+    st a
+
+    ldi pl, lo(divide_byte)
+    ldi ph, hi(divide_byte)
+    jmp
+
+    ldi pl, lo(remainder)
+    ldi ph, hi(remainder)
+    ld  a
+    ldi pl, lo(__cc_ret)
+    ldi ph, hi(__cc_ret)
+    st  a
+
+    ldi pl, lo(wrapper_ret)
+    ldi ph, hi(wrapper_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+
     ; A (=N) / B (=D)
     ; preserve B
-    ; .section text.__cc_udiv_byte
-__cc_udiv_byte:
+    .section text.__cc_divide_byte
 divide_byte:
     mov a, pl
     mov b, a
@@ -1765,33 +1878,19 @@ __cc_div_zero_trap:
 
     .section bss.natrix_runtime
     .align 64 ; all internal data have the same hi byte
-__cc_r_sp: res 2
-__cc_int_sh_val_zeroes_before: res 3
-__cc_sh_val: res 4
-__cc_int_sh_val_zeroes_after: res 3
-__cc_sh_count: res 2
-__cc_from: res 2
-__cc_to: res 2
-numerator:
-__cc_r_a: res 4
-denominator:
-__cc_r_b: res 4
-__cc_r_r: res 4
+__cc_ret: res 8
+    res 3 ; zeroes before shift_lhs
+shift_lhs: res 4
+    res 3 ; zeroes after shift_lhs
 
 int_ret: res 2
-memcpy_arg1:
-src_from: res 2
-src_to: res 2
-memcpy_arg0:
-dst_from: res 2
 tmp: res 2
 bit_shift: res 1
 byte_shift: res 1
-__cc_r_quotient:
 quotient: res 2
-__cc_r_remainder:
 remainder: res 2
 div_ret: res 2
+wrapper_ret: res 2
 qbit: res 2
 memcpy_ret:
 memcpy_arg2: res 2
