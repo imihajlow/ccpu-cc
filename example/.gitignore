@@ -2,3 +2,5 @@
 *.o
 *.bin
 *.map
+*.app
+*.img
