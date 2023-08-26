@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
 
-use crate::generic_ir::{VarLocation, Width};
+use crate::generic_ir::{GlobalVarId, VarLocation, Width};
 
-use super::global;
+use super::global::{self, get_global_var_label};
 use super::reg::FrameReg;
 
 pub struct InstructionWriter {
@@ -104,13 +104,14 @@ impl InstructionWriter {
             bss: HashMap::new(),
             data: HashMap::new(),
             rodata: HashMap::new(),
-            last: [None; 5],
+            last: [None, None, None, None, Some(0)],
             next_label: 0,
         }
     }
 
-    pub fn begin_function(&mut self, name: String) {
-        self.last = [None; 5];
+    pub fn begin_function(&mut self, name: &GlobalVarId) {
+        let name = get_global_var_label(&name);
+        self.reset_last();
         self.text.push((name, Vec::new()));
     }
 
@@ -175,36 +176,45 @@ impl InstructionWriter {
     }
 
     pub fn label(&mut self, label: String) {
-        self.last = [None; 5];
+        self.reset_last();
         self.push(TextItem::Label(label));
     }
 
     pub fn jmp(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jmp));
     }
 
     pub fn jz(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jc(Cond::Z)));
     }
     pub fn jc(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jc(Cond::C)));
     }
     pub fn jo(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jc(Cond::O)));
     }
     pub fn js(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jc(Cond::S)));
     }
     pub fn jnz(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jc(Cond::NZ)));
     }
     pub fn jnc(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jc(Cond::NC)));
     }
     pub fn jno(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jc(Cond::NO)));
     }
     pub fn jns(&mut self) {
+        self.reset_last();
         self.push(TextItem::Op(Op::Jc(Cond::NS)));
     }
 
@@ -288,51 +298,72 @@ impl InstructionWriter {
     }
 
     pub fn mov(&mut self, dst: Reg, src: Reg) {
+        self.last[dst as usize] = self.last[src as usize];
         self.arithm(ArithmOp::MOV, dst, src);
     }
     pub fn add(&mut self, dst: Reg, src: Reg) {
+        self.last[dst as usize] = self.last[dst as usize]
+            .and_then(|dst| self.last[src as usize].map(|src| dst.wrapping_add(src)));
         self.arithm(ArithmOp::ADD, dst, src);
     }
     pub fn adc(&mut self, dst: Reg, src: Reg) {
+        self.last[dst as usize] = None;
         self.arithm(ArithmOp::ADC, dst, src);
     }
     pub fn sub(&mut self, dst: Reg, src: Reg) {
+        self.last[dst as usize] = self.last[dst as usize]
+            .and_then(|dst| self.last[src as usize].map(|src| dst.wrapping_sub(src)));
         self.arithm(ArithmOp::SUB, dst, src);
     }
     pub fn sbb(&mut self, dst: Reg, src: Reg) {
+        self.last[dst as usize] = None;
         self.arithm(ArithmOp::SBB, dst, src);
     }
     pub fn inc(&mut self, dst: Reg) {
+        self.last[dst as usize] = self.last[dst as usize].map(|dst| dst.wrapping_add(1));
         self.arithm_unary(ArithmOp::INC, dst);
     }
     pub fn dec(&mut self, dst: Reg) {
+        self.last[dst as usize] = self.last[dst as usize].map(|dst| dst.wrapping_sub(1));
         self.arithm_unary(ArithmOp::DEC, dst);
     }
     pub fn shl(&mut self, dst: Reg) {
+        self.last[dst as usize] = self.last[dst as usize].map(|dst| dst.wrapping_shl(1));
         self.arithm_unary(ArithmOp::SHL, dst);
     }
     pub fn shr(&mut self, dst: Reg) {
+        self.last[dst as usize] = self.last[dst as usize].map(|dst| dst.wrapping_shr(1));
         self.arithm_unary(ArithmOp::SHR, dst);
     }
     pub fn sar(&mut self, dst: Reg) {
+        self.last[dst as usize] = self.last[dst as usize].map(wrapping_sar);
         self.arithm_unary(ArithmOp::SAR, dst);
     }
     pub fn and(&mut self, dst: Reg, src: Reg) {
+        self.last[dst as usize] = self.last[dst as usize]
+            .and_then(|dst| self.last[src as usize].map(|src| dst & src));
         self.arithm(ArithmOp::AND, dst, src);
     }
     pub fn or(&mut self, dst: Reg, src: Reg) {
+        self.last[dst as usize] = self.last[dst as usize]
+            .and_then(|dst| self.last[src as usize].map(|src| dst | src));
         self.arithm(ArithmOp::OR, dst, src);
     }
     pub fn xor(&mut self, dst: Reg, src: Reg) {
+        self.last[dst as usize] = self.last[dst as usize]
+            .and_then(|dst| self.last[src as usize].map(|src| dst ^ src));
         self.arithm(ArithmOp::XOR, dst, src);
     }
     pub fn not(&mut self, dst: Reg) {
+        self.last[dst as usize] = self.last[dst as usize].map(|x| !x);
         self.arithm_unary(ArithmOp::NOT, dst);
     }
     pub fn neg(&mut self, dst: Reg) {
+        self.last[dst as usize] = self.last[dst as usize].map(|x| (!x).wrapping_add(1));
         self.arithm_unary(ArithmOp::NEG, dst);
     }
     pub fn exp(&mut self, dst: Reg) {
+        self.last[dst as usize] = None;
         self.arithm_unary(ArithmOp::EXP, dst);
     }
 
@@ -368,11 +399,6 @@ impl InstructionWriter {
             }
         };
         self.push(TextItem::Op(Op::Arithm(op, src, inv)));
-        if op == ArithmOp::MOV && dst == Reg::A && src == Reg::Zero {
-            self.last[dst as usize] = Some(0);
-        } else {
-            self.last[dst as usize] = None;
-        }
     }
 
     fn arithm_unary(&mut self, op: ArithmOp, dst: Reg) {
@@ -381,12 +407,20 @@ impl InstructionWriter {
         }
         let inv = if let Reg::A = dst { false } else { true };
         self.push(TextItem::Op(Op::Arithm(op, dst, inv)));
-        self.last[dst as usize] = None;
     }
 
     fn push(&mut self, item: TextItem) {
         self.text.last_mut().unwrap().1.push(item);
     }
+
+    fn reset_last(&mut self) {
+        self.last = [None, None, None, None, Some(0)];
+    }
+}
+
+fn wrapping_sar(x: u8) -> u8 {
+    let msb = x & 0x80;
+    x.wrapping_shr(1) | msb
 }
 
 impl std::fmt::Display for InstructionWriter {

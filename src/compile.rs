@@ -652,7 +652,7 @@ fn compile_string_literal(
     };
     let id = scope.add_literal(buf);
     Ok(TypedRValue {
-        src: RValue::Scalar(Scalar::Var(VarLocation::Global(id))),
+        src: RValue::Scalar(Scalar::SymbolOffset(id, 0)),
         t: QualifiedType {
             t: CType::Pointer(Box::new(QualifiedType {
                 t: char_type,

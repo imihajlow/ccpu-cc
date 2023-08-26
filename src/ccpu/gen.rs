@@ -64,7 +64,8 @@ pub fn gen_tu(
 }
 
 fn gen_function(w: &mut InstructionWriter, f: Function<FrameReg>) {
-    w.begin_function(f.get_name().to_string());
+    let name = f.get_id();
+    w.begin_function(&name);
     // save return address
     w.mov(A, PL);
     w.mov(B, A);

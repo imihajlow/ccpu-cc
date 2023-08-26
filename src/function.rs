@@ -16,7 +16,7 @@ use crate::{
     error::{CompileError, ErrorCollector},
     type_builder::TypeBuilder,
 };
-use ir::Width;
+use ir::{Width, GlobalVarId};
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
@@ -53,6 +53,13 @@ impl<Reg: Hash + Eq> Function<Reg> {
 
     pub fn get_name(&self) -> &str {
         &self.name
+    }
+
+    pub fn get_id(&self) -> GlobalVarId {
+        match self.storage_class {
+            GlobalStorageClass::Static => GlobalVarId::Static(self.name.clone()),
+            GlobalStorageClass::Default | GlobalStorageClass::Extern => GlobalVarId::Global(self.name.clone())
+        }
     }
 
     pub fn get_body(&self) -> &Vec<generic_ir::GenericBlock<generic_ir::Tail<Reg>, Reg>> {
