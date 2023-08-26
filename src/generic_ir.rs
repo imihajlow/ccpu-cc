@@ -36,6 +36,7 @@ pub enum GlobalVarId {
         function_name: String,
         index: usize,
     },
+    Literal(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1964,6 +1965,7 @@ impl std::fmt::Display for GlobalVarId {
                 function_name,
                 index,
             } => write!(f, "$static({}, {}, {})", function_name, name, index),
+            GlobalVarId::Literal(id) => write!(f, "$literal({})", id),
         }
     }
 }

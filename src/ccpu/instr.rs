@@ -12,6 +12,7 @@ pub struct InstructionWriter {
     text: Vec<(String, Vec<TextItem>)>,
     bss: HashMap<String, DataItem<u16>>,
     data: HashMap<String, DataItem<DataValue>>,
+    rodata: HashMap<String, DataItem<DataValue>>,
     last: [Option<u8>; 5],
     next_label: usize,
 }
@@ -102,6 +103,7 @@ impl InstructionWriter {
             imports: HashSet::new(),
             bss: HashMap::new(),
             data: HashMap::new(),
+            rodata: HashMap::new(),
             last: [None; 5],
             next_label: 0,
         }
@@ -150,6 +152,18 @@ impl InstructionWriter {
 
     pub fn data_vec(&mut self, label: String, val: Vec<u8>, align: usize) {
         if let Some(_) = self.data.insert(
+            label,
+            DataItem {
+                data: DataValue::String(val),
+                align,
+            },
+        ) {
+            panic!("duplicate data label");
+        }
+    }
+
+    pub fn ro_data_vec(&mut self, label: String, val: Vec<u8>, align: usize) {
+        if let Some(_) = self.rodata.insert(
             label,
             DataItem {
                 data: DataValue::String(val),
@@ -403,6 +417,12 @@ impl std::fmt::Display for InstructionWriter {
             writeln!(f, "\t.section bss.{}", symbol)?;
             writeln!(f, "\t.align {}", item.align)?;
             writeln!(f, "{}: res {}", symbol, item.data)?
+        }
+        writeln!(f, "")?;
+        for (symbol, item) in &self.rodata {
+            writeln!(f, "\t.section rodata.{}", symbol)?;
+            writeln!(f, "\t.align {}", item.align)?;
+            writeln!(f, "{}: {}", symbol, item.data)?
         }
         Ok(())
     }

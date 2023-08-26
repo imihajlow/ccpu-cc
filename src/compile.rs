@@ -1,4 +1,4 @@
-use lang_c::ast::{CallExpression, CastExpression};
+use lang_c::ast::{CallExpression, CastExpression, StringLiteral};
 use lang_c::span::Span;
 use lang_c::{
     ast::{BlockItem, Declaration, Expression, Initializer, Statement, StorageClassSpecifier},
@@ -7,8 +7,10 @@ use lang_c::{
 
 use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
+use crate::generic_ir::{Scalar, VarLocation};
 use crate::lvalue::TypedLValue;
 use crate::object_location::ObjectLocation;
+use crate::string::parse_string_literal;
 use crate::{
     block_emitter::BlockEmitter,
     constant,
@@ -85,7 +87,7 @@ pub fn compile_expression(
         Expression::AlignOf(si) => compile_alignof(*si, scope, ec),
         Expression::Member(me) => compile_member_expression(*me, scope, be, ec),
         Expression::OffsetOf(_) => todo!(),
-        Expression::StringLiteral(_) => todo!(),
+        Expression::StringLiteral(sl) => compile_string_literal(*sl, scope, ec),
         Expression::CompoundLiteral(_) => todo!(),
         Expression::VaArg(_) => todo!(),
         Expression::GenericSelection(_) => unimplemented!(),
@@ -640,4 +642,29 @@ fn compile_argument(
     } else {
         todo!()
     }
+}
+
+fn compile_string_literal(
+    sl: Node<StringLiteral>,
+    scope: &mut NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<TypedRValue, ()> {
+    let (char_type, buf) = match parse_string_literal(sl.node) {
+        Ok(r) => r,
+        Err(e) => {
+            ec.record_error(CompileError::StringParseError(e), sl.span)?;
+            unreachable!();
+        }
+    };
+    let id = scope.add_literal(buf);
+    Ok(TypedRValue {
+        src: RValue::Scalar(Scalar::Var(VarLocation::Global(id))),
+        t: QualifiedType {
+            t: CType::Pointer(Box::new(QualifiedType {
+                t: char_type,
+                qualifiers: Qualifiers::CONST,
+            })),
+            qualifiers: Qualifiers::empty(),
+        },
+    })
 }

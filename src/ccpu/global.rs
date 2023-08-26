@@ -13,6 +13,7 @@ pub fn get_global_var_label(id: &GlobalVarId) -> String {
             index,
         } => format!("__static_{}_{}_{}", function_name, index, name),
         GlobalVarId::CompilerInternal(s) => format!("__cc_{}", s),
+        GlobalVarId::Literal(id) => format!("__lit_{}", id),
     }
 }
 

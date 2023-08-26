@@ -47,6 +47,7 @@ pub enum CompileError {
     AssignmentToConst,
     DivisionByZero,
     CharParseError(StringParseError),
+    StringParseError(StringParseError),
     // General expression error
     ArithmeticTypeRequired,
     IntegerTypeRequired,
@@ -208,6 +209,9 @@ impl std::fmt::Display for CompileError {
             }
             CompileError::CharParseError(e) => {
                 write!(f, "error while parsing character literal: {}", e)
+            }
+            CompileError::StringParseError(e) => {
+                write!(f, "error while parsing string literal: {}", e)
             }
             CompileError::NamedVoidParameter => f.write_str("argument may not have 'void' type"),
             CompileError::QualifiedVoidParameter => {

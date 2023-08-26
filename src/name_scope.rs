@@ -43,7 +43,8 @@ pub struct NameScope {
     function_frame: Option<FunctionFrame>,
     local_statics: Vec<GlobalVarId>,
     defined_functions: HashSet<String>,
-    static_index: usize,
+    next_id: usize,
+    pub literals: Vec<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
@@ -102,7 +103,8 @@ impl NameScope {
             function_frame: None,
             local_statics: Vec::new(),
             defined_functions: HashSet::new(),
-            static_index: 0,
+            next_id: 0,
+            literals: Vec::new(),
         }
     }
 
@@ -353,9 +355,9 @@ impl NameScope {
                     let id = GlobalVarId::LocalStatic {
                         name: name.to_string(),
                         function_name: self.function_frame.as_ref().unwrap().name.clone(),
-                        index: self.static_index,
+                        index: self.next_id,
                     };
-                    self.static_index += 1;
+                    self.next_id += 1;
                     if t.t.is_scalar() {
                         let initializer = if let Some(tv) = initializer {
                             Some(tv.implicit_cast(&t, span, ec)?)
@@ -458,6 +460,11 @@ impl NameScope {
         let tagged = Tagged::new_enum(values);
         let id = self.declare_tagged(name.clone(), tagged, span, ec)?;
         Ok(EnumIdentifier { id, name })
+    }
+
+    pub fn add_literal(&mut self, data: Vec<u8>) -> GlobalVarId {
+        self.literals.push(data);
+        GlobalVarId::Literal(self.literals.len() - 1)
     }
 
     pub fn get_type_alias(

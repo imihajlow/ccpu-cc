@@ -56,6 +56,10 @@ pub fn gen_tu(
     for (id, (val, span)) in &tu.scope.static_initializers {
         gen_static_data(&mut w, id, val, *span, &tu.scope, ec)?;
     }
+
+    for (idx, data) in tu.scope.literals.iter().enumerate() {
+        gen_ro_data(&mut w, idx, data, 1);
+    }
     Ok(w)
 }
 
@@ -220,6 +224,12 @@ fn gen_static_data(
         }
     }
     Ok(())
+}
+
+fn gen_ro_data(w: &mut InstructionWriter, idx: usize, buf: &Vec<u8>, align: usize) {
+    let id = GlobalVarId::Literal(idx);
+    let label = get_global_var_label(&id);
+    w.ro_data_vec(label, buf.clone(), align);
 }
 
 fn check_16bit(val: u32, span: Span, ec: &mut ErrorCollector) -> Result<u16, ()> {
