@@ -1,5 +1,6 @@
 use crate::generic_ir::UnaryUnsignedOp;
 use crate::ir::{Op, VarLocation};
+use crate::opt::arithmetic::optimize_arithmetics;
 use crate::regalloc::get_live_ranges;
 use crate::{
     block_emitter::BlockEmitter,
@@ -16,7 +17,7 @@ use crate::{
     error::{CompileError, ErrorCollector},
     type_builder::TypeBuilder,
 };
-use ir::{Width, GlobalVarId};
+use ir::{GlobalVarId, Width};
 use lang_c::{
     ast::{FunctionDefinition, StorageClassSpecifier},
     span::Node,
@@ -58,7 +59,9 @@ impl<Reg: Hash + Eq> Function<Reg> {
     pub fn get_id(&self) -> GlobalVarId {
         match self.storage_class {
             GlobalStorageClass::Static => GlobalVarId::Static(self.name.clone()),
-            GlobalStorageClass::Default | GlobalStorageClass::Extern => GlobalVarId::Global(self.name.clone())
+            GlobalStorageClass::Default | GlobalStorageClass::Extern => {
+                GlobalVarId::Global(self.name.clone())
+            }
         }
     }
 
@@ -145,6 +148,7 @@ impl Function<ir::VirtualReg> {
             modified |= merge_chains(&mut self.body);
             modified |= delete_unused_regs(&mut self.body);
             modified |= propagate_const(&mut self.body);
+            modified |= optimize_arithmetics(&mut self.body);
         }
     }
 

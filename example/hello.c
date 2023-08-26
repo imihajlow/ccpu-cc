@@ -50,4 +50,5 @@ static void putstring(unsigned char col, unsigned char row, const char *s) {
 void main(void) {
     vga_clear(COLOR(COLOR_GRAY, COLOR_BLACK));
     putstring(0,0, "Hello World!");
+    while (1) ;
 }

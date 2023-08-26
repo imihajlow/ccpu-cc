@@ -340,18 +340,18 @@ impl InstructionWriter {
         self.arithm_unary(ArithmOp::SAR, dst);
     }
     pub fn and(&mut self, dst: Reg, src: Reg) {
-        self.last[dst as usize] = self.last[dst as usize]
-            .and_then(|dst| self.last[src as usize].map(|src| dst & src));
+        self.last[dst as usize] =
+            self.last[dst as usize].and_then(|dst| self.last[src as usize].map(|src| dst & src));
         self.arithm(ArithmOp::AND, dst, src);
     }
     pub fn or(&mut self, dst: Reg, src: Reg) {
-        self.last[dst as usize] = self.last[dst as usize]
-            .and_then(|dst| self.last[src as usize].map(|src| dst | src));
+        self.last[dst as usize] =
+            self.last[dst as usize].and_then(|dst| self.last[src as usize].map(|src| dst | src));
         self.arithm(ArithmOp::OR, dst, src);
     }
     pub fn xor(&mut self, dst: Reg, src: Reg) {
-        self.last[dst as usize] = self.last[dst as usize]
-            .and_then(|dst| self.last[src as usize].map(|src| dst ^ src));
+        self.last[dst as usize] =
+            self.last[dst as usize].and_then(|dst| self.last[src as usize].map(|src| dst ^ src));
         self.arithm(ArithmOp::XOR, dst, src);
     }
     pub fn not(&mut self, dst: Reg) {
