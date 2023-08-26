@@ -2,11 +2,8 @@ use lang_c::{
     ast::StorageClassSpecifier,
     span::{Node, Span},
 };
-use replace_with::replace_with_or_abort;
-use std::{
-    collections::{HashMap, HashSet},
-    unreachable,
-};
+
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ctype::{EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind},

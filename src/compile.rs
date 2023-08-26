@@ -329,12 +329,7 @@ fn compile_block(
 ) -> Result<(), ()> {
     scope.push();
 
-    fn compile_block_inner(
-        block: Vec<Node<BlockItem>>,
-        scope: &mut NameScope,
-        be: &mut BlockEmitter,
-        ec: &mut ErrorCollector,
-    ) -> Result<(), ()> {
+    let r = (|| {
         for item in block {
             match item.node {
                 BlockItem::Statement(stat) => compile_statement(stat, scope, be, ec)?,
@@ -343,8 +338,7 @@ fn compile_block(
             }
         }
         Ok(())
-    }
-    let r = compile_block_inner(block, scope, be, ec);
+    })();
     scope.pop_and_collect_initializers();
     r
 }

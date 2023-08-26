@@ -156,8 +156,9 @@ impl BlockEmitter {
         );
 
         scope.push();
-        compile_statement(*ifs.node.then_statement, scope, self, ec)?;
+        let r = compile_statement(*ifs.node.then_statement, scope, self, ec);
         scope.pop_and_collect_initializers();
+        r?;
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Jump(cont_block_id)),
@@ -166,8 +167,9 @@ impl BlockEmitter {
 
         if let Some(elses) = ifs.node.else_statement {
             scope.push();
-            compile_statement(*elses, scope, self, ec)?;
+            let r = compile_statement(*elses, scope, self, ec);
             scope.pop_and_collect_initializers();
+            r?;
 
             self.finish_block(
                 LabeledTail::Tail(ir::Tail::Jump(cont_block_id)),
@@ -512,10 +514,11 @@ impl BlockEmitter {
         scope.push();
         self.set_break(continue_block_id);
         self.set_continue(condition_block_id);
-        compile_statement(*whiles.node.statement, scope, self, ec)?;
+        let r = compile_statement(*whiles.node.statement, scope, self, ec);
         self.pop_continue();
         self.pop_break();
         scope.pop_and_collect_initializers();
+        r?;
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
@@ -543,12 +546,16 @@ impl BlockEmitter {
         self.loop_depth += 1;
 
         scope.push();
-        self.set_break(continue_block_id);
-        self.set_continue(condition_block_id);
-        compile_statement(*whiles.node.statement, scope, self, ec)?;
-        self.pop_continue();
-        self.pop_break();
+        let r: Result<(), ()> = (|| {
+            self.set_break(continue_block_id);
+            self.set_continue(condition_block_id);
+            compile_statement(*whiles.node.statement, scope, self, ec)?;
+            self.pop_continue();
+            self.pop_break();
+            Ok(())
+        })();
         scope.pop_and_collect_initializers();
+        r?;
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
@@ -587,59 +594,63 @@ impl BlockEmitter {
         let continue_block_id = self.alloc_block_id();
 
         scope.push();
-        match fors.node.initializer.node {
-            ForInitializer::Empty => (),
-            ForInitializer::Expression(e) => {
-                compile_expression(*e, scope, self, ec)?;
+        let r = (|| {
+            match fors.node.initializer.node {
+                ForInitializer::Empty => (),
+                ForInitializer::Expression(e) => {
+                    compile_expression(*e, scope, self, ec)?;
+                }
+                ForInitializer::Declaration(decl) => {
+                    compile_declaration(decl, scope, self, ec)?;
+                }
+                ForInitializer::StaticAssert(sa) => {
+                    check_static_assert(sa, scope, ec)?;
+                }
             }
-            ForInitializer::Declaration(decl) => {
-                compile_declaration(decl, scope, self, ec)?;
-            }
-            ForInitializer::StaticAssert(sa) => {
-                check_static_assert(sa, scope, ec)?;
-            }
-        }
-
-        self.finish_block(
-            LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
-            condition_block_id,
-        );
-        self.loop_depth += 1;
-
-        if let Some(cond) = fors.node.condition {
-            let cond_span = cond.span;
-            let cond = compile_expression(*cond, scope, self, ec)?;
-            let cond_bool = convert_to_bool(cond, cond_span, scope, self, ec)?;
 
             self.finish_block(
-                LabeledTail::Tail(ir::Tail::Cond(
-                    cond_bool.unwrap_scalar(),
-                    body_block_id,
-                    continue_block_id,
-                )),
-                body_block_id,
+                LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
+                condition_block_id,
             );
-        }
+            self.loop_depth += 1;
 
-        scope.push();
-        self.set_break(continue_block_id);
-        self.set_continue(condition_block_id);
-        compile_statement(*fors.node.statement, scope, self, ec)?;
+            if let Some(cond) = fors.node.condition {
+                let cond_span = cond.span;
+                let cond = compile_expression(*cond, scope, self, ec)?;
+                let cond_bool = convert_to_bool(cond, cond_span, scope, self, ec)?;
+
+                self.finish_block(
+                    LabeledTail::Tail(ir::Tail::Cond(
+                        cond_bool.unwrap_scalar(),
+                        body_block_id,
+                        continue_block_id,
+                    )),
+                    body_block_id,
+                );
+            }
+
+            scope.push();
+            self.set_break(continue_block_id);
+            self.set_continue(condition_block_id);
+            let r = compile_statement(*fors.node.statement, scope, self, ec);
+            scope.pop_and_collect_initializers();
+            r?;
+            self.pop_continue();
+            self.pop_break();
+            if let Some(step) = fors.node.step {
+                compile_expression(*step, scope, self, ec)?;
+            }
+
+            self.finish_block(
+                LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
+                continue_block_id,
+            );
+            self.loop_depth -= 1;
+            Ok(())
+        })();
+
         scope.pop_and_collect_initializers();
-        self.pop_continue();
-        self.pop_break();
-        if let Some(step) = fors.node.step {
-            compile_expression(*step, scope, self, ec)?;
-        }
-
-        self.finish_block(
-            LabeledTail::Tail(ir::Tail::Jump(condition_block_id)),
-            continue_block_id,
-        );
-        self.loop_depth -= 1;
-
-        scope.pop_and_collect_initializers();
-        Ok(())
+        r
     }
 
     pub fn append_break(&mut self, span: Span, ec: &mut ErrorCollector) -> Result<(), ()> {
