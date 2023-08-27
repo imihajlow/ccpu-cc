@@ -527,6 +527,11 @@ impl NameScope {
                             t: t.clone(),
                             src: RValue::Function(Scalar::SymbolOffset(id.clone(), 0)),
                         })
+                    } else if t.t.is_array() {
+                        Ok(TypedRValue {
+                            t: t.clone(),
+                            src: RValue::Scalar(Scalar::SymbolOffset(id.clone(), 0)),
+                        })
                     } else {
                         Ok(TypedRValue {
                             t: t.clone(),

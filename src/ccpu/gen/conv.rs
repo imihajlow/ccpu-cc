@@ -77,10 +77,8 @@ fn gen_conv_var_widen(
         w.exp(A);
         w.inc(PL);
     } else {
-        if dst == src {
-            let offset = info.src_width as u16;
-            w.ldi_p_var_location(dst, offset, true);
-        }
+        let offset = info.src_width as u16;
+        w.ldi_p_var_location(dst, offset, true);
         w.mov(A, Zero);
     }
     // fill the rest of the dst

@@ -5,6 +5,7 @@ use crate::block_emitter::BlockEmitter;
 use crate::error::{CompileError, ErrorCollector};
 use crate::ir;
 use crate::name_scope::NameScope;
+use crate::object_location::ObjectLocation;
 use crate::rvalue::{RValue, TypedRValue};
 
 use super::{compile_expression, compile_pointer_offset, usual_arithmetic_convert};
@@ -82,15 +83,26 @@ pub fn compile_index(
     let offset =
         compile_pointer_offset((ptr, ptr_span), (index, index_span), false, scope, be, ec)?;
     let pointee = offset.t.clone().dereference().unwrap();
-    let width = pointee.t.get_scalar_width().unwrap();
-    let dst = scope.alloc_temp();
-    be.append_operation(ir::Op::Load(ir::LoadOp {
-        dst: dst.clone(),
-        src_addr: offset.unwrap_scalar(),
-        width,
-    }));
-    Ok(TypedRValue {
-        src: RValue::new_var(dst),
-        t: pointee,
-    })
+    if pointee.t.is_scalar() {
+        let width = pointee.t.get_scalar_width().unwrap();
+        let dst = scope.alloc_temp();
+        be.append_operation(ir::Op::Load(ir::LoadOp {
+            dst: dst.clone(),
+            src_addr: offset.unwrap_scalar(),
+            width,
+        }));
+        Ok(TypedRValue {
+            src: RValue::new_var(dst),
+            t: pointee,
+        })
+    } else if pointee.t.is_array() {
+        todo!()
+    } else {
+        assert!(pointee.t.is_object());
+        let location = offset.unwrap_scalar();
+        Ok(TypedRValue {
+            src: RValue::Object(ObjectLocation::PointedBy(location)),
+            t: pointee,
+        })
+    }
 }

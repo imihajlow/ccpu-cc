@@ -1948,7 +1948,7 @@ where
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             VarLocation::Local(r) => write!(f, "%{}", r),
-            VarLocation::Global(id) => write!(f, "{}", id),
+            VarLocation::Global(id) => write!(f, "*{}", id),
             VarLocation::Return => write!(f, "%ret"),
         }
     }

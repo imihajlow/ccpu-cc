@@ -50,7 +50,7 @@ pub fn gen_tu(
     }
 
     for f in tu.functions.into_iter() {
-        gen_function(&mut w, f, ec);
+        gen_function(&mut w, f, ec)?;
     }
 
     for (id, (val, span)) in &tu.scope.static_initializers {

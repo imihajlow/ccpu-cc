@@ -695,6 +695,10 @@ impl BlockEmitter {
             }
             let val = compile_expression(expr, scope, self, ec)?;
             if return_type.t.is_scalar() {
+                if !val.t.t.is_scalar() {
+                    ec.record_error(CompileError::IncompatibleTypes(return_type, val.t), span)?;
+                    unreachable!();
+                }
                 let casted = cast(val, &return_type.t, false, span, scope, self, ec)?;
                 let (src, src_type) = casted.unwrap_scalar_and_type();
                 let width = src_type.t.get_scalar_width().unwrap();
