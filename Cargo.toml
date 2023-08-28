@@ -11,3 +11,8 @@ replace_with = "0.1.7"
 num-traits = "0.2"
 num = "0.4"
 clap = { version = "4.3.19", features = ["derive"] }
+
+[dev-dependencies]
+assert_cmd = "2.0.12"
+rand = "0.8.5"
+lazy_static = "1.4.0"

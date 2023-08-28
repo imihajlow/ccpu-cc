@@ -1,0 +1,9 @@
+mem:
+  io-rev3-with-cr: 0
+vga: absent
+keyboard: absent
+ps2: absent
+spi: absent
+stack: present
+server:
+  port: 3000
