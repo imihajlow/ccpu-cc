@@ -14,11 +14,11 @@ lazy_static! {
 
 pub fn run(bin: &Path, map: &Path, script: &[&str]) {
     let mut cmd = Command::new("rsim");
-    cmd.arg("--config").arg("tests/rsim-stack.yaml");
     for s in script {
         cmd.arg("-c").arg(s);
     }
     cmd.arg("-c").arg("q");
+    cmd.arg("--config").arg("tests/rsim-stack.yaml");
     cmd.arg(&bin).arg(&map).unwrap().assert().success();
 }
 
