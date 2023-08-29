@@ -23,9 +23,6 @@
     .const intrin_arg3 = 0xc800 - 8 * 6
     .const intrin_result = 0xc800 - 8 * 3
 
-    .const numerator = 0xc800 - 8 * 4
-    .const denominator = 0xc800 - 8 * 5
-
     .const shift_rhs = 0xc800 - 8 * 5
 
     ; bit shifts of word values
@@ -983,6 +980,28 @@ __cc_div_word:
     inc pl
     st a
 
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(numerator)
+    ldi ph, hi(numerator)
+    st  a
+    inc pl
+    st  b
+
+    ldi pl, lo(intrin_arg2)
+    ldi ph, hi(intrin_arg2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(denominator)
+    ldi ph, hi(denominator)
+    st  a
+    inc pl
+    st  b
+
     ldi pl, lo(divide_word_signed)
     ldi ph, hi(divide_word_signed)
     jmp
@@ -1016,6 +1035,28 @@ __cc_mod_word:
     st b
     inc pl
     st a
+
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(numerator)
+    ldi ph, hi(numerator)
+    st  a
+    inc pl
+    st  b
+
+    ldi pl, lo(intrin_arg2)
+    ldi ph, hi(intrin_arg2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(denominator)
+    ldi ph, hi(denominator)
+    st  a
+    inc pl
+    st  b
 
     ldi pl, lo(divide_word_signed)
     ldi ph, hi(divide_word_signed)
@@ -1094,91 +1135,62 @@ __cc_div_word_positive:
     ld a
     shr a
     st a
-    ldi pl, lo(__cc_div_word_result_nom_positive)
-    ldi ph, hi(__cc_div_word_result_nom_positive)
+    ldi pl, lo(__cc_div_word_result_num_positive)
+    ldi ph, hi(__cc_div_word_result_num_positive)
     jnc
 
     ; numerator was negative
 
-    ; Q = ~Q
-    ldi pl, lo(quotient)
-    ldi ph, hi(quotient)
-    ld a
-    not a
-    st a
-    inc pl
-    ld a
-    not a
-    st a
-
-    ; R == 0?
+    ; R = -R
     ldi pl, lo(remainder)
-    ld a
+    ldi ph, hi(remainder)
+    ld  b
     inc pl
-    ld b
-    or a, b
-    ldi pl, lo(__cc_div_word_d_minus_r)
-    ldi ph, hi(__cc_div_word_d_minus_r)
-    jnz
-
-    ; "return -Q, 0"
-    ; R == 0
-    ; Q += 1 - finish the negation
-    ldi pl, lo(quotient)
-    ldi ph, hi(quotient)
-    ld b
+    ld  a
+    not a
+    not b
     inc b
-    st b
-    ldi pl, lo(quotient + 1)
-    ld a
     adc a, 0
-    st a
+    st  a
+    dec pl
+    st  b
 
-    ldi pl, lo(__cc_div_word_result_nom_positive)
-    ldi ph, hi(__cc_div_word_result_nom_positive)
+    ldi pl, lo(tmp)
+    ldi ph, hi(tmp)
+    ld a
+    shr a
+    ldi pl, lo(__cc_div_negate_quotient)
+    ldi ph, hi(__cc_div_negate_quotient)
+    jnc ; num -, den +
+
+    ; num -, den -
+    ldi pl, lo(exit)
+    ldi ph, hi(exit)
     jmp
 
-__cc_div_word_d_minus_r:
-    ; "return -Q - 1, D - R"
-    ; Q is already that
-    ; R := D - R
-    ldi ph, hi(denominator)
-    ldi pl, lo(denominator)
-    ld b
-    ldi pl, lo(remainder)
-    ld a
-    sub b, a
-    st b
-    ldi pl, lo(denominator + 1)
-    ld b
-    ldi pl, lo(remainder + 1)
-    ld a
-    sbb b, a
-    st b
-
-__cc_div_word_result_nom_positive:
+__cc_div_word_result_num_positive:
     ldi pl, lo(tmp)
     ldi ph, hi(tmp)
     ld a
     shr a
     ldi pl, lo(exit)
     ldi ph, hi(exit)
-    jnc
-    ; denominator was negative
-    ; "return -Q, R"
-    ; Q := -Q
+    jnc ; num +, den +, nothing to negate
+    ; num +, den -
+__cc_div_negate_quotient:
+    ; Q = -Q
     ldi pl, lo(quotient)
     ldi ph, hi(quotient)
-    ld b
+    ld  b
     inc pl
-    ld a
-    not b
+    ld  a
     not a
+    not b
     inc b
     adc a, 0
-    st a
+    st  a
     dec pl
-    st b
+    st  b
 
     ldi pl, lo(exit)
     ldi ph, hi(exit)
@@ -1243,6 +1255,28 @@ __cc_udiv_word:
     inc pl
     st a
 
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(numerator)
+    ldi ph, hi(numerator)
+    st  a
+    inc pl
+    st  b
+
+    ldi pl, lo(intrin_arg2)
+    ldi ph, hi(intrin_arg2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(denominator)
+    ldi ph, hi(denominator)
+    st  a
+    inc pl
+    st  b
+
     ldi pl, lo(divide_word)
     ldi ph, hi(divide_word)
     jmp
@@ -1276,6 +1310,28 @@ __cc_umod_word:
     st b
     inc pl
     st a
+
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(numerator)
+    ldi ph, hi(numerator)
+    st  a
+    inc pl
+    st  b
+
+    ldi pl, lo(intrin_arg2)
+    ldi ph, hi(intrin_arg2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(denominator)
+    ldi ph, hi(denominator)
+    st  a
+    inc pl
+    st  b
 
     ldi pl, lo(divide_word)
     ldi ph, hi(divide_word)
@@ -1351,19 +1407,16 @@ divide_word_loop_1:
     ldi pl, lo(remainder)
     ld a
     shl a
-    ldi ph, hi(numerator + 1)
     ldi pl, lo(numerator + 1)
     ld b
     shl b
     st b
     adc a, 0
-    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     st a
 
     ; R >= D?
     ; hi(R) is still 0
-    ldi ph, hi(denominator + 1)
     ldi pl, lo(denominator + 1)
     ld a
     add a, 0
@@ -1374,7 +1427,6 @@ divide_word_loop_1:
     ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld a
-    ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld b
     sub a, b ; lo(R) - lo(D)
@@ -1388,7 +1440,6 @@ divide_word_loop_1:
     ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld a
-    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld b
     sub b, a
@@ -1433,21 +1484,17 @@ divide_word_loop_2:
     adc a, 0
     st a
     mov a, b
-    ldi ph, hi(numerator)
     ldi pl, lo(numerator)
     ld b
     shl b
     st b
     adc a, 0
-    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     st a
 
     ; R >= D?
-    ldi ph, hi(denominator + 1)
     ldi pl, lo(denominator + 1)
     ld a
-    ldi ph, hi(remainder + 1)
     ldi pl, lo(remainder + 1)
     ld b
     sub b, a
@@ -1462,7 +1509,6 @@ divide_word_loop_2:
     ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld a
-    ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld b
     sub a, b ; lo(R) - lo(D)
@@ -1476,15 +1522,12 @@ divide_word_loop_2_r_gt_d:
     ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld a
-    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld b
     sub b, a
     st b
-    ldi ph, hi(denominator + 1)
     ldi pl, lo(denominator + 1)
     ld a
-    ldi ph, hi(remainder + 1)
     ldi pl, lo(remainder + 1)
     ld b
     sbb b, a
@@ -1527,6 +1570,17 @@ __cc_div_byte:
     inc pl
     st a
 
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
+    ld  a
+    ldi pl, lo(intrin_arg2)
+    ld  b
+    ldi pl, lo(numerator)
+    ldi ph, hi(numerator)
+    st  a
+    ldi pl, lo(denominator)
+    st  b
+
     ldi pl, lo(divide_byte_signed)
     ldi ph, hi(divide_byte_signed)
     jmp
@@ -1556,6 +1610,17 @@ __cc_mod_byte:
     st b
     inc pl
     st a
+
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
+    ld  a
+    ldi pl, lo(intrin_arg2)
+    ld  b
+    ldi pl, lo(numerator)
+    ldi ph, hi(numerator)
+    st  a
+    ldi pl, lo(denominator)
+    st  b
 
     ldi pl, lo(divide_byte_signed)
     ldi ph, hi(divide_byte_signed)
@@ -1598,7 +1663,6 @@ divide_byte_signed:
     st a
 
     ; test D
-    ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld a
     add a, 0
@@ -1644,7 +1708,6 @@ __cc_div_byte_positive:
     st a
 
     ; R == 0?
-    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld a
     add a, 0
@@ -1672,7 +1735,6 @@ __cc_div_byte_d_minus_r:
     ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld b
-    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     ld a
     sub b, a
@@ -1723,7 +1785,6 @@ __cc_div_byte_neg_nom:
     neg b
     st b
 
-    ldi ph, hi(tmp)
     ldi pl, lo(tmp)
     ld a
     ldi b, 0x01 ; negative numerator
@@ -1745,6 +1806,17 @@ __cc_udiv_byte:
     st b
     inc pl
     st a
+
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
+    ld  a
+    ldi pl, lo(intrin_arg2)
+    ld  b
+    ldi pl, lo(numerator)
+    ldi ph, hi(numerator)
+    st  a
+    ldi pl, lo(denominator)
+    st  b
 
     ldi pl, lo(divide_byte)
     ldi ph, hi(divide_byte)
@@ -1775,6 +1847,17 @@ __cc_umod_byte:
     st b
     inc pl
     st a
+
+    ldi pl, lo(intrin_arg1)
+    ldi ph, hi(intrin_arg1)
+    ld  a
+    ldi pl, lo(intrin_arg2)
+    ld  b
+    ldi pl, lo(numerator)
+    ldi ph, hi(numerator)
+    st  a
+    ldi pl, lo(denominator)
+    st  b
 
     ldi pl, lo(divide_byte)
     ldi ph, hi(divide_byte)
@@ -1839,18 +1922,15 @@ divide_byte_loop:
     ldi pl, lo(remainder)
     ld a
     shl a
-    ldi ph, hi(numerator)
     ldi pl, lo(numerator)
     ld b
     shl b
     st b
     adc a, 0
-    ldi ph, hi(remainder)
     ldi pl, lo(remainder)
     st a
 
     ; R >= D?
-    ldi ph, hi(denominator)
     ldi pl, lo(denominator)
     ld b
     sub a, b
@@ -1903,6 +1983,8 @@ __cc_ret: res 8
 shift_lhs: res 4
     res 3 ; zeroes after shift_lhs
 
+numerator: res 4
+denominator: res 4
 int_ret: res 2
 tmp: res 2
 bit_shift: res 1
