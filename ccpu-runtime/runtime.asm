@@ -1,8 +1,8 @@
-    .export __cc_asr
+    .export __cc_asr_word
     .export __cc_lsr_dword
-    .export __cc_asl
+    .export __cc_asl_word
     .export __cc_asl_dword
-    .export __cc_lsr
+    .export __cc_lsr_word
     .export __cc_mul_byte
     .export __cc_mul_word
     .export __cc_mul_dword
@@ -30,8 +30,8 @@
 
     ; bit shifts of word values
     ; rhs (bit count) is one byte
-    .section text.__cc_asr
-__cc_asr:
+    .section text.__cc_asr_word
+__cc_asr_word:
     mov a, pl
     mov b, a
     mov a, ph
@@ -40,15 +40,6 @@ __cc_asr:
     st b
     inc pl
     st a
-
-    ldi ph, hi(shift_rhs)
-    ldi pl, lo(shift_rhs)
-    ld b
-    ldi pl, lo(return_val_sign)
-    ldi ph, hi(return_val_sign)
-    ldi a, 15
-    sub a, b ; 15 - count
-    jc ; 15 < count
 
     ldi pl, lo(intrin_arg1)
     ldi ph, hi(intrin_arg2)
@@ -60,6 +51,15 @@ __cc_asr:
     st  a
     inc pl
     st  b
+
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
+    ld b
+    ldi pl, lo(return_val_sign)
+    ldi ph, hi(return_val_sign)
+    ldi a, 15
+    sub a, b ; 15 - count
+    jc ; 15 < count
 
     ; shift_lhs = shift_lhs >> shift_rhs
     ldi a, 8
@@ -134,8 +134,8 @@ return_val_sign:
     ldi ph, hi(exit)
     jmp
 
-    .section text.__cc_lsr
-__cc_lsr:
+    .section text.__cc_lsr_word
+__cc_lsr_word:
     mov a, pl
     mov b, a
     mov a, ph
@@ -144,15 +144,6 @@ __cc_lsr:
     st b
     inc pl
     st a
-
-    ldi ph, hi(shift_rhs)
-    ldi pl, lo(shift_rhs)
-    ld b
-    ldi pl, lo(return_0)
-    ldi ph, hi(return_0)
-    ldi a, 15
-    sub a, b ; 15 - count
-    jc ; 15 < count
 
     ldi pl, lo(intrin_arg1)
     ldi ph, hi(intrin_arg2)
@@ -164,6 +155,15 @@ __cc_lsr:
     st  a
     inc pl
     st  b
+
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
+    ld b
+    ldi pl, lo(return_0)
+    ldi ph, hi(return_0)
+    ldi a, 15
+    sub a, b ; 15 - count
+    jc ; 15 < count
 
     ; shift_lhs = shift_lhs >> shift_rhs
     ldi a, 8
@@ -226,8 +226,8 @@ __cc_lsr_loop_end:
 
 
     ; shift_lhs = shift_lhs << shift_rhs
-    .section text.__cc_asl
-__cc_asl:
+    .section text.__cc_asl_word
+__cc_asl_word:
     mov a, pl
     mov b, a
     mov a, ph
@@ -236,15 +236,6 @@ __cc_asl:
     st b
     inc pl
     st a
-
-    ldi ph, hi(shift_rhs)
-    ldi pl, lo(shift_rhs)
-    ld b
-    ldi pl, lo(return_0)
-    ldi ph, hi(return_0)
-    ldi a, 15
-    sub a, b ; 15 - count
-    jc ; 15 < count
 
     ldi pl, lo(intrin_arg1)
     ldi ph, hi(intrin_arg2)
@@ -256,6 +247,15 @@ __cc_asl:
     st  a
     inc pl
     st  b
+
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
+    ld b
+    ldi pl, lo(return_0)
+    ldi ph, hi(return_0)
+    ldi a, 15
+    sub a, b ; 15 - count
+    jc ; 15 < count
 
     ldi a, 8
     sub b, a ; lo(count) - 8
@@ -397,19 +397,6 @@ __cc_asl_dword:
     inc pl
     st a
 
-    ldi ph, hi(shift_rhs)
-    ldi pl, lo(shift_rhs)
-    ld  a
-    ldi pl, lo(return_0_dword)
-    ldi ph, hi(return_0_dword)
-    ldi b, 31
-    sub b, a ; 31 - count
-    jc ; 31 < count
-    ldi pl, lo(shift_dword_exit)
-    ldi ph, hi(shift_dword_exit)
-    add a, 0
-    jz
-
     ldi ph, hi(intrin_arg1)
     ldi pl, lo(intrin_arg1)
     ld  a
@@ -430,6 +417,19 @@ __cc_asl_dword:
     st  a
     inc pl
     st  b
+
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
+    ld  a
+    ldi pl, lo(return_0_dword)
+    ldi ph, hi(return_0_dword)
+    ldi b, 31
+    sub b, a ; 31 - count
+    jc ; 31 < count
+    ldi pl, lo(shift_dword_exit)
+    ldi ph, hi(shift_dword_exit)
+    add a, 0
+    jz
 
     mov b, a
     ldi pl, 0x7
@@ -521,19 +521,6 @@ __cc_lsr_dword:
     inc pl
     st a
 
-    ldi pl, lo(shift_rhs)
-    ldi ph, hi(shift_rhs)
-    ld a
-    ldi pl, lo(return_0_dword)
-    ldi ph, hi(return_0_dword)
-    ldi b, 31
-    sub b, a ; 31 - count
-    jc ; 31 < count
-    ldi pl, lo(shift_dword_exit)
-    ldi ph, hi(shift_dword_exit)
-    add a, 0
-    jz
-
     ldi ph, hi(intrin_arg1)
     ldi pl, lo(intrin_arg1)
     ld  a
@@ -554,6 +541,19 @@ __cc_lsr_dword:
     st  a
     inc pl
     st  b
+
+    ldi pl, lo(shift_rhs)
+    ldi ph, hi(shift_rhs)
+    ld a
+    ldi pl, lo(return_0_dword)
+    ldi ph, hi(return_0_dword)
+    ldi b, 31
+    sub b, a ; 31 - count
+    jc ; 31 < count
+    ldi pl, lo(shift_dword_exit)
+    ldi ph, hi(shift_dword_exit)
+    add a, 0
+    jz
 
     mov b, a
     ldi pl, 0x7

@@ -102,7 +102,7 @@ pub fn replace_with_intrinsic(op: &mut Op<ir::VirtualReg>) {
                     ),
                 })
             }
-            Scalar::ConstInt(_) => Op::LShift(op),
+            Scalar::ConstInt(_) => Op::RShift(op),
         },
         _ => op,
     });

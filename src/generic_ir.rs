@@ -1817,8 +1817,12 @@ where
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(
             f,
-            "{} {}, {}, {}",
-            self.lhs_width, self.dst, self.lhs, self.rhs
+            "{}{} {}, {}, {}",
+            get_sign_char(self.lhs_sign),
+            self.lhs_width,
+            self.dst,
+            self.lhs,
+            self.rhs
         )
     }
 }
