@@ -1,5 +1,6 @@
     .export __cc_asr_word
     .export __cc_lsr_dword
+    .export __cc_asl_byte
     .export __cc_asl_word
     .export __cc_asl_dword
     .export __cc_lsr_word
@@ -221,6 +222,66 @@ __cc_lsr_loop_end:
     ldi ph, hi(shift_exit)
     jmp
 
+    .section text.__cc_asl_byte
+__cc_asl_byte:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(int_ret)
+    ldi ph, hi(int_ret)
+    st b
+    inc pl
+    st a
+
+    ldi ph, hi(shift_rhs)
+    ldi pl, lo(shift_rhs)
+    ld  a
+    add a, 0
+    ldi ph, hi(return_lhs_byte)
+    ldi pl, lo(return_lhs_byte)
+    jz ; count == 0
+    ldi b, 7
+    sub b, a ; 7 - count
+    ldi pl, lo(return_0_byte)
+    ldi ph, hi(return_0_byte)
+    jc ; 7 < count
+
+    ldi ph, hi(intrin_arg1)
+    ldi pl, lo(intrin_arg1)
+    ld  b
+
+__cc_asl_byte_loop:
+    shl b
+    dec a
+    ldi ph, hi(__cc_asl_byte_loop)
+    ldi pl, lo(__cc_asl_byte_loop)
+    jnz
+
+    ldi ph, hi(intrin_result)
+    ldi pl, lo(intrin_result)
+    st  b
+    ldi pl, lo(exit)
+    ldi ph, hi(exit)
+    jmp
+
+return_0_byte:
+    mov a, 0
+    ldi ph, hi(intrin_result)
+    ldi pl, lo(intrin_result)
+    st  a
+    ldi pl, lo(exit)
+    ldi ph, hi(exit)
+    jmp
+
+return_lhs_byte:
+    ldi ph, hi(intrin_arg1)
+    ldi pl, lo(intrin_arg1)
+    ld  a
+    ldi pl, lo(intrin_result)
+    st  a
+    ldi pl, lo(exit)
+    ldi ph, hi(exit)
+    jmp
 
     ; shift_lhs = shift_lhs << shift_rhs
     .section text.__cc_asl_word

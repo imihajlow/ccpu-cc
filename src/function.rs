@@ -1,6 +1,7 @@
 use crate::generic_ir::UnaryUnsignedOp;
 use crate::ir::{Op, VarLocation};
 use crate::opt::arithmetic::optimize_arithmetics;
+use crate::opt::width::optimize_width;
 use crate::regalloc::get_live_ranges;
 use crate::{
     block_emitter::BlockEmitter,
@@ -156,6 +157,7 @@ impl Function<ir::VirtualReg> {
             modified |= delete_unused_regs(&mut self.body);
             modified |= propagate_const(&mut self.body);
             modified |= optimize_arithmetics(&mut self.body);
+            modified |= optimize_width(&mut self.body);
         }
     }
 

@@ -65,7 +65,7 @@ pub fn replace_with_intrinsic(op: &mut Op<ir::VirtualReg>) {
         Op::LShift(op) => match op.rhs {
             Scalar::SymbolOffset(_, _) | Scalar::Var(_) => {
                 let name = match op.lhs_width {
-                    Width::Byte => unimplemented!("left shift of a byte"),
+                    Width::Byte => "asl_byte",
                     Width::Word => "asl_word",
                     Width::Dword => "asl_dword",
                     Width::Qword => unimplemented!("left shift of a qword"),
