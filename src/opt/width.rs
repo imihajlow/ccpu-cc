@@ -22,6 +22,7 @@ pub fn optimize_width(blocks: &mut Vec<ir::Block>) -> bool {
         for op in &mut block.ops {
             modified |= try_shorten_op(&max_width, op);
         }
+        modified |= try_shorten_phi(&max_width, &mut block.phi);
     }
     modified
 }
@@ -41,6 +42,18 @@ fn try_shorten_phi(max_width: &HashMap<ir::VirtualReg, ir::Width>, phi: &mut ir:
 
 fn try_shorten_op(max_width: &HashMap<ir::VirtualReg, ir::Width>, op: &mut ir::Op) -> bool {
     use ir::Op;
+
+    // convert - special case, check source
+    if let Op::Conv(conv_op) = op {
+        if let Some(src_reg) = conv_op.src.get_reg() {
+            if let Some(w) = max_width.get(&src_reg) {
+                if *w < conv_op.src_width {
+                    conv_op.src_width = *w;
+                }
+            }
+        }
+    }
+
     let max_width = if let Some(dst_reg) = op.get_dst_reg() {
         if let Some(w) = max_width.get(&dst_reg) {
             *w

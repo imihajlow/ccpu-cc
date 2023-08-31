@@ -1,7 +1,3 @@
-use std::{collections::HashMap, mem};
-
-use ir::GlobalVarId;
-
 use crate::ir::{self, Scalar};
 
 pub fn optimize_arithmetics(blocks: &mut Vec<ir::Block>) -> bool {
