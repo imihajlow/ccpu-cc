@@ -4,6 +4,7 @@ use crate::opt::arithmetic::optimize_arithmetics;
 use crate::opt::copy::reduce_copies;
 use crate::opt::width::optimize_width;
 use crate::regalloc::get_live_ranges;
+use crate::utils::factorial;
 use crate::{
     block_emitter::BlockEmitter,
     ccpu::{self, opt::frame::resolve_frame_pointer, reg::FrameReg},
@@ -27,6 +28,7 @@ use lang_c::{
 };
 use replace_with::replace_with_or_abort;
 use std::collections::HashSet;
+use std::println;
 use std::{fmt::Formatter, hash::Hash};
 
 pub struct Function<Reg: Eq + Hash> {
@@ -352,8 +354,34 @@ impl Function<ir::VirtualReg> {
 
 impl Function<ir::VirtualReg> {
     pub fn deconstruct_ssa(self) -> Function<ccpu::reg::FrameReg> {
-        let mut map = regalloc::allocate_registers(&self.body);
-        let body = deconstruct::deconstruct_ssa(self.body, &mut map);
+        let phi_permutations = self
+            .body
+            .iter()
+            .map(|block| factorial(block.phi.srcs.len()))
+            .fold(Some(1), |a, b| {
+                a.and_then(|a: usize| b.and_then(|b| a.checked_mul(b)))
+            });
+        let repetitions = match phi_permutations {
+            Some(p) if p < 10000 => p * 5,
+            _ => 50000,
+        };
+        let mut min_copies = None;
+        let mut best_body = None;
+        for _ in 0..repetitions {
+            let body = self.body.clone();
+            let mut map = regalloc::allocate_registers(&self.body);
+            let (body, n_copies) = deconstruct::deconstruct_ssa(body, &mut map);
+            let better = if let Some(m) = min_copies {
+                n_copies < m
+            } else {
+                true
+            };
+            if better {
+                min_copies = Some(n_copies);
+                best_body = Some(body);
+            }
+        }
+        println!("{} copies best", min_copies.unwrap());
         Function {
             is_inline: self.is_inline,
             is_noreturn: self.is_noreturn,
@@ -363,7 +391,7 @@ impl Function<ir::VirtualReg> {
             storage_class: self.storage_class,
             return_type: self.return_type,
             args: self.args,
-            body,
+            body: best_body.unwrap(),
             frame: self.frame,
             span: self.span,
         }

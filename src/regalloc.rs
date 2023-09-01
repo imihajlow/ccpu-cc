@@ -1,3 +1,5 @@
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use std::collections::{HashMap, HashSet};
 
 use crate::{ccpu::reg::FrameReg, generic_ir::IntrinCallVariant, ir, register::Register};
@@ -196,7 +198,10 @@ fn allocate_registers_for_block(
     }
 
     // Allocate for phi
-    for (phi_dst, _) in block.phi.srcs.iter() {
+    let mut dsts: Vec<_> = block.phi.srcs.keys().collect();
+    dsts.shuffle(&mut thread_rng());
+
+    for phi_dst in dsts {
         let phi_reg = allocate(*phi_dst, &mut vacant_registers, hints, preallocated);
         let old = allocations.insert(*phi_dst, phi_reg);
         if old.is_some() {

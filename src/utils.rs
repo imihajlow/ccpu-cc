@@ -7,6 +7,14 @@ pub fn align<T: num_traits::int::PrimInt>(addr: T, alignment: T) -> T {
     }
 }
 
+pub fn factorial(n: usize) -> Option<usize> {
+    let mut r: usize = 1;
+    for i in 2..n {
+        r = r.checked_mul(i)?;
+    }
+    Some(r)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -14,5 +22,12 @@ mod tests {
     fn test_align() {
         assert_eq!(align(4, 4), 4);
         assert_eq!(align(5, 4), 8);
+    }
+
+    fn test_factorial() {
+        assert_eq!(factorial(0), Some(1));
+        assert_eq!(factorial(1), Some(1));
+        assert_eq!(factorial(5), Some(120));
+        assert_eq!(factorial(1000), None);
     }
 }

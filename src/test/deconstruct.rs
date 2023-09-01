@@ -59,7 +59,7 @@ fn test_deconstruct_1() {
         (24, FrameReg::FrameA(4)),
         (25, FrameReg::FrameA(5)),
     ]);
-    let blocks = deconstruct_ssa(blocks, &map);
+    let (blocks, _) = deconstruct_ssa(blocks, &map);
     assert_eq!(blocks.len(), 3);
     assert_eq!(blocks[0].ops, vec![]);
     assert_eq!(blocks[1].ops.len(), 2);
@@ -130,7 +130,7 @@ fn test_deconstruct_2() {
         (24, FrameReg::FrameA(4)),
         (25, FrameReg::FrameA(5)),
     ]);
-    let blocks = deconstruct_ssa(blocks, &map);
+    let (blocks, _) = deconstruct_ssa(blocks, &map);
     println!("{:#?}", blocks);
     assert_eq!(blocks.len(), 4);
     assert_eq!(blocks[0].ops, vec![]);

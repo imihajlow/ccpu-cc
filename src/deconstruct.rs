@@ -6,10 +6,11 @@ use std::{
 
 use crate::{ccpu::reg::FrameReg, generic_ir, graph::ObjectGraph, ir, register::Register};
 
+/// Returns new blocks and number of inserted copy operations.
 pub fn deconstruct_ssa(
     body: Vec<ir::Block>,
     map: &HashMap<ir::VirtualReg, FrameReg>,
-) -> Vec<generic_ir::Block<FrameReg>> {
+) -> (Vec<generic_ir::Block<FrameReg>>, usize) {
     // Rename registers in body and tail
     let mut body: Vec<generic_ir::Block<FrameReg>> = body
         .into_iter()
@@ -31,6 +32,7 @@ pub fn deconstruct_ssa(
         block.phi = generic_ir::Phi::new();
     }
 
+    let mut n_copies = 0;
     // Insert copies to the ends of corresponding blocks
     for (block_id, copies) in copies.into_iter() {
         let mut tail_regs = HashSet::new();
@@ -40,9 +42,11 @@ pub fn deconstruct_ssa(
 
         for (dst, src, width) in original_copies.into_iter() {
             body[block_id].ops.push(get_copy_op(dst, src, width));
+            n_copies += 1;
         }
 
         for (dst_block_id, copies) in moved_copies.into_iter() {
+            n_copies += copies.len();
             let new_block = generic_ir::Block {
                 phi: generic_ir::Phi::new(),
                 tail: generic_ir::Tail::Jump(dst_block_id),
@@ -59,7 +63,7 @@ pub fn deconstruct_ssa(
                 .replace_block_id(dst_block_id, new_block_id);
         }
     }
-    body
+    (body, n_copies)
 }
 
 fn get_copy_op<Reg>(dst: Reg, src: Reg, width: ir::Width) -> generic_ir::Op<Reg> {
