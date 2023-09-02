@@ -39,6 +39,7 @@ fn compile(code: &str) -> PathBuf {
     let asm_filename = filename.with_extension("s");
     Command::cargo_bin("ccpu-cc")
         .unwrap()
+        .arg("--std=gnu11")
         .arg("-o")
         .arg(&asm_filename)
         .arg(filename)

@@ -551,7 +551,7 @@ impl CType {
             CType::StructUnion(_) => None,
             CType::Function { .. } => None,
             CType::Void => None,
-            CType::VaList => None,
+            CType::VaList => Some(ir::Width::VA_LIST_WIDTH),
         }
     }
 

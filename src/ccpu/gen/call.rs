@@ -2,7 +2,7 @@ use crate::{
     ccpu::{
         gen::{copy::gen_copy_var, util::load_addr},
         instr::InstructionWriter,
-        reg::{FrameReg, VA_ARGS_START},
+        reg::{FrameReg, VA_ARGS_START_INDEX},
     },
     generic_ir::{self, Scalar, VarLocation},
 };
@@ -17,7 +17,11 @@ pub fn gen_call(w: &mut InstructionWriter, op: &generic_ir::CallOp<FrameReg>) {
     }
     for (i, (arg, _)) in op.va_args.iter().enumerate() {
         match arg {
-            Scalar::Var(VarLocation::Local(FrameReg::FrameB(n))) if *n == (i + VA_ARGS_START) as u16 => (),
+            Scalar::Var(VarLocation::Local(FrameReg::FrameB(n)))
+                if *n == (i + VA_ARGS_START_INDEX) as u16 =>
+            {
+                ()
+            }
             _ => panic!("Call variadic arguments are not correctly hinted by register allocator!"),
         }
     }

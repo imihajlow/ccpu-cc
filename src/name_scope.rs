@@ -176,7 +176,7 @@ impl NameScope {
             let mut ops = Vec::new();
             for (i, (t, name, span)) in l.iter().enumerate() {
                 if let Some(name) = name {
-                    if t.t.is_scalar() {
+                    if t.t.is_scalar() || t.t.is_valist() {
                         let reg = self.alloc_reg();
                         defs.insert(name.to_string(), (Value::AutoVar(t.clone(), reg), *span));
                         ops.push(ir::Op::Arg(ir::ArgOp {

@@ -356,7 +356,9 @@ fn update_max_width_op(max_width: &mut HashMap<ir::VirtualReg, ir::Width>, op: &
         Op::Arg(_) => (),
         Op::FramePointer(_) => (),
         Op::VaStart(_) => (),
-        Op::VaArg(op) => update_max_width_scalar(max_width, &op.src_va_list, ir::Width::VA_LIST_WIDTH),
+        Op::VaArg(op) => {
+            update_max_width_scalar(max_width, &op.src_va_list, ir::Width::VA_LIST_WIDTH)
+        }
         Op::VaListInc(op) => update_max_width_scalar(max_width, &op.src, ir::Width::VA_LIST_WIDTH),
         #[cfg(test)]
         Op::Dummy(_) => (),

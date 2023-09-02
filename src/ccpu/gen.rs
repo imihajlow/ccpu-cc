@@ -32,6 +32,7 @@ mod shift;
 mod store;
 mod sub;
 mod util;
+mod variadic;
 
 pub fn gen_tu(
     tu: TranslationUnit<FrameReg>,
@@ -134,9 +135,9 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, _function_na
         Call(op) => call::gen_call(w, op),
         Memcpy(_) => todo!(),
         IntrinCall(op) => intrin::gen_intrin_call(w, op),
-        VaStart(_) => todo!(),
-        VaArg(_) => todo!(),
-        VaListInc(_) => todo!(),
+        VaStart(op) => variadic::gen_va_start(w, op),
+        VaArg(op) => variadic::gen_va_arg(w, op),
+        VaListInc(op) => variadic::gen_va_list_inc(w, op),
         FramePointer(_) => {
             unreachable!("Frame pointer expansion step must be performed before generating code")
         }

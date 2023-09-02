@@ -382,18 +382,19 @@ impl TypeBuilder {
                     }
                     Ok(())
                 }
-                BaseType::Alias(_, _) | BaseType::StructUnion(_) | BaseType::Enum(_) | BaseType::Builtin(_) => {
-                    match (&self.modifier, &self.sign) {
-                        (TypeModifier::None, SignModifier::Default) => Ok(()),
-                        _ => {
-                            ec.record_error(
-                                CompileError::WrongModifiers(format!("{}", &base_type)),
-                                span,
-                            )?;
-                            Err(())
-                        }
+                BaseType::Alias(_, _)
+                | BaseType::StructUnion(_)
+                | BaseType::Enum(_)
+                | BaseType::Builtin(_) => match (&self.modifier, &self.sign) {
+                    (TypeModifier::None, SignModifier::Default) => Ok(()),
+                    _ => {
+                        ec.record_error(
+                            CompileError::WrongModifiers(format!("{}", &base_type)),
+                            span,
+                        )?;
+                        Err(())
                     }
-                }
+                },
             },
         }
     }

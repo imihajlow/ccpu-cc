@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 
 use crate::{
     ctype::{CType, QualifiedType, StructUnionIdentifier},
+    machine::MAX_VA_ARGS,
     string::StringParseError,
 };
 
@@ -72,6 +73,7 @@ pub enum CompileError {
     NotAFunction(QualifiedType),
     TooManyArguments(usize, usize),
     TooFewArguments(usize, usize),
+    TooManyVariadicArguments,
     // Control flow errors
     InvalidBreak,
     InvalidContinue,
@@ -222,7 +224,9 @@ impl std::fmt::Display for CompileError {
                 f.write_str("'void' must be the first and only parameter if specified")
             }
             CompileError::VarRedefinition(s) => write!(f, "redefinition of '{}'", s),
-            CompileError::BuiltinRedefinition(s) => write!(f, "redefinition of a builtin name '{}'", s),
+            CompileError::BuiltinRedefinition(s) => {
+                write!(f, "redefinition of a builtin name '{}'", s)
+            }
             CompileError::NotAType(s) => write!(f, "'{}' is not a type, but a variable", s),
             CompileError::NotAVar(s) => write!(f, "'{}' is not a variable, but a type alias", s),
             CompileError::BadIndirection(t) => {
@@ -281,6 +285,9 @@ impl std::fmt::Display for CompileError {
                 "too few arguments to function call, expected {}, have {}",
                 expected, got
             ),
+            CompileError::TooManyVariadicArguments => {
+                write!(f, "too many variadic arguments (maximum {})", MAX_VA_ARGS)
+            }
             CompileError::InvalidBreak => {
                 f.write_str("'break' statement not in loop or switch statement")
             }

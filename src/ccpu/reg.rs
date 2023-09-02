@@ -6,8 +6,8 @@ use super::stack::{STACK_FRAME_0_BASE, STACK_FRAME_1_BASE, STACK_FRAME_SIZE};
 
 pub const FRAME_SIZE: usize = STACK_FRAME_SIZE as usize / 8;
 
-pub const VA_ARGS_START: usize = FRAME_SIZE / 2;
-pub const INTRIN_START: usize = FRAME_SIZE - 6;
+pub const VA_ARGS_START_INDEX: usize = FRAME_SIZE / 2;
+pub const INTRIN_START_INDEX: usize = FRAME_SIZE - 6;
 
 // TODO prevent overlapping of variadic args and registers - unlikely
 
@@ -60,6 +60,32 @@ impl FrameReg {
             FrameReg::FrameB(_) => None,
         }
     }
+
+    pub fn is_frame_a(&self) -> bool {
+        match self {
+            FrameReg::FrameA(_) => true,
+            FrameReg::Tmp => true,
+            FrameReg::RetAddr => true,
+            FrameReg::IntrinsicArg3 => true,
+            FrameReg::IntrinsicArg2 => true,
+            FrameReg::IntrinsicArg1 => true,
+            FrameReg::IntrinsicRet => true,
+            FrameReg::FrameB(_) => false,
+        }
+    }
+
+    pub fn is_frame_b(&self) -> bool {
+        match self {
+            FrameReg::FrameA(_) => false,
+            FrameReg::Tmp => false,
+            FrameReg::RetAddr => false,
+            FrameReg::IntrinsicArg3 => false,
+            FrameReg::IntrinsicArg2 => false,
+            FrameReg::IntrinsicArg1 => false,
+            FrameReg::IntrinsicRet => false,
+            FrameReg::FrameB(_) => true,
+        }
+    }
 }
 
 impl Register for FrameReg {
@@ -107,7 +133,7 @@ impl Register for FrameReg {
     }
 
     fn get_callee_arg(arg_idx: usize) -> Option<Self> {
-        if arg_idx < VA_ARGS_START {
+        if arg_idx < VA_ARGS_START_INDEX {
             Some(FrameReg::FrameB(arg_idx as u16))
         } else {
             None
@@ -115,7 +141,7 @@ impl Register for FrameReg {
     }
 
     fn get_callee_va_arg(va_arg_idx: usize) -> Option<Self> {
-        let idx = va_arg_idx + VA_ARGS_START;
+        let idx = va_arg_idx + VA_ARGS_START_INDEX;
         if idx < FRAME_SIZE - 6 {
             Some(FrameReg::FrameB(idx as u16))
         } else {

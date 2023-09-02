@@ -10,6 +10,7 @@ use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
 use crate::generic_ir::Scalar;
 use crate::lvalue::TypedLValue;
+use crate::machine::MAX_VA_ARGS;
 use crate::object_location::ObjectLocation;
 use crate::string::parse_string_literal;
 use crate::{
@@ -586,6 +587,10 @@ fn compile_call(
 
             for (arg_src, span) in args_src_iter {
                 va_arg_locations.push(compile_argument(None, arg_src, span, scope, be, ec)?);
+
+                if va_arg_locations.len() >= MAX_VA_ARGS {
+                    ec.record_error(CompileError::TooManyVariadicArguments, span)?;
+                }
             }
 
             (arg_locations, va_arg_locations)
@@ -634,6 +639,14 @@ fn compile_argument(
         if arg_type.t.is_scalar() {
             let dst = cast(arg_src, &arg_type.t, false, span, scope, be, ec)?;
             let (s, t) = dst.unwrap_scalar_and_type();
+            let w = t.t.get_scalar_width().unwrap();
+            Ok((s, w))
+        } else if arg_type.t.is_valist() {
+            if !arg_src.t.t.is_valist() {
+                ec.record_error(CompileError::IncompatibleTypes(arg_type, arg_src.t), span)?;
+                unreachable!();
+            }
+            let (s, t) = arg_src.unwrap_scalar_and_type();
             let w = t.t.get_scalar_width().unwrap();
             Ok((s, w))
         } else {
