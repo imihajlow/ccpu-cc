@@ -73,6 +73,9 @@ pub enum Op<Reg> {
     Call(CallOp<Reg>),
     Memcpy(MemcpyOp<Reg>),
     IntrinCall(IntrinCallOp<Reg>),
+    VaStart(VaStartOp<Reg>),
+    VaArg(VaArgOp<Reg>),
+    VaListInc(VaListIncOp<Reg>),
     #[cfg(test)]
     Dummy(usize),
 }
@@ -167,6 +170,7 @@ pub struct CallOp<Reg> {
     pub dst: Option<(VarLocation<Reg>, Width)>,
     pub addr: Scalar<Reg>,
     pub args: Vec<(Scalar<Reg>, Width)>,
+    pub va_args: Vec<(Scalar<Reg>, Width)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -194,6 +198,24 @@ pub enum IntrinCallVariant<Reg> {
         (Width, Scalar<Reg>),
         (Width, Scalar<Reg>),
     ),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VaStartOp<Reg> {
+    pub dst: VarLocation<Reg>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VaArgOp<Reg> {
+    pub dst: VarLocation<Reg>,
+    pub src_va_list: Scalar<Reg>,
+    pub width: Width,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VaListIncOp<Reg> {
+    pub dst: VarLocation<Reg>,
+    pub src: Scalar<Reg>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -266,6 +288,9 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Call(op) => op.get_dst_reg(),
             Op::Memcpy(_) => None,
             Op::IntrinCall(op) => op.get_dst_reg(),
+            Op::VaStart(op) => op.get_dst_reg(),
+            Op::VaArg(op) => op.get_dst_reg(),
+            Op::VaListInc(op) => op.get_dst_reg(),
             #[cfg(test)]
             Op::Dummy(_) => None,
         }
@@ -298,6 +323,9 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Call(op) => op.is_read_from_register(reg),
             Op::IntrinCall(op) => op.is_read_from_register(reg),
             Op::Memcpy(op) => op.is_read_from_register(reg),
+            Op::VaStart(_) => false,
+            Op::VaArg(op) => op.is_read_from_register(reg),
+            Op::VaListInc(op) => op.is_read_from_register(reg),
             #[cfg(test)]
             Op::Dummy(_) => false,
         }
@@ -330,6 +358,9 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Call(_) => true,
             Op::IntrinCall(_) => true,
             Op::Memcpy(_) => true,
+            Op::VaStart(_) => false,
+            Op::VaArg(_) => false,
+            Op::VaListInc(_) => false,
             #[cfg(test)]
             Op::Dummy(_) => false,
         }
@@ -362,6 +393,9 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Call(_) => true,
             Op::IntrinCall(_) => true,
             Op::Memcpy(_) => true,
+            Op::VaStart(_) => false,
+            Op::VaArg(_) => false,
+            Op::VaListInc(_) => false,
             #[cfg(test)]
             Op::Dummy(_) => false,
         }
@@ -394,6 +428,9 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::Call(op) => op.dst.as_ref().map(|(_, w)| w).copied(),
             Op::IntrinCall(op) => op.get_dst_data_width(),
             Op::Memcpy(_) => None,
+            Op::VaStart(_) => Some(Width::VA_LIST_WIDTH),
+            Op::VaArg(op) => Some(op.width),
+            Op::VaListInc(_) => Some(Width::VA_LIST_WIDTH),
             #[cfg(test)]
             Op::Dummy(_) => None,
         }
@@ -428,6 +465,9 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Call(op) => op.collect_read_regs(set),
             Op::IntrinCall(op) => op.collect_read_regs(set),
             Op::Memcpy(op) => op.collect_read_regs(set),
+            Op::VaStart(_) => (),
+            Op::VaArg(op) => op.collect_read_regs(set),
+            Op::VaListInc(op) => op.collect_read_regs(set),
             #[cfg(test)]
             Op::Dummy(_) => (),
         }
@@ -461,6 +501,9 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Call(op) => op.collect_set_regs(set),
             Op::IntrinCall(op) => op.collect_set_regs(set),
             Op::Memcpy(op) => op.collect_set_regs(set),
+            Op::VaStart(op) => op.collect_set_regs(set),
+            Op::VaArg(op) => op.collect_set_regs(set),
+            Op::VaListInc(op) => op.collect_set_regs(set),
             #[cfg(test)]
             Op::Dummy(_) => (),
         }
@@ -503,6 +546,9 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Call(op) => Op::Call(op.remap_regs(map)),
             Op::IntrinCall(op) => Op::IntrinCall(op.remap_regs(map)),
             Op::Memcpy(op) => Op::Memcpy(op.remap_regs(map)),
+            Op::VaStart(op) => Op::VaStart(op.remap_regs(map)),
+            Op::VaArg(op) => Op::VaArg(op.remap_regs(map)),
+            Op::VaListInc(op) => Op::VaListInc(op.remap_regs(map)),
             #[cfg(test)]
             Op::Dummy(x) => Op::Dummy(x),
         }
@@ -541,6 +587,9 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::Call(op) => op.subs_src_regs(map),
             Op::IntrinCall(op) => op.subs_src_regs(map),
             Op::Memcpy(op) => op.subs_src_regs(map),
+            Op::VaStart(_) => false,
+            Op::VaArg(op) => op.subs_src_regs(map),
+            Op::VaListInc(op) => op.subs_src_regs(map),
             #[cfg(test)]
             Op::Dummy(_) => false,
         }
@@ -591,6 +640,9 @@ impl Op<VirtualReg> {
             Op::Call(op) => Op::Call(op.remap_regs_to_new_version(map, scope)),
             Op::IntrinCall(op) => Op::IntrinCall(op.remap_regs_to_new_version(map, scope)),
             Op::Memcpy(op) => Op::Memcpy(op.remap_regs(map)),
+            Op::VaStart(op) => Op::VaStart(op.remap_regs_to_new_version(map, scope)),
+            Op::VaArg(op) => Op::VaArg(op.remap_regs_to_new_version(map, scope)),
+            Op::VaListInc(op) => Op::VaListInc(op.remap_regs_to_new_version(map, scope)),
             #[cfg(test)]
             Op::Dummy(x) => Op::Dummy(x),
         }
@@ -1224,6 +1276,11 @@ impl<Reg: Copy + Eq> CallOp<Reg> {
                 return true;
             }
         }
+        for (a, _) in &self.va_args {
+            if a.is_reg(reg) {
+                return true;
+            }
+        }
         false
     }
 }
@@ -1231,6 +1288,10 @@ impl<Reg: Copy + Eq> CallOp<Reg> {
 impl<Reg: Copy + Eq + Hash> CallOp<Reg> {
     fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
         for (a, _) in &self.args {
+            a.collect_regs(regs);
+        }
+
+        for (a, _) in &self.va_args {
             a.collect_regs(regs);
         }
 
@@ -1248,6 +1309,11 @@ impl<Reg: Copy + Eq + Hash> CallOp<Reg> {
                 .into_iter()
                 .map(|(a, w)| (a.remap_reg(map), w))
                 .collect(),
+            va_args: self
+                .va_args
+                .into_iter()
+                .map(|(a, w)| (a.remap_reg(map), w))
+                .collect(),
 
             dst: self.dst.map(|(dst, w)| (dst.remap_reg(map), w)),
             addr: self.addr.remap_reg(map),
@@ -1257,6 +1323,9 @@ impl<Reg: Copy + Eq + Hash> CallOp<Reg> {
     fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
         let mut result = self.addr.subs_reg(map);
         for (arg, _) in &mut self.args {
+            result |= arg.subs_reg(map);
+        }
+        for (arg, _) in &mut self.va_args {
             result |= arg.subs_reg(map);
         }
         result
@@ -1272,6 +1341,12 @@ impl CallOp<VirtualReg> {
         Self {
             args: self
                 .args
+                .into_iter()
+                .map(|(a, w)| (a.remap_reg(map), w))
+                .collect(),
+
+            va_args: self
+                .va_args
                 .into_iter()
                 .map(|(a, w)| (a.remap_reg(map), w))
                 .collect(),
@@ -1487,6 +1562,126 @@ impl<Reg: Copy + Eq + Hash> MemcpyOp<Reg> {
     }
 }
 
+impl<Reg: Copy + Eq> VaStartOp<Reg> {
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
+    }
+}
+
+impl<Reg: Copy + Eq + Hash> VaStartOp<Reg> {
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
+    }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> VaStartOp<TargetReg> {
+        VaStartOp {
+            dst: self.dst.remap_reg(map),
+        }
+    }
+}
+
+impl VaStartOp<VirtualReg> {
+    fn remap_regs_to_new_version(
+        self,
+        map: &mut HashMap<VirtualReg, VirtualReg>,
+        scope: &mut NameScope,
+    ) -> Self {
+        Self {
+            dst: self.dst.remap_reg_to_new_version(map, scope),
+        }
+    }
+}
+
+impl<Reg: Copy + Eq> VaArgOp<Reg> {
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
+    }
+
+    pub fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.src_va_list.is_reg(reg)
+    }
+}
+
+impl<Reg: Copy + Eq + Hash> VaArgOp<Reg> {
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
+    }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.src_va_list.collect_regs(regs);
+    }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> VaArgOp<TargetReg> {
+        VaArgOp {
+            dst: self.dst.remap_reg(map),
+            src_va_list: self.src_va_list.remap_reg(map),
+            width: self.width,
+        }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.src_va_list.subs_reg(map)
+    }
+}
+
+impl VaArgOp<VirtualReg> {
+    fn remap_regs_to_new_version(
+        self,
+        map: &mut HashMap<VirtualReg, VirtualReg>,
+        scope: &mut NameScope,
+    ) -> Self {
+        Self {
+            dst: self.dst.remap_reg_to_new_version(map, scope),
+            src_va_list: self.src_va_list.remap_reg(map),
+            width: self.width,
+        }
+    }
+}
+
+impl<Reg: Copy + Eq> VaListIncOp<Reg> {
+    fn get_dst_reg(&self) -> Option<Reg> {
+        self.dst.get_reg()
+    }
+
+    pub fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.src.is_reg(reg)
+    }
+}
+
+impl<Reg: Copy + Eq + Hash> VaListIncOp<Reg> {
+    fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
+        self.dst.collect_regs(regs);
+    }
+
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.src.collect_regs(regs);
+    }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> VaListIncOp<TargetReg> {
+        VaListIncOp {
+            dst: self.dst.remap_reg(map),
+            src: self.src.remap_reg(map),
+        }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.src.subs_reg(map)
+    }
+}
+
+impl VaListIncOp<VirtualReg> {
+    fn remap_regs_to_new_version(
+        self,
+        map: &mut HashMap<VirtualReg, VirtualReg>,
+        scope: &mut NameScope,
+    ) -> Self {
+        Self {
+            dst: self.dst.remap_reg_to_new_version(map, scope),
+            src: self.src.remap_reg(map),
+        }
+    }
+}
+
 impl<Reg: Copy + Eq> VarLocation<Reg> {
     pub fn unwrap_reg(self) -> Reg {
         if let VarLocation::Local(x) = self {
@@ -1618,6 +1813,7 @@ impl Width {
     pub const INT_WIDTH: Self = Self::new(machine::INT_SIZE);
     pub const PTR_WIDTH: Self = Self::new(machine::PTR_SIZE);
     pub const BOOL_WIDTH: Self = Self::new(machine::BOOL_SIZE);
+    pub const VA_LIST_WIDTH: Self = Self::new(machine::VA_LIST_SIZE);
 }
 
 impl PartialOrd for Width {
@@ -1694,6 +1890,9 @@ where
             Self::Call(op) => write!(f, "call{}", op),
             Self::IntrinCall(op) => write!(f, "intrin{}", op),
             Self::Memcpy(op) => write!(f, "memcpy{}", op),
+            Self::VaStart(op) => write!(f, "va_start{}", op),
+            Self::VaArg(op) => write!(f, "va_arg{}", op),
+            Self::VaListInc(op) => write!(f, "va_inc{}", op),
             #[cfg(test)]
             Self::Dummy(n) => write!(f, "dummy {}", n),
         }
@@ -1863,6 +2062,17 @@ where
         {
             f.write_str(&s)?;
         }
+        if !self.va_args.is_empty() {
+            f.write_str(" ... ")?;
+            for s in self
+                .va_args
+                .iter()
+                .map(|(s, w)| format!("{} {}", w, s))
+                .intersperse(", ".to_string())
+            {
+                f.write_str(&s)?;
+            }
+        }
         f.write_str(")")?;
         Ok(())
     }
@@ -1917,6 +2127,33 @@ where
                 write!(f, " {} {}, {} {}, {} {}", a1w, a1r, a2w, a2r, a3w, a3r)
             }
         }
+    }
+}
+
+impl<Reg> std::fmt::Display for VaStartOp<Reg>
+where
+    Reg: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, " {}", self.dst)
+    }
+}
+
+impl<Reg> std::fmt::Display for VaArgOp<Reg>
+where
+    Reg: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{} {}, {}", self.width, self.dst, self.src_va_list)
+    }
+}
+
+impl<Reg> std::fmt::Display for VaListIncOp<Reg>
+where
+    Reg: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, " {}, {}", self.dst, self.src)
     }
 }
 

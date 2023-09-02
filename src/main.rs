@@ -4,6 +4,7 @@
 #![feature(map_try_insert)]
 
 mod block_emitter;
+mod builtin;
 mod ccpu;
 mod compile;
 mod constant;

@@ -317,6 +317,9 @@ mod test {
         fn get_callee_arg(arg_index: usize) -> Option<Self> {
             Some(arg_index as u32 + 500)
         }
+        fn get_callee_va_arg(arg_index: usize) -> Option<Self> {
+            Some(arg_index as u32 + 1000)
+        }
     }
 
     fn index_of<Reg: Copy + Eq + Hash>(

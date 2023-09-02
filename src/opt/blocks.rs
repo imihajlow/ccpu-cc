@@ -90,7 +90,9 @@ pub fn simplify_jumps<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<
  *
  * Returns true if any changes have been made.
  */
-pub fn merge_chains<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<Reg>>) -> bool {
+pub fn merge_chains<Reg: Copy + Hash + Eq + std::fmt::Display>(
+    blocks: &mut Vec<generic_ir::Block<Reg>>,
+) -> bool {
     assert!(!blocks.is_empty());
     let mut ref_counts = vec![0; blocks.len()];
     ref_counts[0] = 1;
@@ -116,8 +118,10 @@ pub fn merge_chains<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<Re
                     let mut phi_map = HashMap::new();
                     let phi_srcs = mem::replace(&mut blocks[n].phi.srcs, HashMap::new());
                     for (dst, (_, srcs)) in phi_srcs {
-                        assert_eq!(srcs.len(), 1);
-                        let src = srcs.first().unwrap().1.clone();
+                        let (_, src) = srcs
+                            .into_iter()
+                            .find(|(src_block, _)| *src_block == i)
+                            .unwrap();
                         phi_map.insert(dst, src);
                     }
                     result = true;

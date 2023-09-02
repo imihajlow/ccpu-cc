@@ -1,3 +1,4 @@
+use crate::builtin::get_builtin_type;
 use crate::constant;
 use crate::constant::check_static_assert;
 use crate::ctype::CType;
@@ -59,6 +60,7 @@ enum BaseType {
     Alias(String, QualifiedType),
     StructUnion(StructUnionIdentifier),
     Enum(EnumIdentifier),
+    Builtin(CType),
 }
 
 #[derive(PartialEq, Eq)]
@@ -163,7 +165,13 @@ impl TypeBuilder {
             TypeSpecifier::Unsigned => self.set_signed(false, span, ec)?,
             TypeSpecifier::Long => self.set_long(span, ec)?,
             TypeSpecifier::Short => self.set_short(span, ec)?,
-            TypeSpecifier::TypedefName(n) => self.set_alias(n.node.name, n.span, scope, ec)?,
+            TypeSpecifier::TypedefName(n) => {
+                if let Some(t) = get_builtin_type(&n.node.name) {
+                    self.set_base_type(BaseType::Builtin(t), span, ec)?
+                } else {
+                    self.set_alias(n.node.name, n.span, scope, ec)?
+                }
+            }
             TypeSpecifier::Struct(s) => self.set_struct(s, scope, ec)?,
             TypeSpecifier::Enum(_) => todo!(),
             TypeSpecifier::TypeOf(_) => todo!(),
@@ -234,6 +242,7 @@ impl TypeBuilder {
             Some(BaseType::Alias(_, t)) => t.t.clone(),
             Some(BaseType::StructUnion(id)) => CType::StructUnion(id.clone()),
             Some(BaseType::Enum(id)) => CType::Enum(id.clone()),
+            Some(BaseType::Builtin(t)) => t.clone(),
         };
 
         Ok(TypeBuilderStage2 {
@@ -373,7 +382,7 @@ impl TypeBuilder {
                     }
                     Ok(())
                 }
-                BaseType::Alias(_, _) | BaseType::StructUnion(_) | BaseType::Enum(_) => {
+                BaseType::Alias(_, _) | BaseType::StructUnion(_) | BaseType::Enum(_) | BaseType::Builtin(_) => {
                     match (&self.modifier, &self.sign) {
                         (TypeModifier::None, SignModifier::Default) => Ok(()),
                         _ => {
@@ -690,6 +699,7 @@ impl std::fmt::Display for BaseType {
             BaseType::Float => f.write_str("float"),
             BaseType::Double => f.write_str("double"),
             BaseType::Bool => f.write_str("_Bool"),
+            BaseType::Builtin(t) => write!(f, "{}", t),
             BaseType::Alias(name, t) => write!(f, "{} (aka {})", name, t),
             BaseType::StructUnion(t) => write!(f, "{}", t),
             BaseType::Enum(t) => write!(f, "{}", t),

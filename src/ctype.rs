@@ -21,6 +21,7 @@ pub enum CType {
     StructUnion(StructUnionIdentifier),
     Enum(EnumIdentifier),
     Function { result: Box<QualifiedType>, args: FunctionArgs, vararg: bool },
+    VaList,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -400,6 +401,14 @@ impl CType {
         }
     }
 
+    pub fn is_valist(&self) -> bool {
+        if let CType::VaList = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_same_struct_union(&self, other: &Self) -> bool {
         use CType::*;
         match (self, other) {
@@ -473,6 +482,13 @@ impl CType {
                 su.sizeof(scope, span, ec)
             }
             CType::Enum(_) => Ok(machine::INT_SIZE as u32),
+            CType::VaList => {
+                ec.record_error(
+                    CompileError::Unimplemented("sizeof va_list".to_string()),
+                    span,
+                )?;
+                unreachable!()
+            }
         }
     }
 
@@ -504,6 +520,13 @@ impl CType {
                 su.alignof(scope, span, ec)
             }
             CType::Enum(_) => Ok(machine::INT_ALIGN),
+            CType::VaList => {
+                ec.record_error(
+                    CompileError::Unimplemented("alignof va_list".to_string()),
+                    span,
+                )?;
+                unreachable!()
+            }
         }
     }
 
@@ -514,7 +537,8 @@ impl CType {
             CType::Array(_, _) | CType::Pointer(_) => Some((ir::Width::PTR_WIDTH, false)),
             CType::Enum(_) => Some((ir::Width::INT_WIDTH, true)),
             CType::StructUnion(_) => None,
-            _ => None,
+            CType::VaList => Some((ir::Width::VA_LIST_WIDTH, false)),
+            CType::Void | CType::Float(_) | CType::Function { .. } => None,
         }
     }
 
@@ -527,6 +551,7 @@ impl CType {
             CType::StructUnion(_) => None,
             CType::Function { .. } => None,
             CType::Void => None,
+            CType::VaList => None,
         }
     }
 
@@ -657,6 +682,7 @@ impl std::fmt::Display for CType {
                 if *vararg { ", ..." } else { "" },
                 result
             ),
+            VaList => f.write_str("__builtin_va_list"),
         }
     }
 }

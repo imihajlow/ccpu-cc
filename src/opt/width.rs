@@ -4,7 +4,7 @@ use ir::Width;
 use replace_with::replace_with_or_abort_and_return;
 
 use crate::{
-    generic_ir::{ArgOp, CallOp, ConvOp, IntrinCallVariant, LoadOp},
+    generic_ir::{ArgOp, CallOp, ConvOp, IntrinCallVariant, LoadOp, VaArgOp},
     ir::{self, BinaryOp, BinaryUnsignedOp, CompareOp, ShiftOp, Tail, UnaryUnsignedOp},
 };
 
@@ -212,6 +212,21 @@ fn try_shorten_op(max_width: &HashMap<ir::VirtualReg, ir::Width>, op: &mut ir::O
             }
         }
         Op::FramePointer(_) => (false, op),
+        Op::VaStart(_) => (false, op),
+        Op::VaArg(op) => {
+            if max_width < op.width {
+                (
+                    true,
+                    Op::VaArg(VaArgOp {
+                        width: max_width,
+                        ..op
+                    }),
+                )
+            } else {
+                (false, Op::VaArg(op))
+            }
+        }
+        Op::VaListInc(_) => (false, op),
         #[cfg(test)]
         Op::Dummy(_) => (false, op),
     })
@@ -340,6 +355,9 @@ fn update_max_width_op(max_width: &mut HashMap<ir::VirtualReg, ir::Width>, op: &
         Op::Undefined(_) => (),
         Op::Arg(_) => (),
         Op::FramePointer(_) => (),
+        Op::VaStart(_) => (),
+        Op::VaArg(op) => update_max_width_scalar(max_width, &op.src_va_list, ir::Width::VA_LIST_WIDTH),
+        Op::VaListInc(op) => update_max_width_scalar(max_width, &op.src, ir::Width::VA_LIST_WIDTH),
         #[cfg(test)]
         Op::Dummy(_) => (),
     }

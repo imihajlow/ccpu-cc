@@ -22,6 +22,7 @@ pub type StoreOp = generic_ir::StoreOp<VirtualReg>;
 pub type LoadOp = generic_ir::LoadOp<VirtualReg>;
 pub type CallOp = generic_ir::CallOp<VirtualReg>;
 pub type MemcpyOp = generic_ir::MemcpyOp<VirtualReg>;
+pub type VaArgOp = generic_ir::VaArgOp<VirtualReg>;
 pub type Tail = generic_ir::Tail<VirtualReg>;
 pub type Phi = generic_ir::Phi<VirtualReg>;
 pub type GenericBlock<GTail> = generic_ir::GenericBlock<GTail, VirtualReg>;

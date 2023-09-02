@@ -39,6 +39,7 @@ pub enum CompileError {
     ConflictingStorageClass(String),
     TypedefInitialized,
     VarRedefinition(String),
+    BuiltinRedefinition(String),
     // Constant expression errors
     VariablesForbidden,
     CallsForbidden,
@@ -221,6 +222,7 @@ impl std::fmt::Display for CompileError {
                 f.write_str("'void' must be the first and only parameter if specified")
             }
             CompileError::VarRedefinition(s) => write!(f, "redefinition of '{}'", s),
+            CompileError::BuiltinRedefinition(s) => write!(f, "redefinition of a builtin name '{}'", s),
             CompileError::NotAType(s) => write!(f, "'{}' is not a type, but a variable", s),
             CompileError::NotAVar(s) => write!(f, "'{}' is not a variable, but a type alias", s),
             CompileError::BadIndirection(t) => {

@@ -27,6 +27,9 @@ pub fn compute_const(op: &mut Op) -> bool {
         Op::Arg(_) => None,
         Op::FramePointer(_) => None,
         Op::Undefined(_) => None,
+        Op::VaStart(_) => None,
+        Op::VaArg(_) => None,
+        Op::VaListInc(_) => None,
         #[cfg(test)]
         Op::Dummy(_) => None,
     };

@@ -78,7 +78,8 @@ fn test_call_1() {
                 args: vec![
                     (ir::Scalar::ConstInt(10), ir::Width::Word),
                     (ir::Scalar::Var(VarLocation::Local(1)), ir::Width::Byte)
-                ]
+                ],
+                va_args: vec![]
             })
         ]
     );
@@ -97,7 +98,8 @@ fn test_call_2() {
             ir::Op::Call(ir::CallOp {
                 addr: ir::Scalar::SymbolOffset(ir::GlobalVarId::Global("bar".to_string()), 0),
                 dst: Some((VarLocation::Local(2), ir::Width::Dword)),
-                args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),]
+                args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),],
+                va_args: vec![]
             }),
             ir::Op::Conv(ir::ConvOp {
                 dst: VarLocation::Local(3),
@@ -130,7 +132,8 @@ fn test_call_3() {
                 "bar".to_string()
             ))),
             dst: None,
-            args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),]
+            args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),],
+            va_args: vec![]
         }),]
     );
 }
@@ -155,7 +158,8 @@ fn test_call_4() {
             ir::Op::Call(ir::CallOp {
                 addr: ir::Scalar::Var(VarLocation::Local(1)),
                 dst: None,
-                args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),]
+                args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),],
+                va_args: vec![]
             }),
         ]
     );

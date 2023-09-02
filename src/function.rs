@@ -195,6 +195,9 @@ impl Function<ir::VirtualReg> {
                 for (s, w) in &mut c.args {
                     callback(w, s);
                 }
+                for (s, w) in &mut c.va_args {
+                    callback(w, s);
+                }
             }
         };
 

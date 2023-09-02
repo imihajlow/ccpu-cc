@@ -32,6 +32,11 @@ pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::VirtualReg, FrameRe
                         hints.insert(arg_reg, FrameReg::get_callee_arg(i).unwrap());
                     }
                 }
+                for (i, (arg, _)) in call_op.va_args.iter().enumerate() {
+                    if let Some(arg_reg) = arg.get_reg() {
+                        hints.insert(arg_reg, FrameReg::get_callee_va_arg(i).unwrap());
+                    }
+                }
             } else if let ir::Op::IntrinCall(call_op) = op {
                 match &call_op.variant {
                     IntrinCallVariant::Call2R((_, r), (_, a1), (_, a2)) => {

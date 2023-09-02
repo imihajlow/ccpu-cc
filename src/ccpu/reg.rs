@@ -4,7 +4,12 @@ use crate::register::Register;
 
 use super::stack::{STACK_FRAME_0_BASE, STACK_FRAME_1_BASE, STACK_FRAME_SIZE};
 
-const FRAME_SIZE: usize = STACK_FRAME_SIZE as usize / 8;
+pub const FRAME_SIZE: usize = STACK_FRAME_SIZE as usize / 8;
+
+pub const VA_ARGS_START: usize = FRAME_SIZE / 2;
+pub const INTRIN_START: usize = FRAME_SIZE - 6;
+
+// TODO prevent overlapping of variadic args and registers - unlikely
 
 /**
  * Memory-mapped register on the hardware "stack" frame.
@@ -102,8 +107,17 @@ impl Register for FrameReg {
     }
 
     fn get_callee_arg(arg_idx: usize) -> Option<Self> {
-        if arg_idx < FRAME_SIZE - 6 {
+        if arg_idx < VA_ARGS_START {
             Some(FrameReg::FrameB(arg_idx as u16))
+        } else {
+            None
+        }
+    }
+
+    fn get_callee_va_arg(va_arg_idx: usize) -> Option<Self> {
+        let idx = va_arg_idx + VA_ARGS_START;
+        if idx < FRAME_SIZE - 6 {
+            Some(FrameReg::FrameB(idx as u16))
         } else {
             None
         }

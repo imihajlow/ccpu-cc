@@ -1,10 +1,11 @@
-use lang_c::ast::{CallExpression, CastExpression, StringLiteral};
+use lang_c::ast::{CallExpression, CastExpression, StringLiteral, VaArgExpression};
 use lang_c::span::Span;
 use lang_c::{
     ast::{BlockItem, Declaration, Expression, Initializer, Statement, StorageClassSpecifier},
     span::Node,
 };
 
+use crate::builtin::compile_builtin_call;
 use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
 use crate::generic_ir::Scalar;
@@ -89,7 +90,7 @@ pub fn compile_expression(
         Expression::OffsetOf(_) => todo!(),
         Expression::StringLiteral(sl) => compile_string_literal(*sl, scope, ec),
         Expression::CompoundLiteral(_) => todo!(),
-        Expression::VaArg(_) => todo!(),
+        Expression::VaArg(va) => compile_va_arg(*va, scope, be, ec),
         Expression::GenericSelection(_) => unimplemented!(),
         Expression::Statement(_) => unimplemented!(),
     }
@@ -513,6 +514,9 @@ fn compile_call(
         vararg,
     } = callee.t.t.clone()
     {
+        if let RValue::Builtin(b) = callee.src {
+            return compile_builtin_call(b, args_srcs, c.span, scope, be, ec);
+        }
         (*result, args, vararg, callee.src.unwrap_function_address())
     } else if let Ok(QualifiedType {
         t: CType::Function {
@@ -531,13 +535,13 @@ fn compile_call(
 
     let given_args_count = args_srcs.len();
 
-    let arg_locations = match arg_types {
+    let (arg_locations, va_arg_locations) = match arg_types {
         FunctionArgs::Void => {
             if given_args_count != 0 {
                 ec.record_error(CompileError::TooManyArguments(given_args_count, 0), c.span)?;
                 unreachable!()
             }
-            Vec::new()
+            (Vec::new(), Vec::new())
         }
         FunctionArgs::Empty => {
             ec.record_warning(CompileWarning::ImplicitArgumentTypes, c.span)?;
@@ -546,7 +550,7 @@ fn compile_call(
             for (arg_src, span) in args_srcs {
                 arg_locations.push(compile_argument(None, arg_src, span, scope, be, ec)?);
             }
-            arg_locations
+            (arg_locations, Vec::new())
         }
         FunctionArgs::List(arg_types) => {
             let expected_args_count = arg_types.len();
@@ -567,6 +571,7 @@ fn compile_call(
 
             let mut args_src_iter = args_srcs.into_iter();
             let mut arg_locations = Vec::new();
+            let mut va_arg_locations = Vec::new();
             for (arg_type, _, _) in arg_types {
                 let (arg_src, span) = args_src_iter.next().unwrap();
                 arg_locations.push(compile_argument(
@@ -580,10 +585,10 @@ fn compile_call(
             }
 
             for (arg_src, span) in args_src_iter {
-                arg_locations.push(compile_argument(None, arg_src, span, scope, be, ec)?);
+                va_arg_locations.push(compile_argument(None, arg_src, span, scope, be, ec)?);
             }
 
-            arg_locations
+            (arg_locations, va_arg_locations)
         }
     };
 
@@ -601,6 +606,7 @@ fn compile_call(
         dst: result_location.clone(),
         addr: address,
         args: arg_locations,
+        va_args: va_arg_locations,
     }));
 
     if let Some((result, _)) = result_location {
@@ -634,7 +640,20 @@ fn compile_argument(
             todo!()
         }
     } else {
-        todo!()
+        // Variable arguments
+        if arg_src.t.t.is_scalar() {
+            let (s, t) = arg_src.unwrap_scalar_and_type();
+            let w = t.t.get_scalar_width().unwrap();
+            Ok((s, w))
+        } else {
+            ec.record_error(
+                CompileError::Unimplemented(
+                    "passing non-scalar arguments to a variadic function".to_string(),
+                ),
+                span,
+            )?;
+            unreachable!()
+        }
     }
 }
 
@@ -661,4 +680,48 @@ fn compile_string_literal(
             qualifiers: Qualifiers::empty(),
         },
     })
+}
+
+pub fn compile_va_arg(
+    va: Node<VaArgExpression>,
+    scope: &mut NameScope,
+    be: &mut BlockEmitter,
+    ec: &mut ErrorCollector,
+) -> Result<TypedRValue, ()> {
+    let va_list = compile_expression(*va.node.va_list, scope, be, ec)?;
+    if !va_list.t.t.is_valist() {
+        ec.record_error(
+            CompileError::IncompatibleTypes(
+                QualifiedType {
+                    t: CType::VaList,
+                    qualifiers: Qualifiers::empty(),
+                },
+                va_list.t,
+            ),
+            va.span,
+        )?;
+        unreachable!();
+    }
+    let va_list_scalar = va_list.src.unwrap_scalar();
+    let target_type = type_builder::build_type_from_ast_type_name(va.node.type_name, scope, ec)?;
+
+    if target_type.t.is_scalar() {
+        let width = target_type.t.get_scalar_width().unwrap();
+        let dst = scope.alloc_temp();
+        be.append_operation(ir::Op::VaArg(ir::VaArgOp {
+            width,
+            dst: dst.clone(),
+            src_va_list: va_list_scalar,
+        }));
+        Ok(TypedRValue {
+            src: RValue::new_var(dst),
+            t: target_type,
+        })
+    } else {
+        ec.record_error(
+            CompileError::Unimplemented("non-scalar variadic arguments".to_string()),
+            va.span,
+        )?;
+        unreachable!();
+    }
 }

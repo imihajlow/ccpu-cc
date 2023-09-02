@@ -125,6 +125,13 @@ pub fn compile_assign_to_lval(
                     rhs_span,
                 )?;
             }
+            CType::VaList => {
+                ec.record_error(
+                    CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t),
+                    rhs_span,
+                )?;
+                unreachable!()
+            }
         }
         let rhs_casted = cast(rhs_val, &lhs_lval.t.t, false, rhs_span, scope, be, ec)?;
         let width = rhs_casted.t.t.get_width_sign().unwrap().0;
@@ -163,6 +170,27 @@ pub fn compile_assign_to_lval(
                 t,
                 src: RValue::new_object(ObjectLocation::PointedBy(dst_addr)),
             })
+        } else if lhs_lval.t.t.is_valist() {
+            // va_list assignment: same as scalars, but no cast
+            let width = rhs_val.t.t.get_width_sign().unwrap().0;
+            match lhs_lval.lv {
+                LValue::Var(v) => {
+                    be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                        dst: v,
+                        src: rhs_val.clone().unwrap_scalar(),
+                        width,
+                    }));
+                }
+                LValue::Indirection(addr) => {
+                    be.append_operation(ir::Op::Store(ir::StoreOp {
+                        dst_addr: addr,
+                        src: rhs_val.clone().unwrap_scalar(),
+                        width,
+                    }));
+                }
+                LValue::Object(_) => unreachable!(),
+            }
+            Ok(rhs_val)
         } else {
             ec.record_error(CompileError::NotAssignable, rhs_span)?;
             unreachable!();

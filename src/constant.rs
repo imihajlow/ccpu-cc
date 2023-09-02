@@ -47,7 +47,7 @@ pub fn compute_constant_expr(
                 ec.record_error(CompileError::VariablesForbidden, id.span)?;
                 unreachable!();
             }
-            scope.get_static_const(&id.node.name, id.span, ec).cloned()
+            scope.get_static_const(&id.node.name, id.span, ec)
         }
         Expression::Constant(c) => {
             match c.node {

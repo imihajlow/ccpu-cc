@@ -1,3 +1,4 @@
+use crate::builtin::BuiltinFunction;
 use crate::ctype::QualifiedType;
 use crate::initializer::TypedConstant;
 use crate::object_location::ObjectLocation;
@@ -11,6 +12,7 @@ pub enum RValue {
     Scalar(ir::Scalar),
     Object(ObjectLocation),
     Function(ir::Scalar),
+    Builtin(BuiltinFunction),
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +68,7 @@ impl RValue {
             RValue::Void => None,
             RValue::Scalar(_) => None,
             RValue::Function(_) => None,
+            RValue::Builtin(_) => None,
         }
     }
 
@@ -75,6 +78,7 @@ impl RValue {
             RValue::Scalar(s) => Some(s),
             RValue::Object(o) => Some(o.get_address()),
             RValue::Function(_) => None,
+            RValue::Builtin(_) => None,
         }
     }
 }
@@ -127,6 +131,7 @@ impl std::fmt::Display for RValue {
             RValue::Scalar(s) => s.fmt(f),
             RValue::Object(l) => write!(f, "obj@{}", l),
             RValue::Function(l) => write!(f, "fun@{}", l),
+            RValue::Builtin(b) => write!(f, "builtin({})", b),
         }
     }
 }

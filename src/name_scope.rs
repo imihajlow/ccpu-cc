@@ -6,6 +6,7 @@ use lang_c::{
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    builtin::{get_builtin_function, is_builtin_name, BuiltinFunction},
     ctype::{EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind},
     enums::Enum,
     error::{CompileError, CompileWarning, ErrorCollector},
@@ -55,6 +56,7 @@ pub enum Value {
         Option<TypedConstant>,
     ),
     Object(QualifiedType, ir::Scalar),
+    Builtin(QualifiedType, BuiltinFunction),
 }
 
 #[derive(Clone)]
@@ -154,7 +156,7 @@ impl NameScope {
                 Value::AutoVar(_, _) => {
                     unreachable!("No auto vars at top level");
                 }
-                Value::Type(_) => (),
+                Value::Type(_) | Value::Builtin(_, _) => (),
             }
         }
     }
@@ -235,6 +237,9 @@ impl NameScope {
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
+        if is_builtin_name(name) {
+            return ec.record_error(CompileError::BuiltinRedefinition(name.to_string()), span);
+        }
         let (storage_class, storage_class_span) = if let Some(stc) = storage_class.as_ref() {
             (Some(&stc.node), Some(stc.span))
         } else {
@@ -374,6 +379,12 @@ impl NameScope {
                             Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
                             span,
                         );
+                    } else if t.t.is_valist() {
+                        ec.record_error(
+                            CompileError::Unimplemented("static va_list".to_string()),
+                            span,
+                        )?;
+                        unreachable!()
                     } else {
                         unreachable!()
                     }
@@ -382,7 +393,7 @@ impl NameScope {
                 | Some(StorageClassSpecifier::Auto)
                 | Some(StorageClassSpecifier::Register) => {
                     assert!(initializer.is_none());
-                    if t.t.is_scalar() {
+                    if t.t.is_scalar() | t.t.is_valist() {
                         let id = self.alloc_reg();
                         self.insert(name, Value::AutoVar(t, id), span);
                     } else if t.t.is_object() || t.t.is_array() {
@@ -469,10 +480,10 @@ impl NameScope {
         name: &str,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<&QualifiedType, ()> {
+    ) -> Result<QualifiedType, ()> {
         if let Some(val) = self.get(name) {
             if val.is_type() {
-                return Ok(val.get_type());
+                return Ok(val.take_type());
             } else {
                 ec.record_error(CompileError::NotAType(name.to_string()), span)?;
                 unreachable!();
@@ -487,7 +498,7 @@ impl NameScope {
         name: &str,
         span: Span,
         ec: &mut ErrorCollector,
-    ) -> Result<&TypedConstant, ()> {
+    ) -> Result<TypedConstant, ()> {
         if let Some(val) = self.get(name) {
             if val.is_var() {
                 if let Value::StaticVar(t, _, _, initializer) = val {
@@ -495,7 +506,7 @@ impl NameScope {
                         ec.record_error(CompileError::NonConstInConstExpr, span)?;
                         unreachable!();
                     }
-                    return Ok(initializer.as_ref().unwrap());
+                    return Ok(initializer.unwrap());
                 } else {
                     ec.record_error(CompileError::NonConstInConstExpr, span)?;
                     unreachable!();
@@ -518,24 +529,24 @@ impl NameScope {
         if let Some(val) = self.get(name) {
             match val {
                 Value::AutoVar(t, r) => Ok(TypedRValue {
-                    t: t.clone(),
-                    src: RValue::new_var(VarLocation::Local(*r)),
+                    t,
+                    src: RValue::new_var(VarLocation::Local(r)),
                 }),
                 Value::StaticVar(t, id, _, _) => {
                     if t.t.is_function() {
                         Ok(TypedRValue {
-                            t: t.clone(),
-                            src: RValue::Function(Scalar::SymbolOffset(id.clone(), 0)),
+                            t,
+                            src: RValue::Function(Scalar::SymbolOffset(id, 0)),
                         })
                     } else if t.t.is_array() {
                         Ok(TypedRValue {
-                            t: t.clone(),
-                            src: RValue::Scalar(Scalar::SymbolOffset(id.clone(), 0)),
+                            t,
+                            src: RValue::Scalar(Scalar::SymbolOffset(id, 0)),
                         })
                     } else {
                         Ok(TypedRValue {
-                            t: t.clone(),
-                            src: RValue::new_var(VarLocation::Global(id.clone())),
+                            t,
+                            src: RValue::new_var(VarLocation::Global(id)),
                         })
                     }
                 }
@@ -544,8 +555,12 @@ impl NameScope {
                     unreachable!();
                 }
                 Value::Object(t, p) => Ok(TypedRValue {
-                    t: t.clone(),
-                    src: RValue::new_object(ObjectLocation::PointedBy(p.clone())),
+                    t,
+                    src: RValue::new_object(ObjectLocation::PointedBy(p)),
+                }),
+                Value::Builtin(t, b) => Ok(TypedRValue {
+                    t,
+                    src: RValue::Builtin(b),
                 }),
             }
         } else {
@@ -563,20 +578,20 @@ impl NameScope {
         if let Some(val) = self.get(name) {
             match val {
                 Value::AutoVar(t, r) => Ok(TypedLValue {
-                    t: t.clone(),
-                    lv: LValue::Var(VarLocation::Local(*r)),
+                    t,
+                    lv: LValue::Var(VarLocation::Local(r)),
                 }),
                 Value::StaticVar(t, id, _, _) => Ok(TypedLValue {
-                    t: t.clone(),
-                    lv: LValue::Var(VarLocation::Global(id.clone())),
+                    t,
+                    lv: LValue::Var(VarLocation::Global(id)),
                 }),
-                Value::Type(_) => {
+                Value::Type(_) | Value::Builtin(_, _) => {
                     ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
                     unreachable!();
                 }
                 Value::Object(t, p) => Ok(TypedLValue {
-                    t: t.clone(),
-                    lv: LValue::Object(ObjectLocation::PointedBy(p.clone())),
+                    t,
+                    lv: LValue::Object(ObjectLocation::PointedBy(p)),
                 }),
             }
         } else {
@@ -585,10 +600,13 @@ impl NameScope {
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<&Value> {
+    pub fn get(&self, name: &str) -> Option<Value> {
+        if let Some((builtin_fn, t)) = get_builtin_function(name) {
+            return Some(Value::Builtin(t, builtin_fn));
+        }
         for m in self.defs.iter().rev() {
             if let Some((val, _)) = m.default.get(name) {
-                return Some(val);
+                return Some(val.clone());
             }
         }
         return None;
@@ -817,6 +835,17 @@ impl Value {
             Value::AutoVar(t, _) => t,
             Value::StaticVar(t, _, _, _) => t,
             Value::Object(t, _) => t,
+            Value::Builtin(t, _) => t,
+        }
+    }
+
+    pub fn take_type(self) -> QualifiedType {
+        match self {
+            Value::Type(t) => t,
+            Value::AutoVar(t, _) => t,
+            Value::StaticVar(t, _, _, _) => t,
+            Value::Object(t, _) => t,
+            Value::Builtin(t, _) => t,
         }
     }
 
@@ -830,12 +859,12 @@ impl Value {
 
     #[cfg(test)]
     pub fn unwrap_static_var(
-        &self,
+        self,
     ) -> (
-        &QualifiedType,
-        &GlobalVarId,
-        &GlobalStorageClass,
-        &Option<TypedConstant>,
+        QualifiedType,
+        GlobalVarId,
+        GlobalStorageClass,
+        Option<TypedConstant>,
     ) {
         if let Value::StaticVar(t, id, stcl, init) = self {
             (t, id, stcl, init)

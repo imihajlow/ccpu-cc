@@ -132,8 +132,11 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, _function_na
         Store(op) => store::gen_store(w, op),
         Load(op) => load::gen_load(w, op),
         Call(op) => call::gen_call(w, op),
-        Memcpy(op) => todo!(),
+        Memcpy(_) => todo!(),
         IntrinCall(op) => intrin::gen_intrin_call(w, op),
+        VaStart(_) => todo!(),
+        VaArg(_) => todo!(),
+        VaListInc(_) => todo!(),
         FramePointer(_) => {
             unreachable!("Frame pointer expansion step must be performed before generating code")
         }
