@@ -193,6 +193,7 @@ fn parse_single_char(
         Start,
         Escape,
         Code(u8, u32, u32), // bytes remaining, value, base
+        Oct(u8, u32),       // bytes remaining (at most), value
     }
     let mut state = State::Start;
     loop {
@@ -253,7 +254,7 @@ fn parse_single_char(
                         it.next();
                         State::Code(8, 0, 16)
                     }
-                    '0'..='7' => State::Code(3, 0, 8),
+                    '0'..='7' => State::Oct(3, 0),
                     _ => return Err(StringParseError::BadEscape(*c)),
                 },
             },
@@ -272,6 +273,26 @@ fn parse_single_char(
                     State::Code(count - 1, (value * base) + d, base)
                 }
                 Some(c) => return Err(StringParseError::BadDigit(*c)),
+            },
+            State::Oct(0, value) => {
+                return match char::from_u32(value) {
+                    Some(c) => Ok(Some(c)),
+                    None => Err(StringParseError::BadCode(value)),
+                };
+            }
+            State::Oct(count, value) => match it.peek() {
+                None => return Err(StringParseError::UnexpectedEOL),
+                Some(c) if c.is_digit(8) => {
+                    let d = c.to_digit(8).unwrap();
+                    it.next();
+                    State::Oct(count - 1, (value * 8) + d)
+                }
+                Some(_) => {
+                    return match char::from_u32(value) {
+                        Some(c) => Ok(Some(c)),
+                        None => Err(StringParseError::BadCode(value)),
+                    }
+                }
             },
         }
     }
@@ -454,6 +475,18 @@ mod test {
     fn test_char_lit_3() {
         let val = parse_char_literal("'ab'").unwrap();
         assert_eq!(val, (0x6162, CharType::Default));
+    }
+
+    #[test]
+    fn test_char_lit_4() {
+        let val = parse_char_literal("'\\0'").unwrap();
+        assert_eq!(val, (0, CharType::Default));
+    }
+
+    #[test]
+    fn test_char_lit_5() {
+        let val = parse_char_literal("'\\40'").unwrap();
+        assert_eq!(val, (32, CharType::Default));
     }
 
     #[test]

@@ -128,7 +128,11 @@ fn compile_unary_lnot(
         ec.record_error(CompileError::ScalarTypeRequired, span)?;
         unreachable!();
     }
-    let operand = int_promote(operand, scope, be);
+    let operand = if operand.t.t.is_integer() {
+        int_promote(operand, scope, be)
+    } else {
+        operand
+    };
     let result = scope.alloc_temp();
     let width = operand.t.t.get_scalar_width().unwrap();
     be.append_operation(ir::Op::BoolInv(ir::UnaryUnsignedOp {

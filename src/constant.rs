@@ -8,7 +8,7 @@ use lang_c::{
 };
 
 use crate::name_scope::NameScope;
-use crate::string;
+use crate::string::{self, parse_string_literal};
 use crate::{
     ctype::{self, CType, QualifiedType},
     error::{CompileError, CompileWarning, ErrorCollector},
@@ -115,12 +115,19 @@ pub fn check_static_assert(
 ) -> Result<(), ()> {
     let expr_span = sa.node.expression.span;
     let val = compute_constant_expr(*sa.node.expression, false, scope, ec)?;
+    let msg = match parse_string_literal(sa.node.message.node) {
+        Ok((t, data)) => match t {
+            CType::Int(1, _) => String::from_utf8(data).expect("Expected utf-8"),
+            _ => todo!(),
+        },
+        Err(e) => {
+            ec.record_error(CompileError::StringParseError(e), sa.node.message.span)?;
+            unreachable!();
+        }
+    };
     if val.t.t.is_integer() {
         if val.is_zero() {
-            ec.record_error(
-                CompileError::StaticAssertionFailed("TODO".to_string()),
-                sa.span,
-            )?;
+            ec.record_error(CompileError::StaticAssertionFailed(msg), sa.span)?;
         }
     } else {
         ec.record_error(CompileError::IntegerTypeRequired, expr_span)?;

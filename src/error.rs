@@ -1,4 +1,4 @@
-use lang_c::span::Span;
+use lang_c::{span::Span, loc::{get_location_for_offset, Location}};
 use std::fmt::Formatter;
 
 use crate::{
@@ -133,6 +133,20 @@ impl ErrorCollector {
         self.warnings.len()
     }
 
+    pub fn print_issues_src(&self, source: &str) {
+        for (warn, span) in &self.warnings {
+            let (loc, _incs) = get_location_for_offset(source, span.start);
+            print_loc(&loc);
+            println!(": warning: {}", warn);
+        }
+        for (err, span) in &self.errors {
+            let (loc, _incs) = get_location_for_offset(source, span.start);
+            print_loc(&loc);
+            println!(": error: {}", err);
+        }
+    }
+
+    #[cfg(test)]
     pub fn print_issues(&self) {
         for (warn, span) in &self.warnings {
             println!("{:?}: warning: {}", span, warn);
@@ -151,6 +165,10 @@ impl ErrorCollector {
     pub fn get_first_warning(&self) -> Option<&(CompileWarning, Span)> {
         self.warnings.first()
     }
+}
+
+fn print_loc(loc: &Location) {
+    print!("{}:{}", loc.file, loc.line);
 }
 
 impl std::fmt::Display for CompileError {

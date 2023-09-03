@@ -136,7 +136,7 @@ fn main() {
         println!("========== TRANSLATE ===========");
     }
     let tu = TranslationUnit::translate(p.unit, &mut ec);
-    ec.print_issues();
+    ec.print_issues_src(&p.source);
     if let Ok(mut tu) = tu {
         if cli.verbose {
             println!("{}", tu);
@@ -174,7 +174,7 @@ fn main() {
         }
         let mut ec = ErrorCollector::new();
         let w = ccpu::gen::gen_tu(tu, &mut ec);
-        ec.print_issues();
+        ec.print_issues_src(&p.source);
         let w = if let Ok(w) = w {
             w
         } else {
