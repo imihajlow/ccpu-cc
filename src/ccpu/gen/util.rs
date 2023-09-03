@@ -57,3 +57,4 @@ pub fn load_scalar(
         }
     }
 }
+

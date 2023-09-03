@@ -4,10 +4,8 @@ use crate::{
         reg::{FrameReg, VA_ARGS_START_INDEX},
         stack::{SP0_ADDR, SP1_ADDR},
     },
-    generic_ir::{Scalar, VaArgOp, VaListIncOp, VaStartOp, VarLocation, Width},
+    generic_ir::{Scalar, VaArgOp, VaListIncOp, VaStartOp, VarLocation},
 };
-
-use super::add::gen_add_reg_const;
 
 /*
 va_list is implemented as two bytes:
@@ -30,12 +28,32 @@ pub fn gen_va_start(w: &mut InstructionWriter, op: &VaStartOp<FrameReg>) {
 }
 
 pub fn gen_va_list_inc(w: &mut InstructionWriter, op: &VaListIncOp<FrameReg>) {
+    use crate::ccpu::instr::Reg::*;
+
     let src_reg = if let Scalar::Var(v) = &op.src {
         v
     } else {
         unimplemented!("const va_list");
     };
-    gen_add_reg_const(w, &op.dst, src_reg, 8, Width::Byte);
+
+    if *src_reg == op.dst {
+        w.ldi_p_var_location(src_reg, 0, true);
+        w.ldi_const(B, 8, true);
+        w.ld(A);
+        w.add(A, B);
+        w.st(A);
+    } else {
+        w.ldi_p_var_location(src_reg, 0, true);
+        w.ldi_const(B, 8, true);
+        w.ld(A);
+        w.add(A, B);
+        w.inc(PL);
+        w.ld(B);
+        w.ldi_p_var_location(&op.dst, 1, true);
+        w.st(B);
+        w.dec(PL);
+        w.st(A);
+    }
 }
 
 pub fn gen_va_arg(w: &mut InstructionWriter, op: &VaArgOp<FrameReg>) {
