@@ -3,23 +3,32 @@ use crate::{
     generic_ir::{self, IntrinCallVariant, Scalar, VarLocation},
 };
 
+use super::copy::gen_copy_var;
+
 pub fn gen_intrin_call(w: &mut InstructionWriter, op: &generic_ir::IntrinCallOp<FrameReg>) {
-    match op.variant {
+    let copy_result = match &op.variant {
         IntrinCallVariant::Call2R(
-            (_, VarLocation::Local(FrameReg::IntrinsicRet)),
+            (rw, rv),
             (_, Scalar::Var(VarLocation::Local(FrameReg::IntrinsicArg1))),
             (_, Scalar::Var(VarLocation::Local(FrameReg::IntrinsicArg2))),
-        ) => (),
+        ) => match rv {
+            VarLocation::Local(FrameReg::IntrinsicRet) => None,
+            _ => Some((rw, rv)),
+        },
         IntrinCallVariant::Call3(
             (_, Scalar::Var(VarLocation::Local(FrameReg::IntrinsicArg1))),
             (_, Scalar::Var(VarLocation::Local(FrameReg::IntrinsicArg2))),
             (_, Scalar::Var(VarLocation::Local(FrameReg::IntrinsicArg3))),
-        ) => (),
+        ) => None,
         _ => panic!("Intrinsic call arguments are not correctly hinted by register allocator!"),
-    }
+    };
 
     w.ldi_p_sym(get_intrin_sym(&op.name), 0);
     w.jmp();
+
+    if let Some((width, src)) = copy_result {
+        gen_copy_var(w, src, &VarLocation::Local(FrameReg::IntrinsicRet), *width);
+    }
 }
 
 pub fn gen_intrin_imports(w: &mut InstructionWriter) {
