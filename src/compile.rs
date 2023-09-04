@@ -1,4 +1,6 @@
-use lang_c::ast::{CallExpression, CastExpression, StringLiteral, VaArgExpression};
+use lang_c::ast::{
+    CallExpression, CastExpression, OffsetOfExpression, StringLiteral, VaArgExpression,
+};
 use lang_c::span::Span;
 use lang_c::{
     ast::{BlockItem, Declaration, Expression, Initializer, Statement, StorageClassSpecifier},
@@ -9,6 +11,7 @@ use crate::builtin::compile_builtin_call;
 use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
 use crate::generic_ir::Scalar;
+use crate::initializer::TypedConstant;
 use crate::lvalue::TypedLValue;
 use crate::machine::MAX_VA_ARGS;
 use crate::object_location::ObjectLocation;
@@ -23,7 +26,7 @@ use crate::{
     rvalue::{RValue, TypedRValue},
     type_builder::TypeBuilder,
 };
-use crate::{machine, type_builder};
+use crate::{machine, offsetof, type_builder};
 
 use self::member::compile_member_expression;
 use self::sizeof::{compile_alignof, compile_sizeof_type, compile_sizeof_val};
@@ -88,7 +91,7 @@ pub fn compile_expression(
         Expression::SizeOfVal(si) => compile_sizeof_val(*si, scope, be, ec),
         Expression::AlignOf(si) => compile_alignof(*si, scope, ec),
         Expression::Member(me) => compile_member_expression(*me, scope, be, ec),
-        Expression::OffsetOf(_) => todo!(),
+        Expression::OffsetOf(oo) => compile_offsetof(*oo, scope, ec),
         Expression::StringLiteral(sl) => compile_string_literal(*sl, scope, ec),
         Expression::CompoundLiteral(_) => todo!(),
         Expression::VaArg(va) => compile_va_arg(*va, scope, be, ec),
@@ -737,4 +740,14 @@ pub fn compile_va_arg(
         )?;
         unreachable!();
     }
+}
+
+fn compile_offsetof(
+    o: Node<OffsetOfExpression>,
+    scope: &mut NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<TypedRValue, ()> {
+    let offset = offsetof::compute_offsetof(o, scope, ec)?;
+    let c = TypedConstant::new_integer(offset.into(), ctype::SIZE_TYPE);
+    Ok(TypedRValue::new_from_typed_constant(c))
 }

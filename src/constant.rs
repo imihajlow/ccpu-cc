@@ -1,5 +1,5 @@
 use lang_c::ast::{
-    BinaryOperatorExpression, ConditionalExpression, SizeOfTy, StaticAssert,
+    BinaryOperatorExpression, ConditionalExpression, OffsetOfExpression, SizeOfTy, StaticAssert,
     UnaryOperatorExpression,
 };
 use lang_c::span::Span;
@@ -17,6 +17,7 @@ use crate::{
     machine,
     type_builder::TypeBuilder,
 };
+use crate::{offsetof, type_builder};
 
 pub fn compute_constant_initializer(
     initializer: Node<Initializer>,
@@ -102,7 +103,7 @@ pub fn compute_constant_expr(
         Expression::SizeOfTy(t) => process_size_of_ty_node(*t, allow_var, scope, ec),
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(_) => todo!(),
-        Expression::OffsetOf(_) => todo!(),
+        Expression::OffsetOf(oo) => process_offset_of_expression_node(*oo, scope, ec),
         Expression::VaArg(_) => unimplemented!(),
         Expression::Statement(_) => unimplemented!(), // GNU extension
         Expression::GenericSelection(_) => unimplemented!(),
@@ -143,15 +144,7 @@ fn process_size_of_ty_node(
     ec: &mut ErrorCollector,
 ) -> Result<TypedConstant, ()> {
     let span = node.span;
-    let sqs = node.node.0.node.specifiers;
-    let builder = TypeBuilder::new_from_specifiers_qualifiers(sqs, scope, ec)?;
-    let builder = builder.stage2(span, ec)?;
-    let t = if let Some(d) = node.node.0.node.declarator {
-        let (_, t) = builder.process_declarator_node(d, scope, ec)?;
-        t
-    } else {
-        builder.finalize()
-    };
+    let t = type_builder::build_type_from_ast_type_name(node.node.0, scope, ec)?;
     let size = t.t.sizeof(scope, span, ec)?;
     Ok(TypedConstant::new_integer(size.into(), ctype::SIZE_TYPE))
 }
@@ -616,6 +609,16 @@ fn process_cast_expression_node(
         val: cast(value, &new_type, c.span, ec)?,
         t: new_type,
     })
+}
+
+fn process_offset_of_expression_node(
+    oo: Node<OffsetOfExpression>,
+    scope: &mut NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<TypedConstant, ()> {
+    let offset = offsetof::compute_offsetof(oo, scope, ec)?;
+
+    Ok(TypedConstant::new_integer(offset.into(), ctype::SIZE_TYPE))
 }
 
 fn cast(

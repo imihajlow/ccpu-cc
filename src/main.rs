@@ -22,6 +22,7 @@ mod lvalue;
 mod machine;
 mod name_scope;
 mod object_location;
+mod offsetof;
 mod opt;
 mod preprocess;
 mod regalloc;
@@ -105,10 +106,8 @@ impl From<Standard> for Flavor {
 fn main() {
     let cli = Cli::parse();
 
-    println!("{:?}", cli.define);
-
     let cfg = preprocess::get_config(
-        cli.std.unwrap_or(Standard::C11).into(),
+        cli.std.unwrap_or(Standard::Gnu11).into(),
         cli.define,
         cli.include,
         cli.isystem,
