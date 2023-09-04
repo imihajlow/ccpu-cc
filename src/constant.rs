@@ -1,5 +1,6 @@
 use lang_c::ast::{
-    BinaryOperatorExpression, ConditionalExpression, StaticAssert, UnaryOperatorExpression,
+    BinaryOperatorExpression, ConditionalExpression, SizeOfTy, StaticAssert,
+    UnaryOperatorExpression,
 };
 use lang_c::span::Span;
 use lang_c::{
@@ -98,7 +99,7 @@ pub fn compute_constant_expr(
         Expression::StringLiteral(_) => todo!(),
         Expression::Member(_) => todo!(),
         Expression::CompoundLiteral(_) => todo!(),
-        Expression::SizeOfTy(_) => todo!(),
+        Expression::SizeOfTy(t) => process_size_of_ty_node(*t, allow_var, scope, ec),
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(_) => todo!(),
         Expression::OffsetOf(_) => todo!(),
@@ -133,6 +134,26 @@ pub fn check_static_assert(
         ec.record_error(CompileError::IntegerTypeRequired, expr_span)?;
     }
     Ok(())
+}
+
+fn process_size_of_ty_node(
+    node: Node<SizeOfTy>,
+    _allow_var: bool,
+    scope: &mut NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<TypedConstant, ()> {
+    let span = node.span;
+    let sqs = node.node.0.node.specifiers;
+    let builder = TypeBuilder::new_from_specifiers_qualifiers(sqs, scope, ec)?;
+    let builder = builder.stage2(span, ec)?;
+    let t = if let Some(d) = node.node.0.node.declarator {
+        let (_, t) = builder.process_declarator_node(d, scope, ec)?;
+        t
+    } else {
+        builder.finalize()
+    };
+    let size = t.t.sizeof(scope, span, ec)?;
+    Ok(TypedConstant::new_integer(size.into(), ctype::SIZE_TYPE))
 }
 
 fn process_condition_expression_node(

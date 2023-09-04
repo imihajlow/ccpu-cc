@@ -24,7 +24,9 @@ pub fn get_config(
     options.push("-nostdinc".to_string());
 
     options.push("-D__STDC__=1".to_string());
-    options.push("-D__STDC_VERSION_=201112L".to_string());
+    options.push("-D__STDC_VERSION__=201112L".to_string());
+    options.push("-D__STDC_UTF_16__".to_string());
+    options.push("-D__STDC_UTF_32__".to_string());
 
     options.push("-D__CHAR_UNSIGNED__".to_string());
     options.push("-D__USER_LABEL_PREFIX__=".to_string());
