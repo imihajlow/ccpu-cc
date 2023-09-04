@@ -543,6 +543,13 @@ impl NameScope {
                             t,
                             src: RValue::Scalar(Scalar::SymbolOffset(id, 0)),
                         })
+                    } else if t.t.is_object() {
+                        Ok(TypedRValue {
+                            t,
+                            src: RValue::Object(ObjectLocation::PointedBy(Scalar::SymbolOffset(
+                                id, 0,
+                            ))),
+                        })
                     } else {
                         Ok(TypedRValue {
                             t,
@@ -581,10 +588,21 @@ impl NameScope {
                     t,
                     lv: LValue::Var(VarLocation::Local(r)),
                 }),
-                Value::StaticVar(t, id, _, _) => Ok(TypedLValue {
-                    t,
-                    lv: LValue::Var(VarLocation::Global(id)),
-                }),
+                Value::StaticVar(t, id, _, _) => {
+                    if t.t.is_object() || t.t.is_array() {
+                        Ok(TypedLValue {
+                            t,
+                            lv: LValue::Object(ObjectLocation::PointedBy(Scalar::SymbolOffset(
+                                id, 0,
+                            ))),
+                        })
+                    } else {
+                        Ok(TypedLValue {
+                            t,
+                            lv: LValue::Var(VarLocation::Global(id)),
+                        })
+                    }
+                }
                 Value::Type(_) | Value::Builtin(_, _) => {
                     ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
                     unreachable!();
