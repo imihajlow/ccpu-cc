@@ -20,12 +20,18 @@ pub fn compile_member_expression(
     let id_span = expr.node.identifier.span;
     let (obj_type, obj_addr) = match expr.node.operator.node {
         MemberOperator::Direct => {
+            let obj_span = expr.node.expression.span;
             let lhs = compile_expression(*expr.node.expression, scope, be, ec)?;
             let obj_type = lhs.t;
+            if !obj_type.t.is_object() {
+                ec.record_error(CompileError::NotAStruct(obj_type), obj_span)?;
+                unreachable!();
+            }
             let obj_addr = lhs.src.get_object_address().unwrap();
             (obj_type, obj_addr)
         }
         MemberOperator::Indirect => {
+            let obj_span = expr.node.expression.span;
             let lhs = compile_expression(*expr.node.expression, scope, be, ec)?;
             let obj_type = match lhs.t.dereference() {
                 Ok(t) => t,
@@ -34,6 +40,10 @@ pub fn compile_member_expression(
                     unreachable!();
                 }
             };
+            if !obj_type.t.is_object() {
+                ec.record_error(CompileError::NotAStruct(obj_type), obj_span)?;
+                unreachable!();
+            }
             let obj_addr = lhs.src.unwrap_scalar();
             (obj_type, obj_addr)
         }
@@ -48,7 +58,7 @@ pub fn compile_member_expression(
         lhs: obj_addr,
         rhs: ir::Scalar::ConstInt(field_offset as u64),
     }));
-    if field_type.t.is_scalar_or_array() {
+    if field_type.t.is_scalar() {
         let target_var = scope.alloc_temp();
         let width = field_type.t.get_scalar_width().unwrap();
         be.append_operation(ir::Op::Load(ir::LoadOp {
@@ -59,6 +69,11 @@ pub fn compile_member_expression(
         Ok(TypedRValue {
             t: field_type,
             src: RValue::new_var(target_var),
+        })
+    } else if field_type.t.is_array() {
+        Ok(TypedRValue {
+            t: field_type,
+            src: RValue::new_var(field_addr_var),
         })
     } else if field_type.t.is_object() {
         Ok(TypedRValue {

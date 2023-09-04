@@ -1,4 +1,7 @@
-use lang_c::{span::Span, loc::{get_location_for_offset, Location}};
+use lang_c::{
+    loc::{get_location_for_offset, Location},
+    span::Span,
+};
 use std::fmt::Formatter;
 
 use crate::{
