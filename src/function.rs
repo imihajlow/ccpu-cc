@@ -384,7 +384,6 @@ impl Function<ir::VirtualReg> {
                 best_body = Some(body);
             }
         }
-        println!("{} copies best", min_copies.unwrap());
         Function {
             is_inline: self.is_inline,
             is_noreturn: self.is_noreturn,

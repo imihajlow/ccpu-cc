@@ -1,5 +1,6 @@
 use lang_c::span::Span;
 
+use crate::ccpu::gen::switch::gen_switch;
 use crate::ccpu::global::{get_global_var_label, get_static_frame_symbol};
 use crate::error::{CompileError, ErrorCollector};
 use crate::generic_ir::{GlobalVarId, Width};
@@ -31,6 +32,7 @@ mod neg;
 mod shift;
 mod store;
 mod sub;
+mod switch;
 mod util;
 mod variadic;
 
@@ -157,7 +159,9 @@ fn gen_tail(
         Tail::Ret => gen_return(w),
         Tail::Jump(n) => gen_jump(w, block_idx, *n, function_name),
         Tail::Cond(c, n1, n2) => gen_cond_jump(w, c, block_idx, *n1, *n2, function_name),
-        Tail::Switch(_, _, _, _) => todo!(),
+        Tail::Switch(s, width, cases, default) => {
+            gen_switch(w, function_name, block_idx, s, *width, cases, *default)
+        }
     }
 }
 
@@ -278,7 +282,7 @@ fn gen_load_var_8(w: &mut InstructionWriter, dst: Reg, v: &VarLocation<FrameReg>
     }
 }
 
-fn make_block_label(function_name: &str, block_index: usize) -> String {
+pub fn make_block_label(function_name: &str, block_index: usize) -> String {
     format!("__{}_{}", function_name, block_index)
 }
 

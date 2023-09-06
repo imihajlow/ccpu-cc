@@ -134,9 +134,6 @@ fn find_live_regs(blocks: &Vec<ir::Block>) -> Vec<HashSet<ir::VirtualReg>> {
         }
     }
 
-    for (i, set) in live_regs.iter().enumerate() {
-        println!("{}: {:?}", i, set);
-    }
     live_regs
 }
 

@@ -6,6 +6,7 @@ use crate::generic_ir::{GlobalVarId, VarLocation, Width};
 use super::global::{self, get_global_var_label};
 use super::reg::FrameReg;
 
+#[derive(Clone)]
 pub struct InstructionWriter {
     exports: HashSet<String>,
     imports: HashSet<String>,
@@ -383,6 +384,14 @@ impl InstructionWriter {
         self.push(TextItem::Op(Op::St(dst)));
     }
 
+    pub fn get_ro_size(&self) -> usize {
+        self.text
+            .iter()
+            .map(|(_, v)| v.iter().map(|op| op.get_size()).sum::<usize>())
+            .sum::<usize>()
+            + self.rodata.iter().map(|(_, v)| v.get_size()).sum::<usize>()
+    }
+
     fn arithm(&mut self, op: ArithmOp, dst: Reg, src: Reg) {
         let (inv, src) = if let Reg::A = dst {
             if let Reg::A = src {
@@ -415,6 +424,40 @@ impl InstructionWriter {
 
     fn reset_last(&mut self) {
         self.last = [None, None, None, None, Some(0)];
+    }
+}
+
+impl Op {
+    pub fn get_size(&self) -> usize {
+        match self {
+            Op::Ldi(_, _) => 2,
+            _ => 1,
+        }
+    }
+}
+
+impl TextItem {
+    pub fn get_size(&self) -> usize {
+        match self {
+            TextItem::Op(op) => op.get_size(),
+            TextItem::Label(_) => 0,
+            TextItem::Comment(_) => 0,
+        }
+    }
+}
+
+impl DataItem<DataValue> {
+    pub fn get_size(&self) -> usize {
+        self.data.get_size()
+    }
+}
+
+impl DataValue {
+    pub fn get_size(&self) -> usize {
+        match self {
+            DataValue::Int(_, w) => *w as usize,
+            DataValue::String(v) => v.len(),
+        }
     }
 }
 
