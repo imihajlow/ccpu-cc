@@ -28,7 +28,6 @@ use lang_c::{
 };
 use replace_with::replace_with_or_abort;
 use std::collections::HashSet;
-use std::println;
 use std::{fmt::Formatter, hash::Hash};
 
 pub struct Function<Reg: Eq + Hash> {

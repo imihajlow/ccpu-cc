@@ -533,17 +533,12 @@ impl NameScope {
                     src: RValue::new_var(VarLocation::Local(r)),
                 }),
                 Value::StaticVar(t, id, _, _) => {
-                    if t.t.is_function() {
-                        Ok(TypedRValue {
-                            t,
-                            src: RValue::Function(Scalar::SymbolOffset(id, 0)),
-                        })
-                    } else if t.t.is_array() {
+                    if t.t.is_array() {
                         Ok(TypedRValue {
                             t,
                             src: RValue::Scalar(Scalar::SymbolOffset(id, 0)),
                         })
-                    } else if t.t.is_object() {
+                    } else if t.t.is_object() || t.t.is_function() {
                         Ok(TypedRValue {
                             t,
                             src: RValue::Object(ObjectLocation::PointedBy(Scalar::SymbolOffset(
@@ -589,7 +584,7 @@ impl NameScope {
                     lv: LValue::Var(VarLocation::Local(r)),
                 }),
                 Value::StaticVar(t, id, _, _) => {
-                    if t.t.is_object() || t.t.is_array() {
+                    if t.t.is_object() || t.t.is_array() || t.t.is_function() {
                         Ok(TypedLValue {
                             t,
                             lv: LValue::Object(ObjectLocation::PointedBy(Scalar::SymbolOffset(

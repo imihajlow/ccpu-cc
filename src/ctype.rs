@@ -24,7 +24,7 @@ pub enum CType {
     VaList,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum FunctionArgs {
     Empty,
     Void,
@@ -393,6 +393,13 @@ impl CType {
         }
     }
 
+    pub fn is_pointer_to_void(&self) -> bool {
+        match self {
+            CType::Pointer(t) if t.t.is_void() => true,
+            _ => false,
+        }
+    }
+
     pub fn is_function(&self) -> bool {
         if let CType::Function { .. } = self {
             true
@@ -538,7 +545,8 @@ impl CType {
             CType::Enum(_) => Some((ir::Width::INT_WIDTH, true)),
             CType::StructUnion(_) => None,
             CType::VaList => Some((ir::Width::VA_LIST_WIDTH, false)),
-            CType::Void | CType::Float(_) | CType::Function { .. } => None,
+            CType::Function { .. } => Some((ir::Width::PTR_WIDTH, false)),
+            CType::Void | CType::Float(_) => None,
         }
     }
 
@@ -619,6 +627,23 @@ impl PartialEq for StructUnionIdentifier {
 impl PartialEq for EnumIdentifier {
     fn eq(&self, other: &EnumIdentifier) -> bool {
         self.id == other.id
+    }
+}
+
+impl PartialEq for FunctionArgs {
+    fn eq(&self, other: &FunctionArgs) -> bool {
+        match (self, other) {
+            (FunctionArgs::Empty, FunctionArgs::Empty) => true,
+            (FunctionArgs::Void, FunctionArgs::Void) => true,
+            (FunctionArgs::List(v1), FunctionArgs::List(v2)) => {
+                v1.len() == v2.len()
+                    && v1
+                        .iter()
+                        .zip(v2.iter())
+                        .all(|((a1, _, _), (a2, _, _))| a1 == a2)
+            }
+            _ => false,
+        }
     }
 }
 

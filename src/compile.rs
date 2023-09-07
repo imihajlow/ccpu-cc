@@ -12,6 +12,7 @@ use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
 use crate::generic_ir::Scalar;
 use crate::initializer::TypedConstant;
+use crate::ir::Width;
 use crate::lvalue::TypedLValue;
 use crate::machine::MAX_VA_ARGS;
 use crate::object_location::ObjectLocation;
@@ -183,42 +184,62 @@ pub fn cast(
     src: TypedRValue,
     target_type: &CType,
     copy_if_same_type: bool,
-    _span: Span,
+    span: Span,
     scope: &mut NameScope,
     be: &mut BlockEmitter,
-    _ec: &mut ErrorCollector,
+    ec: &mut ErrorCollector,
 ) -> Result<TypedRValue, ()> {
     assert!(target_type.is_scalar());
-    assert!(src.t.t.is_scalar_or_array());
+    assert!(src.t.t.is_scalar_or_array() || src.t.t.is_function());
     if target_type.is_any_float() || src.t.t.is_any_float() {
         todo!()
     }
-    let (dst_width, dst_sign) = target_type.get_width_sign().unwrap();
-    let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
-    if (dst_width, dst_sign) != (src_width, src_sign) {
-        let dst = scope.alloc_temp();
-        be.append_operation(ir::Op::Conv(ir::ConvOp {
-            dst_width,
-            dst_sign,
-            src_width,
-            src_sign,
-            dst: dst.clone(),
-            src: src.unwrap_scalar(),
-        }));
-        Ok(TypedRValue {
-            src: RValue::new_var(dst),
-            t: QualifiedType {
-                t: target_type.clone(),
-                qualifiers: Qualifiers::empty(),
-            },
-        })
+    if src.t.t.is_function() {
+        let qualified_target_type = QualifiedType {
+            t: target_type.clone(),
+            qualifiers: Qualifiers::empty(),
+        };
+        match target_type.clone().dereference() {
+            Ok(target_deref) if target_deref.t == src.t.t => {
+                let fn_addr = src.src.unwrap_object_location().get_address();
+                if copy_if_same_type {
+                    let dst = scope.alloc_temp();
+                    be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                        dst: dst.clone(),
+                        src: fn_addr,
+                        width: Width::PTR_WIDTH,
+                    }));
+                    Ok(TypedRValue {
+                        src: RValue::Scalar(Scalar::Var(dst)),
+                        t: qualified_target_type,
+                    })
+                } else {
+                    Ok(TypedRValue {
+                        src: RValue::Scalar(fn_addr),
+                        t: qualified_target_type,
+                    })
+                }
+            }
+            _ => {
+                ec.record_error(
+                    CompileError::IncompatibleTypes(src.t, qualified_target_type),
+                    span,
+                )?;
+                unreachable!()
+            }
+        }
     } else {
-        if copy_if_same_type {
+        let (dst_width, dst_sign) = target_type.get_width_sign().unwrap();
+        let (src_width, src_sign) = src.t.t.get_width_sign().unwrap();
+        if (dst_width, dst_sign) != (src_width, src_sign) {
             let dst = scope.alloc_temp();
-            be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+            be.append_operation(ir::Op::Conv(ir::ConvOp {
+                dst_width,
+                dst_sign,
+                src_width,
+                src_sign,
                 dst: dst.clone(),
                 src: src.unwrap_scalar(),
-                width: dst_width,
             }));
             Ok(TypedRValue {
                 src: RValue::new_var(dst),
@@ -228,29 +249,45 @@ pub fn cast(
                 },
             })
         } else {
-            // Pull scalar out of object pointer
-            if src.t.t.is_dereferencable() {
-                if let RValue::Object(o) = src.src {
-                    match o {
-                        ObjectLocation::PointedBy(s) => {
-                            return Ok(TypedRValue {
-                                src: RValue::Scalar(s),
-                                t: QualifiedType {
-                                    t: target_type.clone(),
-                                    qualifiers: Qualifiers::empty(),
-                                },
-                            })
+            if copy_if_same_type {
+                let dst = scope.alloc_temp();
+                be.append_operation(ir::Op::Copy(ir::UnaryUnsignedOp {
+                    dst: dst.clone(),
+                    src: src.unwrap_scalar(),
+                    width: dst_width,
+                }));
+                Ok(TypedRValue {
+                    src: RValue::new_var(dst),
+                    t: QualifiedType {
+                        t: target_type.clone(),
+                        qualifiers: Qualifiers::empty(),
+                    },
+                })
+            } else {
+                // Pull scalar out of object pointer
+                if src.t.t.is_dereferencable() {
+                    if let RValue::Object(o) = src.src {
+                        match o {
+                            ObjectLocation::PointedBy(s) => {
+                                return Ok(TypedRValue {
+                                    src: RValue::Scalar(s),
+                                    t: QualifiedType {
+                                        t: target_type.clone(),
+                                        qualifiers: Qualifiers::empty(),
+                                    },
+                                })
+                            }
                         }
                     }
                 }
+                Ok(TypedRValue {
+                    src: src.src,
+                    t: QualifiedType {
+                        t: target_type.clone(),
+                        qualifiers: Qualifiers::empty(),
+                    },
+                })
             }
-            Ok(TypedRValue {
-                src: src.src,
-                t: QualifiedType {
-                    t: target_type.clone(),
-                    qualifiers: Qualifiers::empty(),
-                },
-            })
         }
     }
 }
@@ -521,7 +558,12 @@ fn compile_call(
         if let RValue::Builtin(b) = callee.src {
             return compile_builtin_call(b, args_srcs, c.span, scope, be, ec);
         }
-        (*result, args, vararg, callee.src.unwrap_function_address())
+        (
+            *result,
+            args,
+            vararg,
+            callee.src.unwrap_object_location().get_address(),
+        )
     } else if let Ok(QualifiedType {
         t: CType::Function {
             result,

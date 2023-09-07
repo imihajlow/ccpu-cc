@@ -1,4 +1,4 @@
-use crate::ir::{self, VarLocation};
+use crate::ir::{self, GlobalVarId, VarLocation};
 
 use super::util::*;
 
@@ -287,5 +287,33 @@ fn test_assign_15() {
             src_addr: ir::Scalar::Var(VarLocation::Local(2)),
             len: 16
         })]
+    );
+}
+
+#[test]
+fn test_assign_16() {
+    let (tu, ec) = compile(
+        "
+        int sum(int a, int b);
+        int (*bar)(int a, int b);
+        void foo(void) { bar = sum; bar = &sum; }",
+    );
+    assert_eq!(ec.get_warning_count(), 0);
+    let body = get_first_body(&tu);
+    assert_eq!(body.len(), 2);
+    assert_eq!(
+        body[1].ops,
+        vec![
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Global(GlobalVarId::Global("bar".to_string())),
+                src: ir::Scalar::SymbolOffset(GlobalVarId::Global("sum".to_string()), 0),
+                width: ir::Width::Word
+            }),
+            ir::Op::Copy(ir::UnaryUnsignedOp {
+                dst: VarLocation::Global(GlobalVarId::Global("bar".to_string())),
+                src: ir::Scalar::SymbolOffset(GlobalVarId::Global("sum".to_string()), 0),
+                width: ir::Width::Word
+            })
+        ]
     );
 }

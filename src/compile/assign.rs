@@ -84,8 +84,9 @@ pub fn compile_assign_to_lval(
         //     one operand is a pointer to an object type, and the other is a pointer to a qualified or unqualified version of void,
         //     and the type pointed to by the left has all the qualifiers of the type pointed to by the right;
         // ... and the right is a null pointer constant;
+        let lhs_pointee = lhs_lval.t.clone().dereference().unwrap();
         match &rhs_val.t.t {
-            CType::Void | CType::Float(_) | CType::Function { .. } => {
+            CType::Void | CType::Float(_) => {
                 ec.record_error(
                     CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t),
                     rhs_span,
@@ -100,7 +101,6 @@ pub fn compile_assign_to_lval(
                 unreachable!()
             }
             CType::Pointer(target) | CType::Array(target, _) => {
-                let lhs_pointee = lhs_lval.t.clone().dereference().unwrap();
                 if lhs_pointee != **target {
                     if !target.t.is_void() && !lhs_pointee.t.is_void() {
                         ec.record_warning(
@@ -131,6 +131,17 @@ pub fn compile_assign_to_lval(
                     rhs_span,
                 )?;
                 unreachable!()
+            }
+            CType::Function { .. } => {
+                if lhs_pointee != rhs_val.t {
+                    if !lhs_pointee.t.is_void() {
+                        ec.record_error(
+                            CompileError::IncompatibleTypes(lhs_lval.t, rhs_val.t),
+                            rhs_span,
+                        )?;
+                        unreachable!()
+                    }
+                }
             }
         }
         let rhs_casted = cast(rhs_val, &lhs_lval.t.t, false, rhs_span, scope, be, ec)?;

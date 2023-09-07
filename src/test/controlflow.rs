@@ -147,20 +147,13 @@ fn test_call_4() {
     assert_eq!(body.len(), 2);
     assert_eq!(
         body[1].ops,
-        vec![
-            ir::Op::Load(ir::LoadOp {
-                dst: VarLocation::Local(1),
-                src_addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
-                    "bar".to_string()
-                ))),
-                width: ir::Width::Word,
-            }),
-            ir::Op::Call(ir::CallOp {
-                addr: ir::Scalar::Var(VarLocation::Local(1)),
-                dst: None,
-                args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),],
-                va_args: vec![]
-            }),
-        ]
+        vec![ir::Op::Call(ir::CallOp {
+            addr: ir::Scalar::Var(VarLocation::Global(ir::GlobalVarId::Global(
+                "bar".to_string()
+            ))),
+            dst: None,
+            args: vec![(ir::Scalar::ConstInt(10), ir::Width::Word),],
+            va_args: vec![]
+        }),]
     );
 }

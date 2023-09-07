@@ -4,9 +4,7 @@ use lang_c::{ast::Expression, span::Node};
 use crate::block_emitter::BlockEmitter;
 use crate::ctype::{self, QualifiedType, Qualifiers};
 use crate::error::{CompileError, ErrorCollector};
-use crate::generic_ir::Scalar;
 use crate::ir;
-use crate::ir::Width;
 use crate::lvalue::{LValue, TypedLValue};
 use crate::name_scope::NameScope;
 use crate::object_location::ObjectLocation;
@@ -284,20 +282,9 @@ fn compile_deref(
                     t: pointee,
                 })
             } else {
-                if pointee.t.is_object() {
+                if pointee.t.is_object() || pointee.t.is_function() {
                     Ok(TypedRValue {
                         src: RValue::Object(ObjectLocation::PointedBy(operand_scalar)),
-                        t: pointee,
-                    })
-                } else if pointee.t.is_function() {
-                    let dst = scope.alloc_temp();
-                    be.append_operation(ir::Op::Load(ir::LoadOp {
-                        dst: dst.clone(),
-                        src_addr: operand_scalar,
-                        width: Width::PTR_WIDTH,
-                    }));
-                    Ok(TypedRValue {
-                        src: RValue::Function(Scalar::Var(dst)),
                         t: pointee,
                     })
                 } else {
