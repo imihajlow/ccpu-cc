@@ -98,27 +98,27 @@ fn construct_flush_instructions_for_reg(
             width,
         ));
     }
-    println!("reg = {} @ {}", fixed_reg, address_reg);
-    println!("descriptions = {:#?}", descriptions);
+    // println!("reg = {} @ {}", fixed_reg, address_reg);
+    // println!("descriptions = {:#?}", descriptions);
 
     let mut modifications = Vec::new();
     loop {
         let desynced = propagate_desynced(g, &descriptions);
-        println!("desynced = {:#?}", desynced);
-        println!("exit_nodes = {:?}", exit_nodes);
+        // println!("desynced = {:#?}", desynced);
+        // println!("exit_nodes = {:?}", exit_nodes);
         let expected = propagate_expected(gt, exit_nodes, &descriptions);
-        println!("expected = {:#?}", expected);
+        // println!("expected = {:#?}", expected);
         if is_consistent(&desynced, &expected) {
             break;
         }
         let fps = find_possible_flush_positions(&desynced, &expected);
-        println!("flush_positions = {:?}", fps);
+        // println!("flush_positions = {:?}", fps);
 
         let pos = fps
             .iter()
             .min_by(|(i, _, _), (j, _, _)| body[*i].loop_depth.cmp(&body[*j].loop_depth))
             .unwrap();
-        println!("use pos {}", pos.0);
+        // println!("use pos {}", pos.0);
         modifications.push(pos.clone());
         descriptions[pos.0].update_with_instruction(pos.1, pos.2);
     }
