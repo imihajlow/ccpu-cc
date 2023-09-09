@@ -708,7 +708,7 @@ impl BlockEmitter {
                     width,
                 }))
             } else if return_type.t.is_object() {
-                todo!()
+                todo!("return objects")
             } else {
                 unreachable!()
             }
@@ -733,7 +733,13 @@ impl BlockEmitter {
             Label::Identifier(id) => self.append_label(id, ec)?,
             Label::Case(e) => self.append_case(*e, ls.span, scope, ec)?,
             Label::Default => self.append_default(ls.span, ec)?,
-            Label::CaseRange(_) => unimplemented!(),
+            Label::CaseRange(_) => {
+                ec.record_error(
+                    CompileError::Unimplemented("case range".to_string()),
+                    ls.span,
+                )?;
+                unreachable!()
+            }
         }
         compile_statement(*ls.node.statement, scope, self, ec)
     }

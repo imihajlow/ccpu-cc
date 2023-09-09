@@ -419,7 +419,13 @@ impl NameScope {
                     return ec
                         .record_error(CompileError::WrongStorageClass, storage_class_span.unwrap())
                 }
-                Some(StorageClassSpecifier::ThreadLocal) => unimplemented!(),
+                Some(StorageClassSpecifier::ThreadLocal) => {
+                    ec.record_error(
+                        CompileError::Unimplemented("thread locals".to_string()),
+                        span,
+                    )?;
+                    unreachable!()
+                }
                 Some(StorageClassSpecifier::Typedef) => unreachable!(), // handled above
             }
         }

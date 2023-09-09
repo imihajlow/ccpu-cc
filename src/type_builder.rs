@@ -117,8 +117,20 @@ impl TypeBuilder {
                 DeclarationSpecifier::TypeQualifier(q) => {
                     type_builder.add_type_qualifier_node(q, ec)?
                 }
-                DeclarationSpecifier::Alignment(_) => unimplemented!(),
-                DeclarationSpecifier::Extension(_) => unimplemented!(),
+                DeclarationSpecifier::Alignment(_) => {
+                    ec.record_error(
+                        CompileError::Unimplemented("alignment specifier".to_string()),
+                        declspec.span,
+                    )?;
+                    unreachable!()
+                }
+                DeclarationSpecifier::Extension(_) => {
+                    ec.record_error(
+                        CompileError::Unimplemented("extension specifier".to_string()),
+                        declspec.span,
+                    )?;
+                    unreachable!()
+                }
             }
         }
         Ok((type_builder, storage_class, extra))
@@ -175,9 +187,21 @@ impl TypeBuilder {
             TypeSpecifier::Struct(s) => self.set_struct(s, scope, ec)?,
             TypeSpecifier::Enum(_) => todo!(),
             TypeSpecifier::TypeOf(_) => todo!(),
-            TypeSpecifier::Atomic(_) => unimplemented!("atomic"),
-            TypeSpecifier::Complex => unimplemented!("complex"),
-            TypeSpecifier::TS18661Float(_) => unimplemented!("TS 18551 float"),
+            TypeSpecifier::Atomic(_) => {
+                ec.record_error(CompileError::Unimplemented("atomic".to_string()), span)?;
+                unreachable!()
+            }
+            TypeSpecifier::Complex => {
+                ec.record_error(CompileError::Unimplemented("complex".to_string()), span)?;
+                unreachable!()
+            }
+            TypeSpecifier::TS18661Float(_) => {
+                ec.record_error(
+                    CompileError::Unimplemented("TS 18551 float".to_string()),
+                    span,
+                )?;
+                unreachable!()
+            }
         }
         Ok(())
     }
@@ -188,13 +212,20 @@ impl TypeBuilder {
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
+        let span = sq.span;
         let sq = sq.node;
         match sq {
             SpecifierQualifier::TypeQualifier(q) => self.add_type_qualifier_node(q, ec),
             SpecifierQualifier::TypeSpecifier(spec) => {
                 self.add_type_specifier_node(spec, scope, ec)
             }
-            SpecifierQualifier::Extension(_) => unimplemented!(),
+            SpecifierQualifier::Extension(_) => {
+                ec.record_error(
+                    CompileError::Unimplemented("extension specifier qualifier".to_string()),
+                    span,
+                )?;
+                unreachable!()
+            }
         }
     }
 
@@ -424,7 +455,11 @@ impl TypeBuilder {
                         if !f.node.declarators.is_empty() {
                             for decl in f.node.declarators {
                                 if decl.node.bit_width.is_some() {
-                                    unimplemented!("bit width");
+                                    ec.record_error(
+                                        CompileError::Unimplemented("bit width".to_string()),
+                                        m.span,
+                                    )?;
+                                    unreachable!()
                                 }
                                 let stage2 = type_builder.stage2(decl.span, ec)?;
                                 let (name, t) = if let Some(decl) = decl.node.declarator {
@@ -559,7 +594,13 @@ impl TypeBuilderStage2 {
                         PointerQualifier::TypeQualifier(tq) => {
                             qualifiers |= convert_qualifier_node(tq, ec)?;
                         }
-                        PointerQualifier::Extension(_) => unimplemented!(),
+                        PointerQualifier::Extension(_) => {
+                            ec.record_error(
+                                CompileError::Unimplemented("extension".to_string()),
+                                pq.span,
+                            )?;
+                            unreachable!()
+                        }
                     }
                 }
                 self.base_type.wrap_pointer(qualifiers);
@@ -584,7 +625,13 @@ impl TypeBuilderStage2 {
                             }
                             DeclarationSpecifier::Alignment(_) => todo!(),
                             DeclarationSpecifier::Function(_) => (), // ignore _Noreturn and inline
-                            DeclarationSpecifier::Extension(_) => unimplemented!(),
+                            DeclarationSpecifier::Extension(_) => {
+                                ec.record_error(
+                                    CompileError::Unimplemented("extension".to_string()),
+                                    dd.span,
+                                )?;
+                                unreachable!()
+                            }
                         }
                     }
                     let builder = builder.stage2(param_decl.span, ec)?;
@@ -624,7 +671,13 @@ impl TypeBuilderStage2 {
             DerivedDeclarator::Array(ad) => {
                 use lang_c::ast::ArraySize;
                 if !ad.node.qualifiers.is_empty() {
-                    unimplemented!()
+                    ec.record_error(
+                        CompileError::Unimplemented(
+                            "type qualifiers in array length declaration".to_string(),
+                        ),
+                        ad.span,
+                    )?;
+                    unreachable!()
                 }
                 match ad.node.size {
                     ArraySize::Unknown => self.base_type.wrap_array(None),
@@ -641,12 +694,36 @@ impl TypeBuilderStage2 {
                         }
                         self.base_type.wrap_array(Some(size as u32))
                     }
-                    ArraySize::VariableUnknown => unimplemented!(),
-                    ArraySize::StaticExpression(_) => unimplemented!(),
+                    ArraySize::VariableUnknown => {
+                        ec.record_error(
+                            CompileError::Unimplemented("variable length arrays".to_string()),
+                            dd.span,
+                        )?;
+                        unreachable!()
+                    }
+                    ArraySize::StaticExpression(_) => {
+                        ec.record_error(
+                            CompileError::Unimplemented("static array size".to_string()),
+                            ad.span,
+                        )?;
+                        unreachable!()
+                    }
                 }
             }
-            DerivedDeclarator::KRFunction(_) => unimplemented!(),
-            DerivedDeclarator::Block(_) => unimplemented!(),
+            DerivedDeclarator::KRFunction(_) => {
+                ec.record_error(
+                    CompileError::Unimplemented("K&R function".to_string()),
+                    dd.span,
+                )?;
+                unreachable!()
+            }
+            DerivedDeclarator::Block(_) => {
+                ec.record_error(
+                    CompileError::Unimplemented("block derived declarator".to_string()),
+                    dd.span,
+                )?;
+                unreachable!()
+            }
         }
         Ok(())
     }

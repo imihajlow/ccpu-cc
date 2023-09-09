@@ -65,7 +65,13 @@ pub fn compile_statement(
         Statement::Labeled(ls) => be.append_labeled_statement(ls, scope, ec)?,
         Statement::Switch(sw) => be.append_switch(sw, scope, ec)?,
         Statement::Goto(id) => be.append_goto(id),
-        Statement::Asm(_) => unimplemented!(),
+        Statement::Asm(_) => {
+            ec.record_error(
+                CompileError::Unimplemented("inline assembly".to_string()),
+                stat.span,
+            )?;
+            unreachable!()
+        }
     }
     Ok(())
 }
@@ -96,8 +102,20 @@ pub fn compile_expression(
         Expression::StringLiteral(sl) => compile_string_literal(*sl, scope, ec),
         Expression::CompoundLiteral(_) => todo!(),
         Expression::VaArg(va) => compile_va_arg(*va, scope, be, ec),
-        Expression::GenericSelection(_) => unimplemented!(),
-        Expression::Statement(_) => unimplemented!(),
+        Expression::GenericSelection(_) => {
+            ec.record_error(
+                CompileError::Unimplemented("generic selection".to_string()),
+                expr.span,
+            )?;
+            unreachable!()
+        }
+        Expression::Statement(_) => {
+            ec.record_error(
+                CompileError::Unimplemented("statement expression".to_string()),
+                expr.span,
+            )?;
+            unreachable!()
+        }
     }
 }
 
@@ -191,8 +209,8 @@ pub fn cast(
 ) -> Result<TypedRValue, ()> {
     assert!(target_type.is_scalar());
     assert!(src.t.t.is_scalar_or_array() || src.t.t.is_function());
-    if target_type.is_any_float() || src.t.t.is_any_float() {
-        todo!()
+    if target_type.is_any_float() && *target_type != src.t.t {
+        todo!("float")
     }
     if src.t.t.is_function() {
         let qualified_target_type = QualifiedType {

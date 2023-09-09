@@ -99,10 +99,16 @@ impl TypedLValue {
                 }
             }
             Expression::Member(me) => Self::compile_member_expression(*me, scope, be, ec),
-            Expression::GenericSelection(_) => unimplemented!(),
+            Expression::GenericSelection(_) => {
+                ec.record_error(
+                    CompileError::Unimplemented("generic selection".to_string()),
+                    expr.span,
+                )?;
+                unreachable!()
+            }
             _ => {
                 ec.record_error(CompileError::NotAssignable, expr.span)?;
-                unimplemented!()
+                unreachable!()
             }
         }
     }

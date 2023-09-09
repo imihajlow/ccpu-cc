@@ -42,6 +42,7 @@ pub fn compute_constant_expr(
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedConstant, ()> {
+    let span = expr.span;
     let expr = expr.node;
     match expr {
         Expression::Identifier(id) => {
@@ -104,9 +105,29 @@ pub fn compute_constant_expr(
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(_) => todo!(),
         Expression::OffsetOf(oo) => process_offset_of_expression_node(*oo, scope, ec),
-        Expression::VaArg(_) => unimplemented!(),
-        Expression::Statement(_) => unimplemented!(), // GNU extension
-        Expression::GenericSelection(_) => unimplemented!(),
+        Expression::VaArg(_) => {
+            ec.record_error(
+                CompileError::Unimplemented("va_arg in constant expressions".to_string()),
+                span,
+            )?;
+            unreachable!()
+        }
+        Expression::Statement(_) => {
+            ec.record_error(
+                CompileError::Unimplemented("statement expression".to_string()),
+                span,
+            )?;
+            unreachable!()
+        } // GNU extension
+        Expression::GenericSelection(_) => {
+            ec.record_error(
+                CompileError::Unimplemented(
+                    "generic selection in constant expressions".to_string(),
+                ),
+                span,
+            )?;
+            unreachable!()
+        }
     }
 }
 
@@ -556,8 +577,20 @@ fn process_unary_operator_expression_node(
             ec.record_error(CompileError::AssignmentToConst, span)?;
             unreachable!()
         }
-        UnaryOperator::Address => unimplemented!(),
-        UnaryOperator::Indirection => unimplemented!(),
+        UnaryOperator::Address => {
+            ec.record_error(
+                CompileError::Unimplemented("address in constant expressions".to_string()),
+                span,
+            )?;
+            unreachable!()
+        }
+        UnaryOperator::Indirection => {
+            ec.record_error(
+                CompileError::Unimplemented("indirection in constant expressions".to_string()),
+                span,
+            )?;
+            unreachable!()
+        }
         UnaryOperator::Plus => {
             if !val.t.t.is_arithmetic() {
                 ec.record_error(CompileError::ArithmeticTypeRequired, span)?;

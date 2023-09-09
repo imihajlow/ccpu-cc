@@ -91,7 +91,11 @@ impl Function<ir::VirtualReg> {
         ec: &mut ErrorCollector,
     ) -> Result<Self, ()> {
         if !node.node.declarations.is_empty() {
-            unimplemented!("K&R functions");
+            ec.record_error(
+                CompileError::Unimplemented("K&R functions".to_string()),
+                node.span,
+            )?;
+            unreachable!()
         }
         let (type_builder, storage_class, extra) =
             TypeBuilder::new_from_specifiers(node.node.specifiers, scope, ec)?;
@@ -365,7 +369,7 @@ impl Function<ir::VirtualReg> {
             });
         let repetitions = match phi_permutations {
             Some(p) if p < 10000 => p * 5,
-            _ => 50000,
+            _ => 10000,
         };
         let mut min_copies = None;
         let mut best_body = None;

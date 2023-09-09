@@ -540,13 +540,14 @@ impl CType {
     pub fn get_width_sign(&self) -> Option<(ir::Width, bool)> {
         match self {
             CType::Int(size, sign) => Some((ir::Width::new(*size), *sign)),
+            CType::Float(size) => Some((ir::Width::new(*size), false)),
             CType::Bool => Some((ir::Width::BOOL_WIDTH, false)),
             CType::Array(_, _) | CType::Pointer(_) => Some((ir::Width::PTR_WIDTH, false)),
             CType::Enum(_) => Some((ir::Width::INT_WIDTH, true)),
             CType::StructUnion(_) => None,
             CType::VaList => Some((ir::Width::VA_LIST_WIDTH, false)),
             CType::Function { .. } => Some((ir::Width::PTR_WIDTH, false)),
-            CType::Void | CType::Float(_) => None,
+            CType::Void => None,
         }
     }
 
@@ -687,10 +688,10 @@ impl std::fmt::Display for CType {
             Int(machine::LONG_SIZE, false) => f.write_str("unsigned long"),
             Int(machine::LLONG_SIZE, true) => f.write_str("long long"),
             Int(machine::LLONG_SIZE, false) => f.write_str("unsigned long long"),
-            Int(_, _) => unimplemented!(),
+            Int(_, _) => unreachable!(),
             Float(4) => f.write_str("float"),
             Float(8) => f.write_str("double"),
-            Float(_) => unimplemented!(),
+            Float(_) => unreachable!(),
             Pointer(inner) => write!(f, "{} *", inner),
             Array(inner, None) => write!(f, "{} []", inner),
             Array(inner, Some(n)) => write!(f, "{} [{}]", inner, n),

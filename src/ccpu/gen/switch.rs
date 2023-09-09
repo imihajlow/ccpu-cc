@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-
 use crate::{
     ccpu::{
         gen::{make_block_label, util::load_scalar},
