@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-lang-c = "0.15"
+lang-c = "0.15.1"
 static_assertions = "1.1.0"
 bitflags = "1.3"
 replace_with = "0.1.7"
