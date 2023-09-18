@@ -3,12 +3,13 @@ use std::fmt::Formatter;
 
 use crate::generic_ir::{GlobalVarId, VarLocation, Width};
 
-use super::global::{self, get_global_var_label};
+use super::global::{self, get_global_var_label, TRANSLATION_UNIT_UID};
 use super::reg::FrameReg;
 
 #[derive(Clone)]
 pub struct InstructionWriter {
     exports: HashSet<String>,
+    weaks: HashSet<String>,
     imports: HashSet<String>,
     text: Vec<(String, Vec<TextItem>)>,
     bss: HashMap<String, DataItem<u16>>,
@@ -101,6 +102,7 @@ impl InstructionWriter {
         InstructionWriter {
             text: Vec::new(),
             exports: HashSet::new(),
+            weaks: HashSet::new(),
             imports: HashSet::new(),
             bss: HashMap::new(),
             data: HashMap::new(),
@@ -113,7 +115,9 @@ impl InstructionWriter {
     pub fn begin_function(&mut self, name: &GlobalVarId) {
         let name = get_global_var_label(&name);
         self.reset_last();
-        self.text.push((name, Vec::new()));
+        let segment_name = format!("{}_{:X}", name, *TRANSLATION_UNIT_UID);
+        self.text.push((segment_name, Vec::new()));
+        self.label(name);
     }
 
     pub fn alloc_label(&mut self) -> String {
@@ -128,6 +132,10 @@ impl InstructionWriter {
 
     pub fn export(&mut self, symbol: String) {
         self.exports.insert(symbol);
+    }
+
+    pub fn export_weak(&mut self, symbol: String) {
+        self.weaks.insert(symbol);
     }
 
     pub fn import(&mut self, symbol: String) {
@@ -471,14 +479,16 @@ impl std::fmt::Display for InstructionWriter {
         for symbol in &self.exports {
             writeln!(f, "\t.export {}", symbol)?;
         }
+        for symbol in &self.weaks {
+            writeln!(f, "\t.weak {}", symbol)?;
+        }
         writeln!(f, "")?;
         for symbol in &self.imports {
             writeln!(f, "\t.global {}", symbol)?;
         }
         writeln!(f, "")?;
-        for (symbol, text) in &self.text {
-            writeln!(f, "\t.section text.{}", symbol)?;
-            writeln!(f, "{}:", symbol)?;
+        for (id, text) in &self.text {
+            writeln!(f, "\t.section text.{}", id)?;
             for item in text {
                 write!(f, "{}", item)?;
             }

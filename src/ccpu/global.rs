@@ -3,6 +3,10 @@ use crate::generic_ir::GlobalVarId;
 pub const RET_VALUE_REG_SYMBOL: &str = "__cc_ret";
 pub const DYN_FRAME_POINTER_SYMBOL: &str = "__cc_fp";
 
+lazy_static! {
+    pub static ref TRANSLATION_UNIT_UID: u64 = rand::random();
+}
+
 pub fn get_global_var_label(id: &GlobalVarId) -> String {
     match id {
         GlobalVarId::Global(s) => s.to_string(),

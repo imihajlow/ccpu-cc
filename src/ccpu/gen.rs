@@ -5,7 +5,7 @@ use crate::ccpu::global::{get_global_var_label, get_static_frame_symbol};
 use crate::error::{CompileError, ErrorCollector};
 use crate::generic_ir::{GlobalVarId, Width};
 use crate::initializer::{Constant, TypedConstant};
-use crate::name_scope::NameScope;
+use crate::name_scope::{ExportClass, NameScope};
 use crate::{
     function::Function,
     generic_ir::{self, ArgOp, Scalar, VarLocation},
@@ -48,8 +48,11 @@ pub fn gen_tu(
         w.import(get_global_var_label(&sym));
     }
 
-    for sym in tu.scope.get_export_symbols() {
-        w.export(get_global_var_label(&sym));
+    for (sym, class) in tu.scope.get_export_symbols() {
+        match class {
+            ExportClass::Normal => w.export(get_global_var_label(&sym)),
+            ExportClass::Weak => w.export_weak(get_global_var_label(&sym)),
+        }
     }
 
     for f in tu.functions.into_iter() {

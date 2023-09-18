@@ -3,7 +3,7 @@ use lang_c::{
     span::{Node, Span},
 };
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     builtin::{get_builtin_function, is_builtin_name, BuiltinFunction},
@@ -40,7 +40,7 @@ pub struct NameScope {
     tagged_types: Vec<(Tagged, Span)>,
     function_frame: Option<FunctionFrame>,
     local_statics: Vec<GlobalVarId>,
-    defined_functions: HashSet<String>,
+    defined_functions: HashMap<String, ExportClass>,
     next_id: usize,
     pub literals: Vec<Vec<u8>>,
 }
@@ -82,6 +82,12 @@ pub enum GlobalStorageClass {
     Extern,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportClass {
+    Normal,
+    Weak,
+}
+
 #[derive(Clone)]
 enum Tagged {
     Enum(Enum),
@@ -101,7 +107,7 @@ impl NameScope {
             tagged_types: Vec::new(),
             function_frame: None,
             local_statics: Vec::new(),
-            defined_functions: HashSet::new(),
+            defined_functions: HashMap::new(),
             next_id: 0,
             literals: Vec::new(),
         }
@@ -169,8 +175,15 @@ impl NameScope {
         name: &str,
         args: &FunctionArgs,
         return_type: &QualifiedType,
+        is_inline: bool,
     ) -> Vec<ir::Op> {
-        self.defined_functions.insert(name.to_string());
+        let export_class = if is_inline {
+            ExportClass::Weak
+        } else {
+            ExportClass::Normal
+        };
+        self.defined_functions
+            .insert(name.to_string(), export_class);
         let mut defs = HashMap::new();
         let mut init_instructions = if let FunctionArgs::List(l) = args {
             let mut ops = Vec::new();
@@ -693,7 +706,7 @@ impl NameScope {
                     match val.unwrap_storage_class() {
                         GlobalStorageClass::Static => (),
                         GlobalStorageClass::Default | GlobalStorageClass::Extern => {
-                            if !self.defined_functions.contains(name) {
+                            if !self.defined_functions.contains_key(name) {
                                 result.push(GlobalVarId::Global(name.clone()));
                             }
                         }
@@ -706,7 +719,7 @@ impl NameScope {
         result
     }
 
-    pub fn get_export_symbols(&self) -> Vec<GlobalVarId> {
+    pub fn get_export_symbols(&self) -> Vec<(GlobalVarId, ExportClass)> {
         let mut result = Vec::new();
         for (name, (val, _)) in &self.defs[0].default {
             if val.is_var() {
@@ -714,13 +727,13 @@ impl NameScope {
                     match val.unwrap_storage_class() {
                         GlobalStorageClass::Static => (),
                         GlobalStorageClass::Default | GlobalStorageClass::Extern => {
-                            if self.defined_functions.contains(name) {
-                                result.push(GlobalVarId::Global(name.clone()));
+                            if let Some(class) = self.defined_functions.get(name) {
+                                result.push((GlobalVarId::Global(name.clone()), *class));
                             }
                         }
                     }
                 } else if let GlobalStorageClass::Default = val.unwrap_storage_class() {
-                    result.push(GlobalVarId::Global(name.clone()));
+                    result.push((GlobalVarId::Global(name.clone()), ExportClass::Normal));
                 }
             }
         }

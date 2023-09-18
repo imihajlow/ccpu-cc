@@ -78,6 +78,10 @@ impl<Reg: Hash + Eq> Function<Reg> {
         &self.body
     }
 
+    pub fn is_weak(&self) -> bool {
+        self.is_inline
+    }
+
     #[cfg(test)]
     pub fn get_frame(&self) -> &FunctionFrame {
         &self.frame
@@ -127,7 +131,7 @@ impl Function<ir::VirtualReg> {
                 StorageClassSpecifier::Static => GlobalStorageClass::Static,
             },
         };
-        let init_instructions = scope.start_function(&name, &args, &return_type);
+        let init_instructions = scope.start_function(&name, &args, &return_type, extra.is_inline);
         let mut be = BlockEmitter::new(init_instructions);
         let compile_result = compile::compile_statement(node.node.statement, scope, &mut be, ec);
         let frame = scope.end_function();

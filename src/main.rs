@@ -41,6 +41,9 @@ mod test;
 #[macro_use]
 extern crate static_assertions;
 
+#[macro_use]
+extern crate lazy_static;
+
 use std::fs::File;
 use std::io::Write;
 use std::{path::PathBuf, process::exit};
