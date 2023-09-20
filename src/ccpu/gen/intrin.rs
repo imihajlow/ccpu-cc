@@ -40,11 +40,13 @@ pub fn gen_intrin_imports(w: &mut InstructionWriter) {
     w.import(get_intrin_sym("udiv_dword"));
     w.import(get_intrin_sym("div_byte"));
     w.import(get_intrin_sym("div_word"));
+    w.import(get_intrin_sym("div_dword"));
     w.import(get_intrin_sym("umod_byte"));
     w.import(get_intrin_sym("umod_word"));
     w.import(get_intrin_sym("umod_dword"));
     w.import(get_intrin_sym("mod_byte"));
     w.import(get_intrin_sym("mod_word"));
+    w.import(get_intrin_sym("mod_dword"));
     w.import(get_intrin_sym("asl_byte"));
     w.import(get_intrin_sym("asl_word"));
     w.import(get_intrin_sym("asl_dword"));

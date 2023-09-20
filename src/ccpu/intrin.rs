@@ -31,7 +31,7 @@ pub fn replace_with_intrinsic(op: &mut Op<ir::VirtualReg>) {
                 (false, Width::Dword) => "udiv_dword",
                 (true, Width::Byte) => "div_byte",
                 (true, Width::Word) => "div_word",
-                (true, Width::Dword) => unimplemented!("32-bit signed division"),
+                (true, Width::Dword) => "div_dword",
                 (_, Width::Qword) => unimplemented!("64-bit division"),
             }
             .to_string();
@@ -51,7 +51,7 @@ pub fn replace_with_intrinsic(op: &mut Op<ir::VirtualReg>) {
                 (false, Width::Dword) => "umod_dword",
                 (true, Width::Byte) => "mod_byte",
                 (true, Width::Word) => "mod_word",
-                (true, Width::Dword) => unimplemented!("32-bit signed division"),
+                (true, Width::Dword) => "mod_dword",
                 (_, Width::Qword) => unimplemented!("64-bit division"),
             }
             .to_string();

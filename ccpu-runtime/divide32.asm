@@ -1,5 +1,7 @@
     .export __cc_udiv_dword
     .export __cc_umod_dword
+    .export __cc_div_dword
+    .export __cc_mod_dword
 
     .global __cc_ret
     .global __cc_div_zero_trap
@@ -92,6 +94,396 @@ __cc_umod_dword:
     st  a
     inc pl
     st  b
+
+    ldi ph, hi(outer_ret)
+    ldi pl, lo(outer_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+    .section text.__cc_div_dword
+__cc_div_dword:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(outer_ret)
+    ldi ph, hi(outer_ret)
+    st b
+    inc pl
+    st a
+
+    ; Division result should be negated if N and D have different signs
+
+    ldi ph, hi(numerator)
+    ldi pl, lo(numerator + 3)
+    ld b
+    mov a, 0
+    shl b
+    adc a, 0
+    ldi pl, lo(denominator + 3)
+    ld b
+    shl b
+    adc a, 0
+    ldi ph, hi(negate)
+    ldi pl, lo(negate)
+    st  a ; a & 1 indicates that the result must be negated
+
+    ldi ph, hi(numerator)
+    ldi pl, lo(numerator + 3)
+    ld  b
+    shl b
+    ldi ph, hi(__cc_div_dword_num_positive)
+    ldi pl, lo(__cc_div_dword_num_positive)
+    jnc
+
+    ; numerator is negative - negate it
+    ldi ph, hi(numerator)
+    ldi pl, lo(numerator + 3)
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    inc a
+    st  a
+    ldi pl, lo(numerator + 1)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(numerator + 2)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(numerator + 3)
+    ld  a
+    adc a, 0
+    st  a
+
+__cc_div_dword_num_positive:
+    ldi ph, hi(denominator)
+    ldi pl, lo(denominator + 3)
+    ld  b
+    shl b
+    ldi ph, hi(__cc_div_dword_den_positive)
+    ldi pl, lo(__cc_div_dword_den_positive)
+    jnc
+
+    ; denominator is negative - negate it
+    ldi ph, hi(denominator)
+    ldi pl, lo(denominator + 3)
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    inc a
+    st  a
+    ldi pl, lo(denominator + 1)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(denominator + 2)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(denominator + 3)
+    ld  a
+    adc a, 0
+    st  a
+
+__cc_div_dword_den_positive:
+    ldi pl, lo(divide_dword)
+    ldi ph, hi(divide_dword)
+    jmp
+
+    ldi ph, hi(negate)
+    ldi pl, lo(negate)
+    ld  a
+    shr a
+    ldi ph, hi(__cc_div_dword_neg_result)
+    ldi pl, lo(__cc_div_dword_neg_result)
+    jc
+
+    ldi pl, lo(quotient)
+    ldi ph, hi(quotient)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
+    st  a
+    inc pl
+    st  b
+    ldi pl, lo(quotient + 2)
+    ldi ph, hi(quotient + 2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result + 2)
+    ldi ph, hi(intrin_result + 2)
+    st  a
+    inc pl
+    st  b
+
+    ldi ph, hi(outer_ret)
+    ldi pl, lo(outer_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+__cc_div_dword_neg_result:
+    ldi pl, lo(quotient + 2)
+    ldi ph, hi(quotient + 2)
+    ld  a
+    not a
+    inc pl
+    ld  b
+    not b
+    ldi pl, lo(intrin_result + 2)
+    ldi ph, hi(intrin_result + 2)
+    st  a
+    inc pl
+    st  b
+    ldi pl, lo(quotient)
+    ldi ph, hi(quotient)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result + 1)
+    ldi ph, hi(intrin_result)
+    not b
+    st  b
+    dec pl
+    not a
+    inc a
+    st  a
+    ldi pl, lo(intrin_result + 1)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(intrin_result + 2)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(intrin_result + 3)
+    ld  a
+    adc a, 0
+    st  a
+
+    ldi ph, hi(outer_ret)
+    ldi pl, lo(outer_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+    .section text.__cc_mod_dword
+__cc_mod_dword:
+    mov a, pl
+    mov b, a
+    mov a, ph
+    ldi pl, lo(outer_ret)
+    ldi ph, hi(outer_ret)
+    st b
+    inc pl
+    st a
+
+    ; Remainder result should be negated if N is negative
+
+    ldi ph, hi(numerator)
+    ldi pl, lo(numerator + 3)
+    ld b
+    mov a, 0
+    shl b
+    adc a, 0
+    ldi ph, hi(negate)
+    ldi pl, lo(negate)
+    st  a ; a & 1 indicates that the result must be negated
+
+    ldi ph, hi(numerator)
+    ldi pl, lo(numerator + 3)
+    ld  b
+    shl b
+    ldi ph, hi(__cc_mod_dword_num_positive)
+    ldi pl, lo(__cc_mod_dword_num_positive)
+    jnc
+
+    ; numerator is negative - negate it
+    ldi ph, hi(numerator)
+    ldi pl, lo(numerator + 3)
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    inc a
+    st  a
+    ldi pl, lo(numerator + 1)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(numerator + 2)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(numerator + 3)
+    ld  a
+    adc a, 0
+    st  a
+
+__cc_mod_dword_num_positive:
+    ldi ph, hi(denominator)
+    ldi pl, lo(denominator + 3)
+    ld  b
+    shl b
+    ldi ph, hi(__cc_mod_dword_den_positive)
+    ldi pl, lo(__cc_mod_dword_den_positive)
+    jnc
+
+    ; denominator is negative - negate it
+    ldi ph, hi(denominator)
+    ldi pl, lo(denominator + 3)
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    st  a
+    dec pl
+    ld  a
+    not a
+    inc a
+    st  a
+    ldi pl, lo(denominator + 1)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(denominator + 2)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(denominator + 3)
+    ld  a
+    adc a, 0
+    st  a
+
+__cc_mod_dword_den_positive:
+    ldi pl, lo(divide_dword)
+    ldi ph, hi(divide_dword)
+    jmp
+
+    ldi ph, hi(negate)
+    ldi pl, lo(negate)
+    ld  a
+    shr a
+    ldi ph, hi(__cc_mod_dword_neg_result)
+    ldi pl, lo(__cc_mod_dword_neg_result)
+    jc
+
+    ldi pl, lo(remainder)
+    ldi ph, hi(remainder)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result)
+    ldi ph, hi(intrin_result)
+    st  a
+    inc pl
+    st  b
+    ldi pl, lo(remainder + 2)
+    ldi ph, hi(remainder + 2)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result + 2)
+    ldi ph, hi(intrin_result + 2)
+    st  a
+    inc pl
+    st  b
+
+    ldi ph, hi(outer_ret)
+    ldi pl, lo(outer_ret)
+    ld  a
+    inc pl
+    ld  ph
+    mov pl, a
+    jmp
+
+__cc_mod_dword_neg_result:
+    ldi pl, lo(remainder + 2)
+    ldi ph, hi(remainder + 2)
+    ld  a
+    not a
+    inc pl
+    ld  b
+    not b
+    ldi pl, lo(intrin_result + 2)
+    ldi ph, hi(intrin_result + 2)
+    st  a
+    inc pl
+    st  b
+    ldi pl, lo(remainder)
+    ldi ph, hi(remainder)
+    ld  a
+    inc pl
+    ld  b
+    ldi pl, lo(intrin_result + 1)
+    ldi ph, hi(intrin_result)
+    not b
+    st  b
+    dec pl
+    not a
+    inc a
+    st  a
+    ldi pl, lo(intrin_result + 1)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(intrin_result + 2)
+    ld  a
+    adc a, 0
+    st  a
+    ldi pl, lo(intrin_result + 3)
+    ld  a
+    adc a, 0
+    st  a
 
     ldi ph, hi(outer_ret)
     ldi pl, lo(outer_ret)
@@ -642,4 +1034,5 @@ quotient:  res 4
 remainder: res 4
 inner_ret: res 2
 outer_ret: res 2
-qbit: res 2
+qbit:      res 1
+negate:    res 1
