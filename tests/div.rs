@@ -123,6 +123,57 @@ fn test_udiv_word() {
 }
 
 #[test]
+fn test_udiv_dword() {
+    let (bin, map) = build(
+        "
+        unsigned long fooa, foob, fooc, food;
+
+        void main(void) {
+            fooc = fooa / foob;
+            food = fooa % foob;
+        }
+    ",
+    );
+
+    let tests = [
+        (30 as u32, 2 as u32),
+        (100, 20),
+        (50, 50),
+        (111, 11),
+        (15000, 75),
+        (30000, 1111),
+        (52000, 123),
+        (1000000, 10),
+        (10, 1000000),
+        (3123456789, 7654321),
+        (0x102031, 0x70),
+        (0x102031, 0x1070),
+        (0x102031, 0x100970),
+        (0xbb102031, 0x70),
+        (0xbb102031, 0x1070),
+        (0xbb102031, 0x100970),
+        (0xbb102031, 0x12100970),
+    ];
+
+    for (a, b) in &tests {
+        let c = a.wrapping_div(*b);
+        let d = a.wrapping_rem(*b);
+        run(
+            &bin,
+            &map,
+            &[
+                "u main",
+                &format!("poke d fooa {}", *a as u32),
+                &format!("poke d foob {}", *b as u32),
+                "u main_exit",
+                &format!("check d fooc {}", c as u32),
+                &format!("check d food {}", d as u32),
+            ],
+        );
+    }
+}
+
+#[test]
 fn test_rem_byte() {
     let (bin, map) = build(
         "

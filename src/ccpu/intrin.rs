@@ -28,9 +28,10 @@ pub fn replace_with_intrinsic(op: &mut Op<ir::VirtualReg>) {
             let name = match (op.sign, op.width) {
                 (false, Width::Byte) => "udiv_byte",
                 (false, Width::Word) => "udiv_word",
+                (false, Width::Dword) => "udiv_dword",
                 (true, Width::Byte) => "div_byte",
                 (true, Width::Word) => "div_word",
-                (_, Width::Dword) => unimplemented!("32-bit division"),
+                (true, Width::Dword) => unimplemented!("32-bit signed division"),
                 (_, Width::Qword) => unimplemented!("64-bit division"),
             }
             .to_string();
@@ -47,9 +48,10 @@ pub fn replace_with_intrinsic(op: &mut Op<ir::VirtualReg>) {
             let name = match (op.sign, op.width) {
                 (false, Width::Byte) => "umod_byte",
                 (false, Width::Word) => "umod_word",
+                (false, Width::Dword) => "umod_dword",
                 (true, Width::Byte) => "mod_byte",
                 (true, Width::Word) => "mod_word",
-                (_, Width::Dword) => unimplemented!("32-bit division"),
+                (true, Width::Dword) => unimplemented!("32-bit signed division"),
                 (_, Width::Qword) => unimplemented!("64-bit division"),
             }
             .to_string();

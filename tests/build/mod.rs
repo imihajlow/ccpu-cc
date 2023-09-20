@@ -10,6 +10,7 @@ lazy_static! {
     static ref RUNTIME_OBJ: PathBuf = assemble(&PathBuf::from("ccpu-runtime/runtime.asm"));
     static ref STARTUP_OBJ: PathBuf = assemble(&PathBuf::from("ccpu-runtime/rom_startup.asm"));
     static ref MEMCPY_OBJ: PathBuf = assemble(&PathBuf::from("ccpu-runtime/memcpy.asm"));
+    static ref DIVIDE32_OBJ: PathBuf = assemble(&PathBuf::from("ccpu-runtime/divide32.asm"));
 }
 
 pub fn run(bin: &Path, map: &Path, script: &[&str]) {
@@ -27,7 +28,7 @@ pub fn build(code: &str) -> (PathBuf, PathBuf) {
     let obj = assemble(&asm);
     link(
         &obj.with_extension("bin"),
-        &[&obj, &RUNTIME_OBJ, &STARTUP_OBJ, &MEMCPY_OBJ],
+        &[&obj, &RUNTIME_OBJ, &STARTUP_OBJ, &MEMCPY_OBJ, &DIVIDE32_OBJ],
         &PathBuf::from("tests/rom.yaml"),
     )
 }

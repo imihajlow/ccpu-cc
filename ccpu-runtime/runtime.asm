@@ -16,6 +16,8 @@
     .export __cc_umod_byte
     .export __cc_umod_word
 
+    .export __cc_div_zero_trap
+
     .export __cc_ret
 
     ; arguments for intrinsic calls
@@ -2037,7 +2039,7 @@ __cc_div_zero_trap:
     ldi ph, hi(__cc_div_zero_trap)
     jmp
 
-    .section bss.natrix_runtime
+    .section bss.cc_runtime
     .align 64 ; all internal data have the same hi byte
 __cc_ret: res 8
     res 3 ; zeroes before shift_lhs
