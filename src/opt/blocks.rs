@@ -115,6 +115,7 @@ pub fn merge_chains<Reg: Copy + Hash + Eq + std::fmt::Display>(
         for i in 0..blocks.len() {
             if let Some(n) = merge_with[i] {
                 if merge_with[n].is_none() {
+                    // i -> n
                     let mut phi_map = HashMap::new();
                     let phi_srcs = mem::replace(&mut blocks[n].phi.srcs, HashMap::new());
                     for (dst, (_, srcs)) in phi_srcs {
@@ -134,6 +135,7 @@ pub fn merge_chains<Reg: Copy + Hash + Eq + std::fmt::Display>(
                     blocks[i].tail.subs_src_regs(&phi_map);
                     for id in blocks[i].tail.get_connections() {
                         blocks[id].phi.subs_src_regs(&phi_map);
+                        blocks[id].phi.subs_block_id(n, i);
                     }
                     merge_with[i] = None;
                 } else {

@@ -840,6 +840,19 @@ impl<Reg: Copy + Eq + Hash> Phi<Reg> {
         }
         result
     }
+
+    pub fn subs_block_id(&mut self, old: usize, new: usize) -> bool {
+        let mut result = false;
+        for (_, (_, src)) in &mut self.srcs {
+            for (block_id, _) in src {
+                if *block_id == old {
+                    *block_id = new;
+                    result = true;
+                }
+            }
+        }
+        result
+    }
 }
 
 impl<Reg: Copy + Eq> ArgOp<Reg> {
