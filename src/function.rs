@@ -1,7 +1,7 @@
 use crate::generic_ir::UnaryUnsignedOp;
 use crate::ir::{Op, VarLocation};
 use crate::opt::arithmetic::optimize_arithmetics;
-use crate::opt::copy::reduce_copies;
+use crate::opt::copy::{drop_trivial_copies, reduce_copies};
 use crate::opt::width::optimize_width;
 use crate::regalloc::get_live_ranges;
 use crate::utils::factorial;
@@ -415,6 +415,7 @@ impl Function<FrameReg> {
             modified = false;
             modified |=
                 replace_with::replace_with_or_abort_and_return(&mut self.body, drop_orphan_blocks);
+            modified |= drop_trivial_copies(&mut self.body);
             modified |= simplify_jumps(&mut self.body);
             modified |= merge_chains(&mut self.body);
         }

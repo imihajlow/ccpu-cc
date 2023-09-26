@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use replace_with::replace_with_or_abort_and_return;
 
 use crate::{
-    generic_ir::{Op, Scalar, VarLocation},
-    ir::{self, UnaryUnsignedOp},
+    generic_ir::{GenericBlock, Op, Scalar, Tail, UnaryUnsignedOp, VarLocation},
+    ir::{self},
 };
 
 pub fn reduce_copies(blocks: &mut Vec<ir::Block>) -> bool {
@@ -58,6 +58,31 @@ pub fn reduce_copies(blocks: &mut Vec<ir::Block>) -> bool {
         });
         modified |= block.tail.subs_src_regs(&copy_scalar_map);
         modified |= block.phi.subs_src_regs(&copy_scalar_map);
+    }
+    modified
+}
+
+/// Remove copies where destination equals source
+pub fn drop_trivial_copies<R: PartialEq + Eq + Hash + Copy>(
+    blocks: &mut Vec<GenericBlock<Tail<R>, R>>,
+) -> bool {
+    let mut modified = false;
+    for block in blocks {
+        modified |= replace_with_or_abort_and_return(&mut block.ops, |ops| {
+            let mut modified = false;
+            let mut filtered_ops = Vec::new();
+            for op in ops {
+                match op {
+                    Op::Copy(UnaryUnsignedOp { dst, src, .. })
+                        if dst.get_reg().is_some() && dst.get_reg() == src.get_reg() =>
+                    {
+                        modified = true;
+                    }
+                    _ => filtered_ops.push(op),
+                }
+            }
+            (modified, filtered_ops)
+        });
     }
     modified
 }

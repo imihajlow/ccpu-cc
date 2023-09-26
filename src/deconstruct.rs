@@ -365,7 +365,10 @@ mod test {
                 _ => panic!("wrong width"),
             }
         }
-        let copies: Vec<_> = copies.into_iter().filter(|(_, src, dst, _)| src != dst).collect();
+        let copies: Vec<_> = copies
+            .into_iter()
+            .filter(|(_, src, dst, _)| src != dst)
+            .collect();
         assert_matches!(copies[0], (0, TMP_REG_INDEX, _, _));
         assert_matches!(copies[3], (0, _, TMP_REG_INDEX, _));
         assert_eq!(copies[0].3, copies[3].3);

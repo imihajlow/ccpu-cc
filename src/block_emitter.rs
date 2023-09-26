@@ -64,7 +64,7 @@ impl BlockEmitter {
                 ops: initial_ops,
                 tail: LabeledTail::Tail(ir::Tail::Jump(1)),
                 loop_depth: 0,
-                original_id: 0
+                original_id: 0,
             },
         );
         Self {
