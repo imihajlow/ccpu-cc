@@ -9,7 +9,7 @@ hello.app: hello.o ../ccpu-runtime/runtime.o ../ccpu-runtime/memcpy.o ../ccpu-ru
 	../../ccpu/tools/link.py -o $@ --slim --layout app.yaml -m $(@:.app=.map) $^
 
 %.o: %.c ../target/debug/ccpu-cc
-	../target/debug/ccpu-cc --verbose -o $(@:.o=.s) $<
+	cargo run -- --verbose -I ../../ccpu-libc2/include -o $(@:.o=.s) $< > $(@:.o=.out)
 	../../ccpu/tools/asm.py -o $@ $(@:.o=.s)
 
 %.o: %.asm

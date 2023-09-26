@@ -64,6 +64,7 @@ impl BlockEmitter {
                 ops: initial_ops,
                 tail: LabeledTail::Tail(ir::Tail::Jump(1)),
                 loop_depth: 0,
+                original_id: 0
             },
         );
         Self {
@@ -89,6 +90,7 @@ impl BlockEmitter {
                 ops: self.current_ops,
                 tail: LabeledTail::Tail(ir::Tail::Ret),
                 loop_depth: 0,
+                original_id: self.current_id,
             },
         );
         let mut result = Vec::new();
@@ -110,6 +112,7 @@ impl BlockEmitter {
                 ops: block.ops,
                 tail,
                 loop_depth: block.loop_depth,
+                original_id: block.original_id,
             });
         }
         Ok(result)
@@ -873,6 +876,7 @@ impl BlockEmitter {
                 phi: ir::Phi::new(),
                 tail,
                 loop_depth: self.loop_depth,
+                original_id: self.current_id,
             },
         );
         self.current_id = next_block;

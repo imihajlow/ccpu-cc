@@ -7,7 +7,7 @@ use crate::{ccpu::reg::FrameReg, generic_ir::IntrinCallVariant, ir, register::Re
 /**
  * Allocate physical registers for a program in an SSA form.
  *
- * Each virtual register is expected to live only across single block and in sources of phi nodes of its children.
+ * Each virtual register is expected to live only across a single block and in sources of phi nodes of its children.
  * Physical registers are plenty, no spilling is performed.
  */
 pub fn allocate_registers(body: &[ir::Block]) -> HashMap<ir::VirtualReg, FrameReg> {
@@ -196,10 +196,10 @@ fn allocate_registers_for_block(
             .iter()
             .enumerate()
             .find(|(_, vacant)| **vacant)
-            .map(|(i, _)| i as ir::VirtualReg)
+            .map(|(i, _)| i)
             .expect("out of registers");
-        vacant_registers[phy_reg as usize] = false;
-        FrameReg::FrameA(phy_reg as u16)
+        vacant_registers[phy_reg] = false;
+        FrameReg::from_index(phy_reg).unwrap()
     }
 
     // Allocate for phi

@@ -28,6 +28,7 @@ fn test_regalloc_args_1() {
         ],
         tail: Tail::Ret,
         loop_depth: 0,
+        original_id: 0,
     }];
     let map = allocate_registers(&body);
     assert_eq!(map.len(), 3);

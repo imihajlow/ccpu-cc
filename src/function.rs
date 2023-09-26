@@ -450,7 +450,11 @@ impl<Reg: std::fmt::Display + Eq + Hash> std::fmt::Display for Function<Reg> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         writeln!(f, "function {}({})", self.name, self.get_frame_size())?;
         for (i, b) in self.body.iter().enumerate() {
-            writeln!(f, "{}:\n{}", i, b)?;
+            if i == b.original_id {
+                writeln!(f, "{}:\n{}", i, b)?;
+            } else {
+                writeln!(f, "{} (originally {}):\n{}", i, b.original_id, b)?;
+            }
         }
         Ok(())
     }

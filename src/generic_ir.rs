@@ -237,6 +237,7 @@ pub struct GenericBlock<GTail, Reg: Eq + Hash> {
     pub ops: Vec<Op<Reg>>,
     pub tail: GTail,
     pub loop_depth: usize,
+    pub original_id: usize,
 }
 
 pub type Block<Reg> = GenericBlock<Tail<Reg>, Reg>;

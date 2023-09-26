@@ -217,36 +217,42 @@ mod test {
                 ops: vec![ir::Op::Dummy(0)],
                 tail: ir::Tail::Jump(2),
                 loop_depth: 0,
+                original_id: 0,
             },
             ir::Block {
                 phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(1)],
                 tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 0, 2),
                 loop_depth: 0,
+                original_id: 1,
             },
             ir::Block {
                 phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(2)],
                 tail: ir::Tail::Jump(4),
                 loop_depth: 0,
+                original_id: 2,
             },
             ir::Block {
                 phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(3)],
                 tail: ir::Tail::Jump(4),
                 loop_depth: 0,
+                original_id: 3,
             },
             ir::Block {
                 phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(4)],
                 tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 2, 5),
                 loop_depth: 0,
+                original_id: 4,
             },
             ir::Block {
                 phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(5)],
                 tail: ir::Tail::Jump(0),
                 loop_depth: 0,
+                original_id: 5,
             },
         ];
 
@@ -260,24 +266,28 @@ mod test {
                     ops: vec![ir::Op::Dummy(0)],
                     tail: ir::Tail::Jump(1),
                     loop_depth: 0,
+                    original_id: 0,
                 },
                 ir::Block {
                     phi: Phi::new(),
                     ops: vec![ir::Op::Dummy(2)],
                     tail: ir::Tail::Jump(2),
                     loop_depth: 0,
+                    original_id: 2,
                 },
                 ir::Block {
                     phi: Phi::new(),
                     ops: vec![ir::Op::Dummy(4)],
                     tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 1, 3),
                     loop_depth: 0,
+                    original_id: 4,
                 },
                 ir::Block {
                     phi: Phi::new(),
                     ops: vec![ir::Op::Dummy(5)],
                     tail: ir::Tail::Jump(0),
                     loop_depth: 0,
+                    original_id: 5,
                 },
             ]
         )

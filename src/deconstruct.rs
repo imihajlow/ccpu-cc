@@ -19,6 +19,7 @@ pub fn deconstruct_ssa(
             tail: block.tail.remap_regs(map),
             phi: block.phi.remap_regs(map),
             loop_depth: block.loop_depth,
+            original_id: block.original_id,
         })
         .collect();
 
@@ -55,6 +56,7 @@ pub fn deconstruct_ssa(
                     .map(|(dst, src, width)| get_copy_op(dst, src, width))
                     .collect(),
                 loop_depth: body[dst_block_id].loop_depth,
+                original_id: block_id,
             };
             body.push(new_block);
             let new_block_id = body.len() - 1;
@@ -119,10 +121,8 @@ fn phi_to_copies<Reg: Copy + Eq + Hash + Register + Debug>(
                 let idx = g.get_node_index(&dst_reg).unwrap();
                 if let Some(src_idx) = g.get_edges_from_index(idx).next() {
                     let src_reg = *g.get_object(src_idx).unwrap();
-                    if src_reg != dst_reg {
-                        let width = *widths.get(&dst_reg).unwrap();
-                        copies.push((src_block, dst_reg, src_reg, width));
-                    }
+                    let width = *widths.get(&dst_reg).unwrap();
+                    copies.push((src_block, dst_reg, src_reg, width));
                 } else {
                     // End of chain.
                 }
@@ -226,7 +226,7 @@ impl BlockCopyOps {
         let mut original_copies = Vec::new();
         let mut moved_copies = Vec::new();
         for (dst_block_id, copies) in self.0.into_iter() {
-            if conflicting_dsts.contains(&dst_block_id) {
+            if !conflicting_dsts.is_empty() {
                 moved_copies.push((dst_block_id, copies));
             } else {
                 original_copies.extend(copies.into_iter());
@@ -357,14 +357,15 @@ mod test {
         phi.add_binding(&4, &2, 0, Byte);
         let copies = phi_to_copies(&phi);
         println!("{:?}", copies);
-        assert_eq!(copies.len(), 4);
+        assert_eq!(copies.len(), 6);
         for (_, dst, _, width) in &copies {
             match (*dst, *width) {
-                (2, Dword) | (3, Qword) | (4, Byte) => (),
+                (0, Byte) | (1, Word) | (2, Dword) | (3, Qword) | (4, Byte) => (),
                 (TMP_REG_INDEX, _) => (),
                 _ => panic!("wrong width"),
             }
         }
+        let copies: Vec<_> = copies.into_iter().filter(|(_, src, dst, _)| src != dst).collect();
         assert_matches!(copies[0], (0, TMP_REG_INDEX, _, _));
         assert_matches!(copies[3], (0, _, TMP_REG_INDEX, _));
         assert_eq!(copies[0].3, copies[3].3);
