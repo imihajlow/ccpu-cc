@@ -20,7 +20,7 @@ fn gen_store_const(
     width: Width,
 ) {
     use crate::ccpu::instr::Reg::*;
-    load_addr(w, dst_addr, 0);
+    load_addr(w, dst_addr, 0, false);
     for i in 0..(width as u16) {
         if i != 0 {
             w.inc(PL);
@@ -39,7 +39,7 @@ fn gen_store_sym(
     width: Width,
 ) {
     use crate::ccpu::instr::Reg::*;
-    load_addr(w, dst_addr, 0);
+    load_addr(w, dst_addr, 0, false);
     for i in 0..(width as u16) {
         if i != 0 {
             w.inc(PL);
@@ -63,7 +63,7 @@ fn gen_store_var(
     for i in 0..(width as u16) {
         w.ldi_p_var_location(src, i, true);
         w.ld(B);
-        load_addr(w, dst_addr, i);
+        load_addr(w, dst_addr, i as u8, false);
         w.st(B);
     }
 }

@@ -4,17 +4,20 @@ use crate::{
 };
 
 /**
- * Load address into P from scalar. B is not used.
+ * Load address into P from scalar. B is never used. A is used if addr is Scalar::Var.
  */
-pub fn load_addr(w: &mut InstructionWriter, addr: &generic_ir::Scalar<FrameReg>, offset: u16) {
-    assert!(offset < 256);
-
+pub fn load_addr(
+    w: &mut InstructionWriter,
+    addr: &generic_ir::Scalar<FrameReg>,
+    offset: u8,
+    overflow_possible: bool,
+) {
     use crate::ccpu::instr::Reg::*;
     match addr {
-        Scalar::ConstInt(x) => w.ldi_p_const(*x as u16 + offset, true),
+        Scalar::ConstInt(x) => w.ldi_p_const(*x as u16 + offset as u16, true),
         Scalar::SymbolOffset(id, sym_offset) => {
             let label = get_global_var_label(&id);
-            w.ldi_p_sym(label, sym_offset + offset);
+            w.ldi_p_sym(label, sym_offset + offset as u16);
         }
         Scalar::Var(v) => {
             w.ldi_p_var_location(&v, 0, true);
@@ -24,6 +27,10 @@ pub fn load_addr(w: &mut InstructionWriter, addr: &generic_ir::Scalar<FrameReg>,
             if offset != 0 {
                 w.ldi_const(PL, offset as u8, true);
                 w.add(PL, A);
+                if overflow_possible {
+                    w.mov(A, Zero);
+                    w.adc(PH, A);
+                }
             } else {
                 w.mov(PL, A);
             }

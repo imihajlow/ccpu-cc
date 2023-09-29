@@ -1,9 +1,11 @@
 use replace_with::replace_with_or_abort;
 
 use crate::{
-    generic_ir::{IntrinCallOp, IntrinCallVariant, Op, Scalar, Width},
+    generic_ir::{CallOp, GlobalVarId, IntrinCallOp, IntrinCallVariant, Op, Scalar, Width},
     ir,
 };
+
+const MAX_INLINE_MEMCPY_LEN: u32 = 32;
 
 pub fn replace_with_intrinsic(op: &mut Op<ir::VirtualReg>) {
     replace_with_or_abort(op, |op| match op {
@@ -106,6 +108,16 @@ pub fn replace_with_intrinsic(op: &mut Op<ir::VirtualReg>) {
             }
             Scalar::ConstInt(_) => Op::RShift(op),
         },
+        Op::Memcpy(op) if op.len > MAX_INLINE_MEMCPY_LEN => Op::Call(CallOp {
+            addr: Scalar::SymbolOffset(GlobalVarId::Global("memcpy".to_string()), 0),
+            args: vec![
+                (op.dst_addr, Width::PTR_WIDTH),
+                (op.src_addr, Width::PTR_WIDTH),
+                (Scalar::ConstInt(op.len as u64), Width::PTR_WIDTH),
+            ],
+            va_args: vec![],
+            dst: None,
+        }),
         _ => op,
     });
 }

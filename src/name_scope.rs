@@ -11,7 +11,7 @@ use crate::{
     enums::Enum,
     error::{CompileError, CompileWarning, ErrorCollector},
     generic_ir::Scalar,
-    ir,
+    ir::{self, Width},
     lvalue::{LValue, TypedLValue},
     object_location::ObjectLocation,
     rvalue::{RValue, TypedRValue},
@@ -197,8 +197,23 @@ impl NameScope {
                             arg_number: i,
                             width: t.t.get_scalar_width().unwrap(),
                         }))
+                    } else if t.t.is_object() {
+                        // Passing struct by value - actually passing the address of the struct
+                        let reg = self.alloc_reg();
+                        defs.insert(
+                            name.to_string(),
+                            (
+                                Value::Object(t.clone(), Scalar::Var(VarLocation::Local(reg))),
+                                *span,
+                            ),
+                        );
+                        ops.push(ir::Op::Arg(ir::ArgOp {
+                            dst_reg: reg,
+                            arg_number: i,
+                            width: Width::PTR_WIDTH,
+                        }))
                     } else {
-                        todo!("struct passing in parameters")
+                        todo!("array passing in parameters")
                     }
                 }
             }
@@ -738,6 +753,31 @@ impl NameScope {
             }
         }
         result
+    }
+
+    /// Allocate space for an object on the function frame.
+    pub fn alloc_temp_object(
+        &mut self,
+        t: QualifiedType,
+        ec: &mut ErrorCollector,
+        span: Span,
+    ) -> Result<TypedLValue, ()> {
+        assert!(t.t.is_object());
+        let size = t.t.sizeof(self, span, ec)?;
+        let align = t.t.alignof(self, span, ec)?;
+        let offset = self.alloc_frame(size, align);
+        let address_reg = self.alloc_reg();
+        self.function_frame
+            .as_mut()
+            .unwrap()
+            .address_regs
+            .push((address_reg, offset));
+        Ok(TypedLValue {
+            t,
+            lv: LValue::Object(ObjectLocation::PointedBy(Scalar::Var(VarLocation::Local(
+                address_reg,
+            )))),
+        })
     }
 
     fn get_tagged_type(&self, id: usize) -> &Tagged {

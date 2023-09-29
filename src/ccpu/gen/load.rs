@@ -8,7 +8,7 @@ pub fn gen_load(w: &mut InstructionWriter, op: &generic_ir::LoadOp<FrameReg>) {
     use crate::ccpu::instr::Reg::*;
 
     if op.width == Width::Byte {
-        load_addr(w, &op.src_addr, 0);
+        load_addr(w, &op.src_addr, 0, false);
         w.ld(A);
         w.ldi_p_var_location(&op.dst, 0, true);
         w.st(A);
@@ -16,7 +16,7 @@ pub fn gen_load(w: &mut InstructionWriter, op: &generic_ir::LoadOp<FrameReg>) {
         let words = op.width as u16 / 2;
         // Reverse order to allow loads to same register
         for word_offset in (0..words).rev() {
-            load_addr(w, &op.src_addr, (word_offset * 2) as u16);
+            load_addr(w, &op.src_addr, (word_offset * 2) as u8, false);
             w.ld(A);
             w.inc(PL);
             w.ld(B);

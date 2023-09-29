@@ -10,7 +10,7 @@ use lang_c::{
 use crate::builtin::compile_builtin_call;
 use crate::ctype::{self, CType, FunctionArgs, Qualifiers};
 use crate::error::CompileError;
-use crate::generic_ir::Scalar;
+use crate::generic_ir::{MemcpyOp, Scalar};
 use crate::initializer::TypedConstant;
 use crate::ir::Width;
 use crate::lvalue::TypedLValue;
@@ -712,6 +712,21 @@ fn compile_argument(
             let (s, t) = arg_src.unwrap_scalar_and_type();
             let w = t.t.get_scalar_width().unwrap();
             Ok((s, w))
+        } else if arg_type.t.is_object() {
+            if !arg_type.is_compatible_to(&arg_src.t, false) {
+                ec.record_error(CompileError::IncompatibleTypes(arg_type, arg_src.t), span)?;
+                unreachable!();
+            }
+            let size = arg_type.t.sizeof(scope, span, ec)?;
+            let lv = scope.alloc_temp_object(arg_type, ec, span)?;
+            let dst_addr = lv.get_object_address().unwrap();
+            let src_addr = arg_src.get_object_address().unwrap();
+            be.append_operation(ir::Op::Memcpy(MemcpyOp {
+                dst_addr: dst_addr.clone(),
+                src_addr,
+                len: size,
+            }));
+            Ok((dst_addr, Width::PTR_WIDTH))
         } else {
             todo!()
         }

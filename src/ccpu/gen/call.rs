@@ -25,7 +25,7 @@ pub fn gen_call(w: &mut InstructionWriter, op: &generic_ir::CallOp<FrameReg>) {
             _ => panic!("Call variadic arguments are not correctly hinted by register allocator!"),
         }
     }
-    load_addr(w, &op.addr, 0);
+    load_addr(w, &op.addr, 0, false);
     w.jmp();
     if let Some((ret_location, ret_width)) = &op.dst {
         gen_copy_var(w, ret_location, &VarLocation::Return, *ret_width);

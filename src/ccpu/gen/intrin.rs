@@ -54,6 +54,7 @@ pub fn gen_intrin_imports(w: &mut InstructionWriter) {
     w.import(get_intrin_sym("asr_dword"));
     w.import(get_intrin_sym("lsr_word"));
     w.import(get_intrin_sym("lsr_dword"));
+    w.import("memcpy".to_string());
 }
 
 fn get_intrin_sym(name: &str) -> String {

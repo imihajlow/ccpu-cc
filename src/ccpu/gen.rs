@@ -28,6 +28,7 @@ mod conv;
 mod copy;
 mod intrin;
 mod load;
+mod memcpy;
 mod neg;
 mod shift;
 mod store;
@@ -138,7 +139,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, _function_na
         Store(op) => store::gen_store(w, op),
         Load(op) => load::gen_load(w, op),
         Call(op) => call::gen_call(w, op),
-        Memcpy(_) => todo!(),
+        Memcpy(op) => memcpy::gen_memcpy(w, op),
         IntrinCall(op) => intrin::gen_intrin_call(w, op),
         VaStart(op) => variadic::gen_va_start(w, op),
         VaArg(op) => variadic::gen_va_arg(w, op),
