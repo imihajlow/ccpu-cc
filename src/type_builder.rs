@@ -717,6 +717,16 @@ impl TypeBuilderStage2 {
                     )?;
                     unreachable!()
                 }
+                if self.base_type.t.is_packed_object(scope) {
+                    let size = self.base_type.t.sizeof(scope, dd.span, ec)?;
+                    let align = self.base_type.t.alignof(scope, dd.span, ec)?;
+                    if size != align {
+                        ec.record_warning(
+                            CompileWarning::ArrayOfPacked(self.base_type.clone()),
+                            dd.span,
+                        )?;
+                    }
+                }
                 match ad.node.size {
                     ArraySize::Unknown => self.base_type.wrap_array(None),
                     ArraySize::VariableExpression(e) => {

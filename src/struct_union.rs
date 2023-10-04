@@ -102,6 +102,10 @@ impl StructUnion {
         self.members.is_some()
     }
 
+    pub fn is_packed(&self) -> bool {
+        self.packed
+    }
+
     /**
      * Make a set of member names.
      * Names from nested anonymous structs/unions are included recursively.

@@ -342,13 +342,12 @@ pub fn compile_pointer_offset(
     }
 
     let index_ssize = cast(index, &ctype::SSIZE_TYPE, false, index_span, scope, be, ec)?;
-    let element_size = ptr
-        .t
-        .clone()
-        .dereference()
-        .unwrap()
-        .t
-        .sizeof(scope, ptr_span, ec)?;
+    let pointee_type = ptr.t.clone().dereference().unwrap();
+    let element_size = pointee_type.t.sizeof(scope, ptr_span, ec)?;
+    let element_align = pointee_type.t.sizeof(scope, ptr_span, ec)?;
+    if pointee_type.t.is_packed_object(scope) && (element_align - 1) & element_size != 0 {
+        ec.record_warning(CompileWarning::ArrayOfPacked(pointee_type), index_span)?;
+    }
     let element_size_src = TypedRValue {
         t: ctype::QualifiedType {
             t: ctype::SSIZE_TYPE,

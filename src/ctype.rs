@@ -433,6 +433,14 @@ impl CType {
         }
     }
 
+    pub fn is_packed_object(&self, scope: &NameScope) -> bool {
+        if let CType::StructUnion(id) = self {
+            scope.get_struct_union(id).is_packed()
+        } else {
+            false
+        }
+    }
+
     pub fn dereferences_to_complete(&self, scope: &NameScope) -> bool {
         match self {
             CType::Pointer(t) | CType::Array(t, _) => t.t.is_complete(scope),

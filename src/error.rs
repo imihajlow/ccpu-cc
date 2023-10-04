@@ -101,6 +101,7 @@ pub enum CompileWarning {
     IndexTooWide(QualifiedType),
     IncompatibleTypes(QualifiedType, QualifiedType),
     ImplicitArgumentTypes,
+    ArrayOfPacked(QualifiedType),
 }
 
 pub struct CompileErrorWithSpan(pub CompileError, pub Span);
@@ -355,6 +356,13 @@ impl std::fmt::Display for CompileWarning {
             }
             CompileWarning::ImplicitArgumentTypes => {
                 f.write_str("empty arguments list in function declaration")
+            }
+            CompileWarning::ArrayOfPacked(t) => {
+                write!(
+                    f,
+                    "elements of an array of packed objects of type `{}` can be misaligned",
+                    t
+                )
             }
         }
     }
