@@ -18,6 +18,7 @@ use crate::name_scope::NameScope;
 
 use lang_c::ast::DeclarationSpecifier;
 use lang_c::ast::Ellipsis;
+use lang_c::ast::EnumType;
 use lang_c::ast::Extension;
 use lang_c::ast::FunctionSpecifier;
 use lang_c::ast::SpecifierQualifier;
@@ -197,7 +198,7 @@ impl TypeBuilder {
                 }
             }
             TypeSpecifier::Struct(s) => self.set_struct(s, scope, ec)?,
-            TypeSpecifier::Enum(_) => todo!(),
+            TypeSpecifier::Enum(e) => self.set_enum(e, scope, ec)?,
             TypeSpecifier::TypeOf(_) => todo!(),
             TypeSpecifier::Atomic(_) => {
                 ec.record_error(CompileError::Unimplemented("atomic".to_string()), span)?;
@@ -566,6 +567,48 @@ impl TypeBuilder {
             StructKind::Union => scope.declare_union(name, members, self.packed, span, ec)?,
         };
         self.set_base_type(BaseType::StructUnion(t), span, ec)
+    }
+
+    fn set_enum(
+        &mut self,
+        e: Node<EnumType>,
+        scope: &mut NameScope,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        let mut cur_value = 0;
+        let mut enum_values = Vec::new();
+        let mut const_values = Vec::new();
+        let span = e.span;
+        for enumerator in e.node.enumerators {
+            if let Some(expr) = enumerator.node.expression {
+                let expr_span = expr.span;
+                let c = constant::compute_constant_expr(*expr, true, scope, ec)?;
+                if !c.t.t.is_integer() {
+                    ec.record_error(CompileError::IntegerTypeRequired, expr_span)?;
+                    unreachable!();
+                }
+                cur_value = c.unwrap_integer();
+            }
+            let name = enumerator.node.identifier.node.name;
+            enum_values.push((name.clone(), cur_value));
+            const_values.push((name, cur_value, enumerator.span));
+            cur_value += 1;
+        }
+        let name = e.node.identifier.map(|n| n.node.name);
+        let id = scope.declare_enum(name, Some(enum_values), span, ec)?;
+        for (name, value, span) in const_values {
+            scope.declare_int_constant(
+                &name,
+                QualifiedType {
+                    t: CType::Enum(id.clone()),
+                    qualifiers: Qualifiers::empty(),
+                },
+                value,
+                span,
+                ec,
+            )?;
+        }
+        self.set_base_type(BaseType::Enum(id), span, ec)
     }
 
     fn set_packed(&mut self) {

@@ -57,6 +57,7 @@ pub enum Value {
     ),
     Object(QualifiedType, ir::Scalar),
     Builtin(QualifiedType, BuiltinFunction),
+    IntConstant(QualifiedType, i128),
 }
 
 #[derive(Clone)]
@@ -162,7 +163,7 @@ impl NameScope {
                 Value::AutoVar(_, _) => {
                     unreachable!("No auto vars at top level");
                 }
-                Value::Type(_) | Value::Builtin(_, _) => (),
+                Value::Type(_) | Value::Builtin(_, _) | Value::IntConstant(_, _) => (),
             }
         }
     }
@@ -460,6 +461,24 @@ impl NameScope {
         Ok(())
     }
 
+    pub fn declare_int_constant(
+        &mut self,
+        name: &str,
+        t: QualifiedType,
+        value: i128,
+        span: Span,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        if self.exists_at_any_level(name).is_some() {
+            ec.record_warning(CompileWarning::LocalVarShadow(name.to_string()), span)?;
+        }
+        if self.remove_at_same_level(name).is_some() {
+            return ec.record_error(CompileError::VarRedefinition(name.to_string()), span);
+        }
+        self.insert(name, Value::IntConstant(t, value), span);
+        Ok(())
+    }
+
     pub fn declare_struct(
         &mut self,
         name: Option<String>,
@@ -595,6 +614,10 @@ impl NameScope {
                     t,
                     src: RValue::Builtin(b),
                 }),
+                Value::IntConstant(t, v) => Ok(TypedRValue {
+                    src: RValue::new_const(v as u64),
+                    t,
+                }),
             }
         } else {
             ec.record_error(CompileError::UnknownIdentifier(name.to_string()), span)?;
@@ -629,7 +652,7 @@ impl NameScope {
                         })
                     }
                 }
-                Value::Type(_) | Value::Builtin(_, _) => {
+                Value::Type(_) | Value::Builtin(_, _) | Value::IntConstant(_, _) => {
                     ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
                     unreachable!();
                 }
@@ -890,7 +913,11 @@ impl Value {
     pub fn is_var(&self) -> bool {
         match self {
             Value::Type(_) => false,
-            _ => true,
+            Value::AutoVar(_, _) => true,
+            Value::StaticVar(_, _, _, _) => true,
+            Value::Object(_, _) => true,
+            Value::Builtin(_, _) => true,
+            Value::IntConstant(_, _) => false,
         }
     }
 
@@ -905,6 +932,7 @@ impl Value {
             Value::StaticVar(t, _, _, _) => t,
             Value::Object(t, _) => t,
             Value::Builtin(t, _) => t,
+            Value::IntConstant(t, _) => t,
         }
     }
 
@@ -915,6 +943,7 @@ impl Value {
             Value::StaticVar(t, _, _, _) => t,
             Value::Object(t, _) => t,
             Value::Builtin(t, _) => t,
+            Value::IntConstant(t, _) => t,
         }
     }
 
