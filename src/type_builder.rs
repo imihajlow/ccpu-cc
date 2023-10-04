@@ -18,6 +18,7 @@ use crate::name_scope::NameScope;
 
 use lang_c::ast::DeclarationSpecifier;
 use lang_c::ast::Ellipsis;
+use lang_c::ast::Extension;
 use lang_c::ast::FunctionSpecifier;
 use lang_c::ast::SpecifierQualifier;
 use lang_c::ast::StorageClassSpecifier;
@@ -36,6 +37,7 @@ pub struct TypeBuilder {
     modifier: TypeModifier,
     sign: SignModifier,
     qualifiers: Qualifiers,
+    packed: bool,
 }
 
 /**
@@ -84,6 +86,7 @@ impl TypeBuilder {
             modifier: TypeModifier::None,
             sign: SignModifier::Default,
             qualifiers: Qualifiers::empty(),
+            packed: false,
         }
     }
 
@@ -98,6 +101,14 @@ impl TypeBuilder {
         };
         let mut type_builder = Self::new();
         let mut storage_class = None;
+        // Process extension specifiers first
+        for declspec in &specs {
+            if let DeclarationSpecifier::Extension(ve) = &declspec.node {
+                for ext in ve {
+                    type_builder.add_extension_node(ext, ec)?;
+                }
+            }
+        }
         for declspec in specs {
             match declspec.node {
                 DeclarationSpecifier::StorageClass(stc) => {
@@ -124,13 +135,7 @@ impl TypeBuilder {
                     )?;
                     unreachable!()
                 }
-                DeclarationSpecifier::Extension(_) => {
-                    ec.record_error(
-                        CompileError::Unimplemented("extension specifier".to_string()),
-                        declspec.span,
-                    )?;
-                    unreachable!()
-                }
+                DeclarationSpecifier::Extension(_) => (),
             }
         }
         Ok((type_builder, storage_class, extra))
@@ -142,6 +147,13 @@ impl TypeBuilder {
         ec: &mut ErrorCollector,
     ) -> Result<Self, ()> {
         let mut r = Self::new();
+        for sq in &sqs {
+            if let SpecifierQualifier::Extension(vext) = &sq.node {
+                for ext in vext {
+                    r.add_extension_node(ext, ec)?;
+                }
+            }
+        }
         for sq in sqs {
             r.add_specifier_qualifier_node(sq, scope, ec)?;
         }
@@ -206,26 +218,46 @@ impl TypeBuilder {
         Ok(())
     }
 
+    fn add_extension_node(
+        &mut self,
+        ext: &Node<lang_c::ast::Extension>,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        let span = ext.span;
+        match &ext.node {
+            Extension::Attribute(a) => match &a.name.node[..] {
+                "packed" => self.set_packed(),
+                x => ec.record_warning(
+                    CompileWarning::Unimplemented(format!("attribute {}", x)),
+                    span,
+                )?,
+            },
+            Extension::AsmLabel(_) => {
+                ec.record_warning(CompileWarning::Unimplemented("asm label".to_string()), span)?;
+            }
+            Extension::AvailabilityAttribute(_) => {
+                ec.record_warning(
+                    CompileWarning::Unimplemented("availability attribute".to_string()),
+                    span,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     fn add_specifier_qualifier_node(
         &mut self,
         sq: Node<lang_c::ast::SpecifierQualifier>,
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
-        let span = sq.span;
         let sq = sq.node;
         match sq {
             SpecifierQualifier::TypeQualifier(q) => self.add_type_qualifier_node(q, ec),
             SpecifierQualifier::TypeSpecifier(spec) => {
                 self.add_type_specifier_node(spec, scope, ec)
             }
-            SpecifierQualifier::Extension(_) => {
-                ec.record_error(
-                    CompileError::Unimplemented("extension specifier qualifier".to_string()),
-                    span,
-                )?;
-                unreachable!()
-            }
+            SpecifierQualifier::Extension(_) => Ok(()),
         }
     }
 
@@ -530,10 +562,15 @@ impl TypeBuilder {
             None
         };
         let t = match kind {
-            StructKind::Struct => scope.declare_struct(name, members, span, ec)?,
-            StructKind::Union => scope.declare_union(name, members, span, ec)?,
+            StructKind::Struct => scope.declare_struct(name, members, self.packed, span, ec)?,
+            StructKind::Union => scope.declare_union(name, members, self.packed, span, ec)?,
         };
         self.set_base_type(BaseType::StructUnion(t), span, ec)
+    }
+
+    fn set_packed(&mut self) {
+        assert!(self.base_type.is_none());
+        self.packed = true;
     }
 }
 
@@ -611,6 +648,13 @@ impl TypeBuilderStage2 {
                 let mut has_void = false;
                 for param_decl in fd.node.parameters {
                     let mut builder = TypeBuilder::new();
+                    for declspec in &param_decl.node.specifiers {
+                        if let DeclarationSpecifier::Extension(vext) = &declspec.node {
+                            for ext in vext {
+                                builder.add_extension_node(ext, ec)?;
+                            }
+                        }
+                    }
                     for declspec in param_decl.node.specifiers {
                         match declspec.node {
                             DeclarationSpecifier::StorageClass(sc) => match sc.node {
@@ -625,13 +669,7 @@ impl TypeBuilderStage2 {
                             }
                             DeclarationSpecifier::Alignment(_) => todo!(),
                             DeclarationSpecifier::Function(_) => (), // ignore _Noreturn and inline
-                            DeclarationSpecifier::Extension(_) => {
-                                ec.record_error(
-                                    CompileError::Unimplemented("extension".to_string()),
-                                    dd.span,
-                                )?;
-                                unreachable!()
-                            }
+                            DeclarationSpecifier::Extension(_) => (),
                         }
                     }
                     let builder = builder.stage2(param_decl.span, ec)?;
@@ -735,6 +773,13 @@ pub fn build_type_from_ast_type_name(
     ec: &mut ErrorCollector,
 ) -> Result<QualifiedType, ()> {
     let mut builder = TypeBuilder::new();
+    for sq in &node.node.specifiers {
+        if let SpecifierQualifier::Extension(vext) = &sq.node {
+            for ext in vext {
+                builder.add_extension_node(ext, ec)?;
+            }
+        }
+    }
     for sq in node.node.specifiers {
         builder.add_specifier_qualifier_node(sq, scope, ec)?;
     }

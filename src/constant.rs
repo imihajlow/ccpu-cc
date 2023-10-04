@@ -1,6 +1,6 @@
 use lang_c::ast::{
-    BinaryOperatorExpression, ConditionalExpression, OffsetOfExpression, SizeOfTy, StaticAssert,
-    UnaryOperatorExpression,
+    AlignOf, BinaryOperatorExpression, ConditionalExpression, OffsetOfExpression, SizeOfTy,
+    StaticAssert, UnaryOperatorExpression,
 };
 use lang_c::span::Span;
 use lang_c::{
@@ -103,7 +103,7 @@ pub fn compute_constant_expr(
         Expression::CompoundLiteral(_) => todo!(),
         Expression::SizeOfTy(t) => process_size_of_ty_node(*t, allow_var, scope, ec),
         Expression::SizeOfVal(_) => todo!(),
-        Expression::AlignOf(_) => todo!(),
+        Expression::AlignOf(a) => process_align_of_node(*a, allow_var, scope, ec),
         Expression::OffsetOf(oo) => process_offset_of_expression_node(*oo, scope, ec),
         Expression::VaArg(_) => {
             ec.record_error(
@@ -167,6 +167,18 @@ fn process_size_of_ty_node(
     let span = node.span;
     let t = type_builder::build_type_from_ast_type_name(node.node.0, scope, ec)?;
     let size = t.t.sizeof(scope, span, ec)?;
+    Ok(TypedConstant::new_integer(size.into(), ctype::SIZE_TYPE))
+}
+
+fn process_align_of_node(
+    node: Node<AlignOf>,
+    _allow_var: bool,
+    scope: &mut NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<TypedConstant, ()> {
+    let span = node.span;
+    let t = type_builder::build_type_from_ast_type_name(*node.node.0, scope, ec)?;
+    let size = t.t.alignof(scope, span, ec)?;
     Ok(TypedConstant::new_integer(size.into(), ctype::SIZE_TYPE))
 }
 

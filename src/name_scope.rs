@@ -464,10 +464,11 @@ impl NameScope {
         &mut self,
         name: Option<String>,
         members: Option<Vec<(Option<String>, QualifiedType)>>,
+        packed: bool,
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<StructUnionIdentifier, ()> {
-        let tagged = Tagged::new_struct(members);
+        let tagged = Tagged::new_struct(members, packed);
         let id = self.declare_tagged(name.clone(), tagged, span, ec)?;
         Ok(StructUnionIdentifier {
             id,
@@ -480,10 +481,11 @@ impl NameScope {
         &mut self,
         name: Option<String>,
         members: Option<Vec<(Option<String>, QualifiedType)>>,
+        packed: bool,
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<StructUnionIdentifier, ()> {
-        let tagged = Tagged::new_union(members);
+        let tagged = Tagged::new_union(members, packed);
         let id = self.declare_tagged(name.clone(), tagged, span, ec)?;
         Ok(StructUnionIdentifier {
             id,
@@ -1026,12 +1028,12 @@ impl Scope {
 }
 
 impl Tagged {
-    fn new_struct(members: Option<Vec<(Option<String>, QualifiedType)>>) -> Self {
-        Self::StructUnion(StructUnion::new_struct(members))
+    fn new_struct(members: Option<Vec<(Option<String>, QualifiedType)>>, packed: bool) -> Self {
+        Self::StructUnion(StructUnion::new_struct(members, packed))
     }
 
-    fn new_union(members: Option<Vec<(Option<String>, QualifiedType)>>) -> Self {
-        Self::StructUnion(StructUnion::new_union(members))
+    fn new_union(members: Option<Vec<(Option<String>, QualifiedType)>>, packed: bool) -> Self {
+        Self::StructUnion(StructUnion::new_union(members, packed))
     }
 
     fn new_enum(values: Option<Vec<(String, i128)>>) -> Self {

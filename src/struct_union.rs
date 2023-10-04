@@ -12,20 +12,23 @@ use crate::utils;
 pub struct StructUnion {
     kind: StructUnionKind,
     members: Option<Vec<(Option<String>, QualifiedType)>>,
+    packed: bool,
 }
 
 impl StructUnion {
-    pub fn new_struct(members: Option<Vec<(Option<String>, QualifiedType)>>) -> Self {
+    pub fn new_struct(members: Option<Vec<(Option<String>, QualifiedType)>>, packed: bool) -> Self {
         Self {
             members,
             kind: StructUnionKind::Struct,
+            packed,
         }
     }
 
-    pub fn new_union(members: Option<Vec<(Option<String>, QualifiedType)>>) -> Self {
+    pub fn new_union(members: Option<Vec<(Option<String>, QualifiedType)>>, packed: bool) -> Self {
         Self {
             members,
             kind: StructUnionKind::Union,
+            packed,
         }
     }
 
@@ -39,11 +42,23 @@ impl StructUnion {
             .members
             .as_ref()
             .expect("complete types only at this point");
-        let mut align = 1;
-        for (_, t) in members {
-            align = num::integer::lcm(align, t.t.alignof(scope, span, ec)?);
+        if !self.packed {
+            let mut align = 1;
+            for (_, t) in members {
+                align = num::integer::lcm(align, t.t.alignof(scope, span, ec)?);
+            }
+            Ok(align)
+        } else {
+            let mut size = 0;
+            for (_, t) in members {
+                size += t.t.sizeof(scope, span, ec)?;
+            }
+            if size.is_power_of_two() {
+                Ok(size)
+            } else {
+                Ok(1 << (size.ilog2() + 1))
+            }
         }
-        Ok(align)
     }
 
     pub fn sizeof(
@@ -119,8 +134,10 @@ impl StructUnion {
             .expect("complete types only at this point");
         let mut size = 0;
         for (_, t) in members {
-            let align = t.t.alignof(scope, span, ec)?;
-            size = utils::align(size, align);
+            if !self.packed {
+                let align = t.t.alignof(scope, span, ec)?;
+                size = utils::align(size, align);
+            }
             size += t.t.sizeof(scope, span, ec)?;
         }
         Ok(size)
@@ -156,8 +173,10 @@ impl StructUnion {
             .expect("complete types only at this point");
         let mut offset = 0;
         for (member_name, t) in members {
-            let align = t.t.alignof(scope, span, ec)?;
-            offset = utils::align(offset, align);
+            if !self.packed {
+                let align = t.t.alignof(scope, span, ec)?;
+                offset = utils::align(offset, align);
+            }
             if let Some(member_name) = member_name.as_ref() {
                 if member_name == name {
                     return Ok(Some((offset, t.clone())));
@@ -252,6 +271,7 @@ mod test {
                 ),
             ]),
             kind: StructUnionKind::Struct,
+            packed: false,
         };
         let mut ec = &mut ErrorCollector::new();
         let scope = NameScope::new();
@@ -280,6 +300,7 @@ mod test {
                 ),
             ]),
             kind: StructUnionKind::Struct,
+            packed: false,
         };
         let mut ec = &mut ErrorCollector::new();
         let scope = NameScope::new();
@@ -308,6 +329,7 @@ mod test {
                 ),
             ]),
             kind: StructUnionKind::Struct,
+            packed: false,
         };
         let mut ec = &mut ErrorCollector::new();
         let scope = NameScope::new();
