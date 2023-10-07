@@ -12,7 +12,7 @@ pub enum Constant {
     Zero,
     Int(i128),
     Struct(Vec<FieldInitializer>),
-    Array(Vec<Constant>),
+    Array(QualifiedType, Vec<Constant>),
 }
 
 #[derive(Debug, Clone)]
@@ -333,7 +333,7 @@ impl Constant {
             Constant::Void => true,
             Constant::Zero => true,
             Constant::Int(x) => *x == 0,
-            Constant::Array(v) => v.iter().all(|c| c.is_bss()),
+            Constant::Array(_, v) => v.iter().all(|c| c.is_bss()),
             Constant::Struct(m) => m.iter().all(|f| f.value.is_bss()),
         }
     }

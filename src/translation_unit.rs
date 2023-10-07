@@ -131,16 +131,12 @@ impl TranslationUnit<ir::VirtualReg> {
             ec,
         )?;
 
-        let initializer = if let Some(initializer) = init_declarator.initializer {
-            Some(compute_constant_initializer(
-                initializer,
-                &t,
-                false,
-                &mut self.scope,
-                ec,
-            )?)
+        let (t, initializer) = if let Some(initializer) = init_declarator.initializer {
+            let initializer =
+                compute_constant_initializer(initializer, &t, false, &mut self.scope, ec)?;
+            (initializer.t.clone(), Some(initializer))
         } else {
-            None
+            (t, None)
         };
         match id {
             None => ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator_span)?,

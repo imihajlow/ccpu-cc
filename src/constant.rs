@@ -1,6 +1,6 @@
 use lang_c::ast::{
-    AlignOf, BinaryOperatorExpression, ConditionalExpression, OffsetOfExpression, SizeOfTy,
-    StaticAssert, UnaryOperatorExpression,
+    AlignOf, BinaryOperatorExpression, CompoundLiteral, ConditionalExpression, Designator,
+    InitializerListItem, OffsetOfExpression, SizeOfTy, StaticAssert, UnaryOperatorExpression,
 };
 use lang_c::span::Span;
 use lang_c::{
@@ -26,14 +26,16 @@ pub fn compute_constant_initializer(
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<TypedConstant, ()> {
-    let v = match initializer.node {
+    match initializer.node {
         Initializer::Expression(expr) => {
             let v = compute_constant_expr(*expr, allow_var, scope, ec)?;
-            cast(v, target_type, initializer.span, ec)?
+            let casted = cast(v, target_type, initializer.span, ec)?;
+            Ok(TypedConstant::new(casted, target_type.clone()))
         }
-        Initializer::List(_) => todo!(),
-    };
-    Ok(TypedConstant::new(v, target_type.clone()))
+        Initializer::List(il) => {
+            process_initializer_list(target_type, il, allow_var, scope, initializer.span, ec)
+        }
+    }
 }
 
 pub fn compute_constant_expr(
@@ -100,7 +102,7 @@ pub fn compute_constant_expr(
         Expression::Conditional(c) => process_condition_expression_node(*c, allow_var, scope, ec),
         Expression::StringLiteral(_) => todo!(),
         Expression::Member(_) => todo!(),
-        Expression::CompoundLiteral(_) => todo!(),
+        Expression::CompoundLiteral(c) => process_compound_literal_node(*c, allow_var, scope, ec),
         Expression::SizeOfTy(t) => process_size_of_ty_node(*t, allow_var, scope, ec),
         Expression::SizeOfVal(_) => todo!(),
         Expression::AlignOf(a) => process_align_of_node(*a, allow_var, scope, ec),
@@ -664,6 +666,164 @@ fn process_offset_of_expression_node(
     let offset = offsetof::compute_offsetof(oo, scope, ec)?;
 
     Ok(TypedConstant::new_integer(offset.into(), ctype::SIZE_TYPE))
+}
+
+fn process_compound_literal_node(
+    c: Node<CompoundLiteral>,
+    allow_var: bool,
+    scope: &mut NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<TypedConstant, ()> {
+    let type_builder =
+        TypeBuilder::new_from_specifiers_qualifiers(c.node.type_name.node.specifiers, scope, ec)?;
+    let type_builder = type_builder.stage2(c.node.type_name.span, ec)?;
+    let target_type = if let Some(decl) = c.node.type_name.node.declarator {
+        type_builder.process_declarator_node(decl, scope, ec)?.1
+    } else {
+        type_builder.finalize()
+    };
+    process_initializer_list(
+        &target_type,
+        c.node.initializer_list,
+        allow_var,
+        scope,
+        c.span,
+        ec,
+    )
+}
+
+fn process_initializer_list(
+    target_type: &QualifiedType,
+    il: Vec<Node<InitializerListItem>>,
+    allow_var: bool,
+    scope: &mut NameScope,
+    span: Span,
+    ec: &mut ErrorCollector,
+) -> Result<TypedConstant, ()> {
+    if target_type.t.is_array() {
+        process_array_initializer_list(&target_type, il, allow_var, scope, span, ec)
+    } else {
+        todo!()
+    }
+}
+
+fn process_array_initializer_list(
+    target_type: &QualifiedType,
+    il: Vec<Node<InitializerListItem>>,
+    allow_var: bool,
+    scope: &mut NameScope,
+    span: Span,
+    ec: &mut ErrorCollector,
+) -> Result<TypedConstant, ()> {
+    assert!(target_type.t.is_array());
+    let element_type = target_type.t.clone().dereference().unwrap();
+    if !element_type.t.is_scalar() {
+        ec.record_error(
+            CompileError::Unimplemented(
+                "arrays of non-scalar types in initializer lists".to_string(),
+            ),
+            span,
+        )?;
+        unreachable!()
+    }
+    let element_count = target_type.t.get_element_count().map(|c| c as usize);
+    let mut elements = Vec::new();
+    if let Some(c) = element_count {
+        elements.resize(c as usize, None);
+    }
+    let mut index: usize = 0;
+    for initializer in il {
+        match initializer.node.designation.len() {
+            0 => (),
+            1 => {
+                let designation = &initializer.node.designation[0];
+                let index_const = match &designation.node {
+                    Designator::Index(index_expr) => {
+                        compute_constant_expr(index_expr.clone(), allow_var, scope, ec)?
+                    }
+                    Designator::Member(_) => {
+                        ec.record_error(
+                            CompileError::WrongInitializerForType(target_type.clone()),
+                            designation.span,
+                        )?;
+                        unreachable!()
+                    }
+                    Designator::Range(_) => {
+                        ec.record_error(
+                            CompileError::Unimplemented("range designator".to_string()),
+                            designation.span,
+                        )?;
+                        unreachable!()
+                    }
+                };
+                if !index_const.t.t.is_integer() {
+                    ec.record_error(CompileError::IntegerTypeRequired, designation.span)?;
+                    unreachable!()
+                }
+                index = if let Ok(i) = index_const.unwrap_integer().try_into() {
+                    i
+                } else {
+                    ec.record_error(CompileError::ConstantOutOfRange, designation.span)?;
+                    unreachable!()
+                };
+            }
+            _ => {
+                ec.record_error(
+                    CompileError::WrongInitializerForType(target_type.clone()),
+                    initializer.span,
+                )?;
+                unreachable!()
+            }
+        }
+        match element_count {
+            Some(count) if count <= index => {
+                ec.record_error(
+                    CompileError::ArrayDesignatorIndexOutOfBounds(count, index),
+                    initializer.span,
+                )?;
+                unreachable!()
+            }
+            _ => (),
+        }
+        if elements.len() <= index {
+            elements.resize(index + 1, None);
+        }
+        if elements[index].is_some() {
+            ec.record_warning(
+                CompileWarning::PriorInitializationOverridden,
+                initializer.span,
+            )?;
+        }
+
+        let value = match initializer.node.initializer.node {
+            Initializer::Expression(e) => compute_constant_expr(*e, allow_var, scope, ec)?,
+            Initializer::List(_) => {
+                ec.record_error(
+                    CompileError::WrongInitializerForType(target_type.clone()),
+                    initializer.node.initializer.span,
+                )?;
+                unreachable!()
+            }
+        };
+        let casted = cast(value, &element_type, initializer.node.initializer.span, ec)?;
+
+        elements[index] = Some(casted);
+
+        index += 1;
+    }
+
+    let elements: Vec<_> = elements
+        .into_iter()
+        .map(|el| el.unwrap_or(Constant::Zero))
+        .collect();
+    let final_type = QualifiedType {
+        qualifiers: target_type.qualifiers,
+        t: CType::Array(Box::new(element_type), Some(elements.len() as u32)),
+    };
+    Ok(TypedConstant {
+        t: final_type.clone(),
+        val: Constant::Array(final_type.clone().dereference().unwrap(), elements),
+    })
 }
 
 fn cast(

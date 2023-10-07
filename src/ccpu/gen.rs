@@ -241,8 +241,10 @@ fn gen_static_data(
                 let width = Width::new(size as u8);
                 w.data_int(label, x as u64, width, align as usize);
             }
-            Constant::Array(_) => todo!(),
-            Constant::Struct(_) => todo!(),
+            Constant::Array(_, _) | Constant::Struct(_) => {
+                let bytes = constant_to_bytes(&val, span, scope, ec)?;
+                w.data_vec(label, bytes, align as usize);
+            }
             Constant::Void | Constant::Zero => {
                 // is_bss
                 unreachable!()
@@ -250,6 +252,46 @@ fn gen_static_data(
         }
     }
     Ok(())
+}
+
+fn constant_to_bytes(
+    val: &TypedConstant,
+    span: Span,
+    scope: &NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<Vec<u8>, ()> {
+    match &val.val {
+        Constant::Int(x) => {
+            let size = check_16bit(val.t.t.sizeof(scope, span, ec)?, span, ec)? as usize;
+            let bytes = x.to_le_bytes()[0..size].to_vec();
+            Ok(bytes)
+        }
+        Constant::Zero => {
+            let size = check_16bit(val.t.t.sizeof(scope, span, ec)?, span, ec)? as usize;
+            Ok(vec![0; size])
+        }
+        Constant::Void => {
+            assert!(val.t.t.is_void());
+            Ok(Vec::new())
+        }
+        Constant::Array(el_type, els) => {
+            let mut r = Vec::new();
+            for el in els {
+                let mut el_bytes = constant_to_bytes(
+                    &TypedConstant {
+                        t: el_type.clone(),
+                        val: el.clone(),
+                    },
+                    span,
+                    scope,
+                    ec,
+                )?;
+                r.append(&mut el_bytes);
+            }
+            Ok(r)
+        }
+        Constant::Struct(_) => todo!(),
+    }
 }
 
 fn gen_ro_data(w: &mut InstructionWriter, idx: usize, buf: &Vec<u8>, align: usize) {

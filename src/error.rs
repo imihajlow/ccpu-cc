@@ -53,6 +53,9 @@ pub enum CompileError {
     DivisionByZero,
     CharParseError(StringParseError),
     StringParseError(StringParseError),
+    WrongInitializerForType(QualifiedType),
+    ConstantOutOfRange,
+    ArrayDesignatorIndexOutOfBounds(usize, usize),
     // General expression error
     ArithmeticTypeRequired,
     IntegerTypeRequired,
@@ -102,6 +105,7 @@ pub enum CompileWarning {
     IncompatibleTypes(QualifiedType, QualifiedType),
     ImplicitArgumentTypes,
     ArrayOfPacked(QualifiedType),
+    PriorInitializationOverridden,
 }
 
 pub struct CompileErrorWithSpan(pub CompileError, pub Span);
@@ -120,6 +124,7 @@ impl ErrorCollector {
     }
 
     pub fn record_error(&mut self, error: CompileError, span: Span) -> Result<(), ()> {
+        // panic!("{}", error);
         self.errors.push((error, span));
         Err(())
     }
@@ -238,6 +243,15 @@ impl std::fmt::Display for CompileError {
             CompileError::StringParseError(e) => {
                 write!(f, "error while parsing string literal: {}", e)
             }
+            CompileError::WrongInitializerForType(t) => {
+                write!(f, "'{}' cannot be initialized with this initializer", t)
+            }
+            CompileError::ConstantOutOfRange => f.write_str("constant out of range"),
+            CompileError::ArrayDesignatorIndexOutOfBounds(got, expected) => write!(
+                f,
+                "array designator index ({}) exceeds array bounds ({})",
+                got, expected
+            ),
             CompileError::NamedVoidParameter => f.write_str("argument may not have 'void' type"),
             CompileError::QualifiedVoidParameter => {
                 f.write_str("'void' as parameter must not have type qualifiers")
@@ -363,6 +377,9 @@ impl std::fmt::Display for CompileWarning {
                     "elements of an array of packed objects of type `{}` can be misaligned",
                     t
                 )
+            }
+            CompileWarning::PriorInitializationOverridden => {
+                f.write_str("initializer overrides prior initialization of this subobject")
             }
         }
     }

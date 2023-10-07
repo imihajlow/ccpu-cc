@@ -426,16 +426,12 @@ pub fn compile_declaration(
             })
         );
         if is_static {
-            let initializer = if let Some(initializer) = init_declarator.node.initializer {
-                Some(constant::compute_constant_initializer(
-                    initializer,
-                    &t,
-                    true,
-                    scope,
-                    ec,
-                )?)
+            let (t, initializer) = if let Some(initializer) = init_declarator.node.initializer {
+                let initializer =
+                    constant::compute_constant_initializer(initializer, &t, true, scope, ec)?;
+                (initializer.t.clone(), Some(initializer))
             } else {
-                None
+                (t, None)
             };
             scope.declare(&name, t, &stclass, initializer, init_declarator.span, ec)?;
         } else {

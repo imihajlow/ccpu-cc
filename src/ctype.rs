@@ -257,11 +257,14 @@ impl FunctionArgs {
 
 impl CType {
     pub fn is_explicit_castable_to(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
         if let CType::Void = other {
             return true;
         }
-        if (self.is_arithmetic() || self.is_pointer())
-            && (other.is_arithmetic() || other.is_pointer() || other.is_array())
+        if (other.is_arithmetic() || other.is_pointer())
+            && (self.is_arithmetic() || self.is_pointer() || self.is_array())
         {
             return true;
         }
@@ -623,6 +626,14 @@ impl CType {
             CType::Pointer(t) => Ok(*t),
             CType::Array(t, _) => Ok(*t),
             _ => Err(self),
+        }
+    }
+
+    pub fn get_element_count(&self) -> Option<u32> {
+        if let CType::Array(_, count) = self {
+            *count
+        } else {
+            None
         }
     }
 }
