@@ -1,6 +1,7 @@
 use lang_c::ast::{
     AlignOf, BinaryOperatorExpression, CompoundLiteral, ConditionalExpression, Designator,
-    InitializerListItem, OffsetOfExpression, SizeOfTy, StaticAssert, UnaryOperatorExpression,
+    InitializerListItem, OffsetOfExpression, SizeOfTy, SizeOfVal, StaticAssert,
+    UnaryOperatorExpression,
 };
 use lang_c::span::Span;
 use lang_c::{
@@ -104,7 +105,7 @@ pub fn compute_constant_expr(
         Expression::Member(_) => todo!(),
         Expression::CompoundLiteral(c) => process_compound_literal_node(*c, allow_var, scope, ec),
         Expression::SizeOfTy(t) => process_size_of_ty_node(*t, allow_var, scope, ec),
-        Expression::SizeOfVal(_) => todo!(),
+        Expression::SizeOfVal(v) => process_size_of_val_node(*v, scope, ec),
         Expression::AlignOf(a) => process_align_of_node(*a, allow_var, scope, ec),
         Expression::OffsetOf(oo) => process_offset_of_expression_node(*oo, scope, ec),
         Expression::VaArg(_) => {
@@ -168,6 +169,26 @@ fn process_size_of_ty_node(
 ) -> Result<TypedConstant, ()> {
     let span = node.span;
     let t = type_builder::build_type_from_ast_type_name(node.node.0, scope, ec)?;
+    let size = t.t.sizeof(scope, span, ec)?;
+    Ok(TypedConstant::new_integer(size.into(), ctype::SIZE_TYPE))
+}
+
+fn process_size_of_val_node(
+    node: Node<SizeOfVal>,
+    scope: &mut NameScope,
+    ec: &mut ErrorCollector,
+) -> Result<TypedConstant, ()> {
+    let span = node.span;
+    let t = if let Expression::Identifier(id) = node.node.0.node {
+        let rv = scope.get_rvalue(&id.node.name, id.span, ec)?;
+        rv.t
+    } else {
+        ec.record_error(
+            CompileError::Unimplemented("sizeof complex experssions in compile time".to_string()),
+            node.span,
+        )?;
+        unreachable!();
+    };
     let size = t.t.sizeof(scope, span, ec)?;
     Ok(TypedConstant::new_integer(size.into(), ctype::SIZE_TYPE))
 }
