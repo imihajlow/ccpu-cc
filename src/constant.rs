@@ -855,6 +855,13 @@ fn cast(
             }
             _ => unreachable!(),
         },
+        CType::Bool => match constant.t.t {
+            CType::Int(_, _) | CType::Pointer(_) => cast_to_bool(constant.val),
+            CType::Bool => constant.val,
+            CType::Float(_) => todo!(),
+            CType::Array(_, _) => Constant::Int(1),
+            _ => unreachable!(),
+        },
         CType::Float(_) => todo!(),
         CType::Pointer(_) => match constant.t.t {
             CType::Int(old_size, old_sign) => {
@@ -930,5 +937,13 @@ fn cast_from_bool(value: Constant) -> Constant {
         Constant::Int(new_val)
     } else {
         panic!("value doesn't match type")
+    }
+}
+
+fn cast_to_bool(value: Constant) -> Constant {
+    match value {
+        Constant::Zero => Constant::Zero,
+        Constant::Int(v) => Constant::Int(if v == 0 { 0 } else { 1 }),
+        _ => panic!("value doesn't match type"),
     }
 }

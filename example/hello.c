@@ -4,12 +4,8 @@
 #include <libsys/ps2keyboard.h>
 #include <libsys/vga.h>
 
-void trap(int code) {
-
-}
 
 void main(void) {
-    ps2_init();
     vga_clear(COLOR(COLOR_GRAY, COLOR_BLACK));
 
     sprintf(VGA_CHAR_SEG, "Hello world! %u %020lu %c %04X", 1234, 100000ul, 60, 0xF00D);
@@ -18,7 +14,6 @@ void main(void) {
     while (1) {
         uint16_t c = ps2_get_ascii();
         if (c) {
-            trap(c);
             if (PS2_IS_ASCII(c)) {
                 VGA_CHAR_SEG[VGA_OFFSET(col, row)] = c;
                 col += 1;
