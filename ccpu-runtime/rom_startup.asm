@@ -6,6 +6,10 @@
     .global __seg_ramtext_end
     .global __seg_ramtext_origin_begin
     .global __seg_ramtext_origin_end
+    .global __seg_data_begin
+    .global __seg_data_end
+    .global __seg_data_origin_begin
+    .global __seg_data_origin_end
 
     .global __seg_bss_begin
     .global __seg_bss_end
@@ -62,6 +66,35 @@
     ldi ph, hi(frameb_arg3)
     ldi a, lo(__seg_ramtext_end - __seg_ramtext_begin)
     ldi b, hi(__seg_ramtext_end - __seg_ramtext_begin)
+    st a
+    inc pl
+    st b
+
+    ldi pl, lo(memcpy)
+    ldi ph, hi(memcpy)
+    jmp
+
+    ; populate data secion
+    ldi pl, lo(frameb_arg1)
+    ldi ph, hi(frameb_arg1)
+    ldi a, lo(__seg_data_begin)
+    ldi b, hi(__seg_data_begin)
+    st a
+    inc pl
+    st b
+
+    ldi pl, lo(frameb_arg2)
+    ldi ph, hi(frameb_arg2)
+    ldi a, lo(__seg_data_origin_begin)
+    ldi b, hi(__seg_data_origin_begin)
+    st a
+    inc pl
+    st b
+
+    ldi pl, lo(frameb_arg3)
+    ldi ph, hi(frameb_arg3)
+    ldi a, lo(__seg_data_end - __seg_data_begin)
+    ldi b, hi(__seg_data_end - __seg_data_begin)
     st a
     inc pl
     st b

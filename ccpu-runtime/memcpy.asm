@@ -195,6 +195,7 @@ memset_loop:
 
     ldi pl, lo(memset_loop)
     ldi ph, hi(memset_loop)
+    jmp
 
 memset_exit:
     ldi pl, lo(ret_addr)

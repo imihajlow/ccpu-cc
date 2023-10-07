@@ -48,4 +48,11 @@ fn gen_bool_common(
     }
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
+    if op.width as usize > 1 {
+        w.ldi_const(A, 0, true);
+        for _ in 1..(op.width as usize) {
+            w.inc(PL);
+            w.st(A);
+        }
+    }
 }

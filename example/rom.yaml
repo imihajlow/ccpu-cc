@@ -12,9 +12,14 @@
   init: Yes
   target: ramtext
 
+- name: data_origin
+  init: Yes
+  target: data
+
 - name: data
   begin: 0x8000
   init: No
+  shadow: data_origin
 
 - name: ramtext
   init: No
