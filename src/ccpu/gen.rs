@@ -3,7 +3,7 @@ use lang_c::span::Span;
 use crate::ccpu::gen::switch::gen_switch;
 use crate::ccpu::global::{get_global_var_label, get_static_frame_symbol};
 use crate::error::{CompileError, ErrorCollector};
-use crate::generic_ir::{GlobalVarId, Width};
+use crate::generic_ir::{GlobalVarId, JumpCondition, Width};
 use crate::initializer::{Constant, TypedConstant};
 use crate::name_scope::{ExportClass, NameScope};
 use crate::{
@@ -171,16 +171,22 @@ fn gen_tail(
 
 fn gen_cond_jump(
     w: &mut InstructionWriter,
-    c: &Scalar<FrameReg>,
+    c: &JumpCondition<FrameReg>,
     cur_idx: usize,
     if_idx: usize,
     else_idx: usize,
     function_name: &str,
 ) {
     match c {
-        Scalar::ConstInt(0) => gen_jump(w, cur_idx, else_idx, function_name),
-        Scalar::ConstInt(_) => gen_jump(w, cur_idx, if_idx, function_name),
-        Scalar::Var(v) => {
+        JumpCondition::RelaxedBool(Scalar::ConstInt(0), _)
+        | JumpCondition::StrictBool(Scalar::ConstInt(0)) => {
+            gen_jump(w, cur_idx, else_idx, function_name)
+        }
+        JumpCondition::RelaxedBool(Scalar::ConstInt(_), _)
+        | JumpCondition::StrictBool(Scalar::ConstInt(_)) => {
+            gen_jump(w, cur_idx, if_idx, function_name)
+        }
+        JumpCondition::StrictBool(Scalar::Var(v)) => {
             gen_load_var_8(w, A, v);
             w.add(A, Zero);
             if if_idx == cur_idx + 1 {
@@ -196,7 +202,34 @@ fn gen_cond_jump(
                 w.jmp();
             }
         }
-        Scalar::SymbolOffset(_, _) => unimplemented!(),
+        JumpCondition::RelaxedBool(Scalar::Var(v), width) => {
+            w.ldi_p_var_location(v, 0, true);
+            w.ld(A);
+            if *width == Width::Byte {
+                w.add(A, Zero);
+            } else {
+                for _ in 1..(*width as u16) {
+                    w.inc(PL);
+                    w.ld(B);
+                    w.or(A, B);
+                }
+            }
+            if if_idx == cur_idx + 1 {
+                w.ldi_p_sym(make_block_label(function_name, else_idx), 0);
+                w.jz();
+            } else if else_idx == cur_idx + 1 {
+                w.ldi_p_sym(make_block_label(function_name, if_idx), 0);
+                w.jnz();
+            } else {
+                w.ldi_p_sym(make_block_label(function_name, if_idx), 0);
+                w.jnz();
+                w.ldi_p_sym(make_block_label(function_name, else_idx), 0);
+                w.jmp();
+            }
+        }
+        JumpCondition::Compare(_) => todo!(),
+        JumpCondition::StrictBool(Scalar::SymbolOffset(_, _)) => unimplemented!(),
+        JumpCondition::RelaxedBool(Scalar::SymbolOffset(_, _), _) => unimplemented!(),
     }
 }
 

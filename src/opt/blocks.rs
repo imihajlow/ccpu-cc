@@ -42,7 +42,7 @@ pub fn drop_orphan_blocks<Reg: Hash + Eq + Copy>(
  * Returns true if any changes have been made.
  */
 pub fn simplify_jumps<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<Reg>>) -> bool {
-    use generic_ir::Tail;
+    use generic_ir::{JumpCondition, Tail};
     let mut result = false;
     for block in blocks.iter_mut() {
         replace_with_or_abort(&mut block.tail, |tail| match tail {
@@ -50,11 +50,18 @@ pub fn simplify_jumps<Reg: Copy + Hash + Eq>(blocks: &mut Vec<generic_ir::Block<
                 result = true;
                 Tail::Jump(t)
             }
-            Tail::Cond(generic_ir::Scalar::SymbolOffset(_, _), t, _) => {
+            Tail::Cond(
+                JumpCondition::RelaxedBool(generic_ir::Scalar::SymbolOffset(_, _), _),
+                t,
+                _,
+            )
+            | Tail::Cond(JumpCondition::StrictBool(generic_ir::Scalar::SymbolOffset(_, _)), t, _) =>
+            {
                 result = true;
                 Tail::Jump(t)
             }
-            Tail::Cond(generic_ir::Scalar::ConstInt(c), t, e) => {
+            Tail::Cond(JumpCondition::RelaxedBool(generic_ir::Scalar::ConstInt(c), _), t, e)
+            | Tail::Cond(JumpCondition::StrictBool(generic_ir::Scalar::ConstInt(c)), t, e) => {
                 result = true;
                 if c & 0xff == 0 {
                     Tail::Jump(e)
@@ -222,7 +229,7 @@ mod test {
             ir::Block {
                 phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(1)],
-                tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 0, 2),
+                tail: ir::Tail::Cond(ir::JumpCondition::StrictBool(ir::Scalar::ConstInt(1)), 0, 2),
                 loop_depth: 0,
                 original_id: 1,
             },
@@ -243,7 +250,7 @@ mod test {
             ir::Block {
                 phi: Phi::new(),
                 ops: vec![ir::Op::Dummy(4)],
-                tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 2, 5),
+                tail: ir::Tail::Cond(ir::JumpCondition::StrictBool(ir::Scalar::ConstInt(1)), 2, 5),
                 loop_depth: 0,
                 original_id: 4,
             },
@@ -278,7 +285,11 @@ mod test {
                 ir::Block {
                     phi: Phi::new(),
                     ops: vec![ir::Op::Dummy(4)],
-                    tail: ir::Tail::Cond(ir::Scalar::ConstInt(1), 1, 3),
+                    tail: ir::Tail::Cond(
+                        ir::JumpCondition::StrictBool(ir::Scalar::ConstInt(1)),
+                        1,
+                        3
+                    ),
                     loop_depth: 0,
                     original_id: 4,
                 },

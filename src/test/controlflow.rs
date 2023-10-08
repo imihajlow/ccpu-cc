@@ -24,7 +24,11 @@ fn test_ternary_1() {
     );
     assert_eq!(
         body[1].tail,
-        ir::Tail::Cond(ir::Scalar::Var(VarLocation::Local(4)), 2, 3)
+        ir::Tail::Cond(
+            ir::JumpCondition::StrictBool(ir::Scalar::Var(VarLocation::Local(4))),
+            2,
+            3
+        )
     );
     assert_eq!(
         body[2].ops,

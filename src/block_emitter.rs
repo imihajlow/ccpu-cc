@@ -16,6 +16,7 @@ use crate::{
     constant::{check_static_assert, compute_constant_expr},
     ctype::{self, QualifiedType, Qualifiers},
     error::{CompileError, ErrorCollector},
+    generic_ir::JumpCondition,
     ir,
     name_scope::NameScope,
     rvalue::{RValue, TypedRValue},
@@ -151,7 +152,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                cond_bool.unwrap_scalar(),
+                JumpCondition::StrictBool(cond_bool.unwrap_scalar()),
                 then_block_id,
                 else_block_id,
             )),
@@ -201,7 +202,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                lhs_bool.unwrap_scalar(),
+                JumpCondition::StrictBool(lhs_bool.unwrap_scalar()),
                 rhs_block_id,
                 shortcut_block_id,
             )),
@@ -261,7 +262,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                lhs_bool.unwrap_scalar(),
+                JumpCondition::StrictBool(lhs_bool.unwrap_scalar()),
                 shortcut_block_id,
                 rhs_block_id,
             )),
@@ -330,7 +331,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                ir::Scalar::Var(cond_dst),
+                JumpCondition::StrictBool(ir::Scalar::Var(cond_dst)),
                 then_block,
                 else_block,
             )),
@@ -507,7 +508,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                cond_bool.unwrap_scalar(),
+                JumpCondition::StrictBool(cond_bool.unwrap_scalar()),
                 body_block_id,
                 continue_block_id,
             )),
@@ -571,7 +572,7 @@ impl BlockEmitter {
 
         self.finish_block(
             LabeledTail::Tail(ir::Tail::Cond(
-                cond_bool.unwrap_scalar(),
+                JumpCondition::StrictBool(cond_bool.unwrap_scalar()),
                 body_block_id,
                 continue_block_id,
             )),
@@ -624,7 +625,7 @@ impl BlockEmitter {
 
                 self.finish_block(
                     LabeledTail::Tail(ir::Tail::Cond(
-                        cond_bool.unwrap_scalar(),
+                        JumpCondition::StrictBool(cond_bool.unwrap_scalar()),
                         body_block_id,
                         continue_block_id,
                     )),

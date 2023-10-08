@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub fn gen_compare(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg>) {
-    match (op.kind, op.sign) {
+    match (op.desc.kind, op.desc.sign) {
         (Equal, _) => gen_compare_eq(w, op),
         (NotEqual, _) => gen_compare_ne(w, op),
         (_, false) => gen_compare_unsigned(w, op),
@@ -17,19 +17,19 @@ pub fn gen_compare(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameRe
 }
 
 fn gen_compare_eq(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg>) {
-    assert_eq!(op.kind, Equal);
+    assert_eq!(op.desc.kind, Equal);
     use crate::ccpu::instr::Reg::*;
 
     // Let constant be loaded into A to give `mov a, 0` a chance
-    let (lhs, rhs) = if let Scalar::ConstInt(_) = &op.rhs {
-        (&op.rhs, &op.lhs)
+    let (lhs, rhs) = if let Scalar::ConstInt(_) = &op.desc.rhs {
+        (&op.desc.rhs, &op.desc.lhs)
     } else {
-        (&op.lhs, &op.rhs)
+        (&op.desc.lhs, &op.desc.rhs)
     };
 
     let label_ne = w.alloc_label();
     let label_end = w.alloc_label();
-    for o in 0..(op.width as u16) {
+    for o in 0..(op.desc.width as u16) {
         load_scalar(w, A, lhs, o, true);
         load_scalar(w, B, rhs, o, true);
         w.sub(A, B);
@@ -44,9 +44,9 @@ fn gen_compare_eq(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg
     w.label(label_end);
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
-    if op.width as u16 > 1 {
+    if op.desc.width as u16 > 1 {
         w.mov(A, Zero);
-        for _ in 1..(op.width as u16) {
+        for _ in 1..(op.desc.width as u16) {
             w.inc(PL);
             w.st(A);
         }
@@ -54,23 +54,23 @@ fn gen_compare_eq(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg
 }
 
 fn gen_compare_ne(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg>) {
-    assert_eq!(op.kind, NotEqual);
+    assert_eq!(op.desc.kind, NotEqual);
     use crate::ccpu::instr::Reg::*;
 
     // Let constant be loaded into A to give `mov a, 0` a chance
-    let (lhs, rhs) = if let Scalar::ConstInt(_) = &op.rhs {
-        (&op.rhs, &op.lhs)
+    let (lhs, rhs) = if let Scalar::ConstInt(_) = &op.desc.rhs {
+        (&op.desc.rhs, &op.desc.lhs)
     } else {
-        (&op.lhs, &op.rhs)
+        (&op.desc.lhs, &op.desc.rhs)
     };
 
     let label_ne = w.alloc_label();
     let label_end = w.alloc_label();
-    for offset in 0..(op.width as u16) {
+    for offset in 0..(op.desc.width as u16) {
         load_scalar(w, A, lhs, offset, true);
         load_scalar(w, B, rhs, offset, true);
         w.sub(A, B);
-        if offset != (op.width as u16) - 1 {
+        if offset != (op.desc.width as u16) - 1 {
             w.ldi_p_sym(label_ne.clone(), 0);
             w.jnz();
         } else {
@@ -83,9 +83,9 @@ fn gen_compare_ne(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg
     w.label(label_end);
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
-    if op.width as u16 > 1 {
+    if op.desc.width as u16 > 1 {
         w.mov(A, Zero);
-        for _ in 1..(op.width as u16) {
+        for _ in 1..(op.desc.width as u16) {
             w.inc(PL);
             w.st(A);
         }
@@ -100,16 +100,20 @@ fn gen_compare_ne(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg
         gt: NS & neq
 */
 fn gen_compare_unsigned(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg>) {
-    assert_eq!(op.sign, false);
+    assert_eq!(op.desc.sign, false);
     use crate::ccpu::instr::Reg::*;
 
-    let (lhs, rhs, kind) = match op.kind {
-        CompareKind::LessThan | CompareKind::GreaterOrEqual => (&op.lhs, &op.rhs, op.kind),
-        CompareKind::LessOrEqual | CompareKind::GreaterThan => (&op.rhs, &op.lhs, op.kind.flip()),
+    let (lhs, rhs, kind) = match op.desc.kind {
+        CompareKind::LessThan | CompareKind::GreaterOrEqual => {
+            (&op.desc.lhs, &op.desc.rhs, op.desc.kind)
+        }
+        CompareKind::LessOrEqual | CompareKind::GreaterThan => {
+            (&op.desc.rhs, &op.desc.lhs, op.desc.kind.flip())
+        }
         _ => unreachable!(),
     };
 
-    for offset in 0..(op.width as u16) {
+    for offset in 0..(op.desc.width as u16) {
         load_scalar(w, A, lhs, offset, offset == 0);
         load_scalar(w, B, rhs, offset, offset == 0);
         if offset == 0 {
@@ -130,9 +134,9 @@ fn gen_compare_unsigned(w: &mut InstructionWriter, op: &generic_ir::CompareOp<Fr
     w.label(label);
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
-    if op.width as u16 > 1 {
+    if op.desc.width as u16 > 1 {
         w.mov(A, Zero);
-        for _ in 1..(op.width as u16) {
+        for _ in 1..(op.desc.width as u16) {
             w.inc(PL);
             w.st(A);
         }
@@ -147,16 +151,20 @@ fn gen_compare_unsigned(w: &mut InstructionWriter, op: &generic_ir::CompareOp<Fr
         gt: neq & S == O
 */
 fn gen_compare_signed(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg>) {
-    assert_eq!(op.sign, true);
+    assert_eq!(op.desc.sign, true);
     use crate::ccpu::instr::Reg::*;
 
-    let (lhs, rhs, kind) = match op.kind {
-        CompareKind::LessThan | CompareKind::GreaterOrEqual => (&op.lhs, &op.rhs, op.kind),
-        CompareKind::LessOrEqual | CompareKind::GreaterThan => (&op.rhs, &op.lhs, op.kind.flip()),
+    let (lhs, rhs, kind) = match op.desc.kind {
+        CompareKind::LessThan | CompareKind::GreaterOrEqual => {
+            (&op.desc.lhs, &op.desc.rhs, op.desc.kind)
+        }
+        CompareKind::LessOrEqual | CompareKind::GreaterThan => {
+            (&op.desc.rhs, &op.desc.lhs, op.desc.kind.flip())
+        }
         _ => unreachable!(),
     };
 
-    for offset in 0..(op.width as u16) {
+    for offset in 0..(op.desc.width as u16) {
         load_scalar(w, A, lhs, offset, offset == 0);
         load_scalar(w, B, rhs, offset, offset == 0);
         if offset == 0 {
@@ -207,9 +215,9 @@ fn gen_compare_signed(w: &mut InstructionWriter, op: &generic_ir::CompareOp<Fram
 
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
-    if op.width as u16 > 1 {
+    if op.desc.width as u16 > 1 {
         w.mov(A, Zero);
-        for _ in 1..(op.width as u16) {
+        for _ in 1..(op.desc.width as u16) {
             w.inc(PL);
             w.st(A);
         }

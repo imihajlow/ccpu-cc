@@ -162,13 +162,15 @@ pub fn compile_cmp_inner(
             let (width, sign) = lhs.t.t.get_width_sign().unwrap();
             let dst = scope.alloc_temp();
             be.append_operation(ir::Op::Compare(ir::CompareOp {
-                kind,
                 dst: dst.clone(),
                 dst_width: ir::Width::INT_WIDTH,
-                lhs: lhs.unwrap_scalar(),
-                rhs: rhs.unwrap_scalar(),
-                width,
-                sign,
+                desc: ir::CompareDesc {
+                    kind,
+                    lhs: lhs.unwrap_scalar(),
+                    rhs: rhs.unwrap_scalar(),
+                    width,
+                    sign,
+                },
             }));
             Ok(TypedRValue {
                 src: RValue::new_var(dst),
@@ -196,13 +198,15 @@ pub fn compile_cmp_inner(
         let dst = scope.alloc_temp();
         let (width, sign) = lhs.t.t.get_width_sign().unwrap();
         be.append_operation(ir::Op::Compare(ir::CompareOp {
-            kind,
             dst: dst.clone(),
             dst_width: ir::Width::INT_WIDTH,
-            lhs: lhs.unwrap_scalar(),
-            rhs: rhs.unwrap_scalar(),
-            width,
-            sign,
+            desc: ir::CompareDesc {
+                kind,
+                lhs: lhs.unwrap_scalar(),
+                rhs: rhs.unwrap_scalar(),
+                width,
+                sign,
+            },
         }));
         Ok(TypedRValue {
             src: RValue::new_var(dst),

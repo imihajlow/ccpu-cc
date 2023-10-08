@@ -2,7 +2,9 @@ use std::assert_matches::assert_matches;
 use std::collections::HashMap;
 
 use crate::ccpu::reg::FrameReg;
-use crate::generic_ir::{Block, Op, Phi, Scalar, Tail, UnaryUnsignedOp, VarLocation, Width};
+use crate::generic_ir::{
+    Block, JumpCondition, Op, Phi, Scalar, Tail, UnaryUnsignedOp, VarLocation, Width,
+};
 
 use crate::deconstruct::*;
 
@@ -96,7 +98,11 @@ fn test_deconstruct_2() {
         Block {
             phi: Phi::new(),
             ops: vec![],
-            tail: Tail::Cond(Scalar::Var(VarLocation::Local(10)), 1, 2),
+            tail: Tail::Cond(
+                JumpCondition::StrictBool(Scalar::Var(VarLocation::Local(10))),
+                1,
+                2,
+            ),
             loop_depth: 0,
             original_id: 0,
         },
@@ -153,7 +159,11 @@ fn test_deconstruct_2() {
     assert_eq!(blocks[0].ops, vec![]);
     assert_matches!(
         blocks[0].tail,
-        Tail::Cond(Scalar::Var(VarLocation::Local(FrameReg::FrameA(0))), 1, 3)
+        Tail::Cond(
+            JumpCondition::StrictBool(Scalar::Var(VarLocation::Local(FrameReg::FrameA(0)))),
+            1,
+            3
+        )
     );
 
     assert_eq!(blocks[1].ops.len(), 2);
@@ -188,7 +198,11 @@ fn test_deconstruct_3() {
         Block {
             phi: Phi::new(),
             ops: vec![],
-            tail: Tail::Cond(Scalar::Var(VarLocation::Local(01)), 1, 2),
+            tail: Tail::Cond(
+                JumpCondition::StrictBool(Scalar::Var(VarLocation::Local(01))),
+                1,
+                2,
+            ),
             loop_depth: 0,
             original_id: 0,
         },
@@ -242,7 +256,11 @@ fn test_deconstruct_3() {
     assert_eq!(blocks.len(), 5);
     assert_eq!(blocks[0].ops, vec![]);
     let (new_block_1, new_block_2) = match blocks[0].tail {
-        Tail::Cond(Scalar::Var(VarLocation::Local(FrameReg::FrameA(1))), a, b) => (a, b),
+        Tail::Cond(
+            JumpCondition::StrictBool(Scalar::Var(VarLocation::Local(FrameReg::FrameA(1)))),
+            a,
+            b,
+        ) => (a, b),
         _ => panic!("Wrong tail!"),
     };
 

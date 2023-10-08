@@ -281,9 +281,9 @@ fn compute_not(op: &UnaryUnsignedOp) -> Option<Op> {
     }
 }
 fn compute_compare(op: &CompareOp) -> Option<Op> {
-    match (&op.lhs, &op.rhs) {
+    match (&op.desc.lhs, &op.desc.rhs) {
         (Scalar::ConstInt(lhs), Scalar::ConstInt(rhs)) => {
-            let r = compare(*lhs, *rhs, op.width, op.sign, op.kind);
+            let r = compare(*lhs, *rhs, op.desc.width, op.desc.sign, op.desc.kind);
             Some(Op::Copy(UnaryUnsignedOp {
                 dst: op.dst.clone(),
                 src: Scalar::ConstInt(if r { 1 } else { 0 }),
@@ -291,7 +291,13 @@ fn compute_compare(op: &CompareOp) -> Option<Op> {
             }))
         }
         (Scalar::SymbolOffset(sl, ol), Scalar::SymbolOffset(sr, or)) if sl == sr => {
-            let r = compare(*ol as u64, *or as u64, Width::Word, op.sign, op.kind);
+            let r = compare(
+                *ol as u64,
+                *or as u64,
+                Width::Word,
+                op.desc.sign,
+                op.desc.kind,
+            );
             Some(Op::Copy(UnaryUnsignedOp {
                 dst: op.dst.clone(),
                 src: Scalar::ConstInt(if r { 1 } else { 0 }),

@@ -16,13 +16,15 @@ fn test_rel_1() {
             ir::Op::Undefined(2),
             ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
-                kind: ir::CompareKind::LessThan,
                 dst_width: ir::Width::Word,
                 dst: VarLocation::Local(4),
-                width: ir::Width::Word,
-                sign: true,
-                lhs: ir::Scalar::Var(VarLocation::Local(2)),
-                rhs: ir::Scalar::Var(VarLocation::Local(3))
+                desc: ir::CompareDesc {
+                    kind: ir::CompareKind::LessThan,
+                    width: ir::Width::Word,
+                    sign: true,
+                    lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(3))
+                }
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(1),
@@ -55,13 +57,15 @@ fn test_rel_2() {
                 src: ir::Scalar::Var(VarLocation::Local(2))
             }),
             ir::Op::Compare(ir::CompareOp {
-                kind: ir::CompareKind::GreaterOrEqual,
                 dst_width: ir::Width::Word,
                 dst: VarLocation::Local(5),
-                width: ir::Width::Dword,
-                sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(4)),
-                rhs: ir::Scalar::Var(VarLocation::Local(3))
+                desc: ir::CompareDesc {
+                    kind: ir::CompareKind::GreaterOrEqual,
+                    width: ir::Width::Dword,
+                    sign: false,
+                    lhs: ir::Scalar::Var(VarLocation::Local(4)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(3))
+                }
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(1),
@@ -86,13 +90,15 @@ fn test_rel_3() {
             ir::Op::Undefined(2),
             ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
-                kind: ir::CompareKind::LessOrEqual,
                 dst_width: ir::Width::Word,
                 dst: VarLocation::Local(4),
-                width: ir::Width::Word,
-                sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(2)),
-                rhs: ir::Scalar::Var(VarLocation::Local(3))
+                desc: ir::CompareDesc {
+                    kind: ir::CompareKind::LessOrEqual,
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(3))
+                }
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(1),
@@ -117,13 +123,15 @@ fn test_rel_4() {
             ir::Op::Undefined(2),
             ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
-                kind: ir::CompareKind::GreaterThan,
                 dst_width: ir::Width::Word,
                 dst: VarLocation::Local(4),
-                width: ir::Width::Word,
-                sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(2)),
-                rhs: ir::Scalar::Var(VarLocation::Local(3))
+                desc: ir::CompareDesc {
+                    kind: ir::CompareKind::GreaterThan,
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(3))
+                }
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(1),
@@ -148,13 +156,15 @@ fn test_rel_5() {
             ir::Op::Undefined(2),
             ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
-                kind: ir::CompareKind::Equal,
                 dst_width: ir::Width::Word,
                 dst: VarLocation::Local(4),
-                width: ir::Width::Word,
-                sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(2)),
-                rhs: ir::Scalar::Var(VarLocation::Local(3))
+                desc: ir::CompareDesc {
+                    kind: ir::CompareKind::Equal,
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(3))
+                }
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(1),
@@ -179,13 +189,15 @@ fn test_rel_6() {
             ir::Op::Undefined(2),
             ir::Op::Undefined(3),
             ir::Op::Compare(ir::CompareOp {
-                kind: ir::CompareKind::NotEqual,
                 dst_width: ir::Width::Word,
                 dst: VarLocation::Local(4),
-                width: ir::Width::Word,
-                sign: false,
-                lhs: ir::Scalar::Var(VarLocation::Local(2)),
-                rhs: ir::Scalar::Var(VarLocation::Local(3))
+                desc: ir::CompareDesc {
+                    kind: ir::CompareKind::NotEqual,
+                    width: ir::Width::Word,
+                    sign: false,
+                    lhs: ir::Scalar::Var(VarLocation::Local(2)),
+                    rhs: ir::Scalar::Var(VarLocation::Local(3))
+                }
             }),
             ir::Op::Copy(ir::UnaryUnsignedOp {
                 dst: VarLocation::Local(1),

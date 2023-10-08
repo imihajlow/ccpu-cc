@@ -13,6 +13,7 @@ pub type Op = generic_ir::Op<VirtualReg>;
 
 pub type ArgOp = generic_ir::ArgOp<VirtualReg>;
 pub type CompareOp = generic_ir::CompareOp<VirtualReg>;
+pub type CompareDesc = generic_ir::CompareDesc<VirtualReg>;
 pub type UnaryUnsignedOp = generic_ir::UnaryUnsignedOp<VirtualReg>;
 pub type BinaryOp = generic_ir::BinaryOp<VirtualReg>;
 pub type BinaryUnsignedOp = generic_ir::BinaryUnsignedOp<VirtualReg>;
@@ -28,3 +29,4 @@ pub type Phi = generic_ir::Phi<VirtualReg>;
 pub type GenericBlock<GTail> = generic_ir::GenericBlock<GTail, VirtualReg>;
 pub type Block = GenericBlock<Tail>;
 pub type Function = generic_ir::Function<VirtualReg>;
+pub type JumpCondition = generic_ir::JumpCondition<VirtualReg>;

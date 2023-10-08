@@ -99,9 +99,14 @@ pub struct ArgOp<Reg> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompareOp<Reg> {
-    pub kind: CompareKind,
     pub dst_width: Width,
     pub dst: VarLocation<Reg>,
+    pub desc: CompareDesc<Reg>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompareDesc<Reg> {
+    pub kind: CompareKind,
     pub width: Width,
     pub sign: Sign,
     pub lhs: Scalar<Reg>,
@@ -221,9 +226,20 @@ pub struct VaListIncOp<Reg> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tail<Reg> {
     Jump(BlockNumber),
-    Cond(Scalar<Reg>, BlockNumber, BlockNumber),
+    Cond(JumpCondition<Reg>, BlockNumber, BlockNumber),
     Ret,
     Switch(Scalar<Reg>, Width, Vec<(u64, BlockNumber)>, BlockNumber),
+}
+
+/// Condition variants for Tail::Cond
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JumpCondition<Reg> {
+    /// 0 or 1
+    StrictBool(Scalar<Reg>),
+    /// 0 or any other value
+    RelaxedBool(Scalar<Reg>, Width),
+    /// Comparison
+    Compare(CompareDesc<Reg>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -654,7 +670,7 @@ impl<Reg: Copy + Eq> Tail<Reg> {
     pub fn is_read_from_register(&self, reg: Reg) -> bool {
         match self {
             Tail::Jump(_) | Tail::Ret => false,
-            Tail::Cond(c, _, _) => c.is_reg(reg),
+            Tail::Cond(c, _, _) => c.is_read_from_register(reg),
             Tail::Switch(c, _, _, _) => c.is_reg(reg),
         }
     }
@@ -719,7 +735,7 @@ impl<Reg: Copy + Eq + Hash> Tail<Reg> {
     pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
         match self {
             Tail::Jump(_) | Tail::Ret => (),
-            Tail::Cond(c, _, _) => c.collect_regs(set),
+            Tail::Cond(c, _, _) => c.collect_read_regs(set),
             Tail::Switch(c, _, _, _) => c.collect_regs(set),
         }
     }
@@ -728,17 +744,55 @@ impl<Reg: Copy + Eq + Hash> Tail<Reg> {
         match self {
             Tail::Jump(n) => Tail::Jump(n),
             Tail::Ret => Tail::Ret,
-            Tail::Cond(c, i, e) => Tail::Cond(c.remap_reg(map), i, e),
+            Tail::Cond(c, i, e) => Tail::Cond(c.remap_regs(map), i, e),
             Tail::Switch(c, w, s, d) => Tail::Switch(c.remap_reg(map), w, s, d),
         }
     }
 
     pub fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
         match self {
-            Tail::Cond(c, _, _) => c.subs_reg(map),
+            Tail::Cond(c, _, _) => c.subs_src_regs(map),
             Tail::Switch(c, _, _, _) => c.subs_reg(map),
             Tail::Ret => false,
             Tail::Jump(_) => false,
+        }
+    }
+}
+
+impl<Reg: Copy + Eq> JumpCondition<Reg> {
+    pub fn is_read_from_register(&self, reg: Reg) -> bool {
+        match self {
+            JumpCondition::StrictBool(s) | JumpCondition::RelaxedBool(s, _) => s.is_reg(reg),
+            JumpCondition::Compare(op) => op.is_read_from_register(reg),
+        }
+    }
+}
+
+impl<Reg: Copy + Eq + Hash> JumpCondition<Reg> {
+    pub fn collect_read_regs(&self, set: &mut HashSet<Reg>) {
+        match self {
+            JumpCondition::StrictBool(s) => s.collect_regs(set),
+            JumpCondition::RelaxedBool(s, _) => s.collect_regs(set),
+            JumpCondition::Compare(op) => op.collect_read_regs(set),
+        }
+    }
+
+    pub fn remap_regs<TargetReg: Copy>(
+        self,
+        map: &HashMap<Reg, TargetReg>,
+    ) -> JumpCondition<TargetReg> {
+        match self {
+            JumpCondition::StrictBool(s) => JumpCondition::StrictBool(s.remap_reg(map)),
+            JumpCondition::RelaxedBool(s, w) => JumpCondition::RelaxedBool(s.remap_reg(map), w),
+            JumpCondition::Compare(op) => JumpCondition::Compare(op.remap_regs(map)),
+        }
+    }
+
+    pub fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        match self {
+            JumpCondition::StrictBool(s) => s.subs_reg(map),
+            JumpCondition::RelaxedBool(s, _) => s.subs_reg(map),
+            JumpCondition::Compare(op) => op.subs_src_regs(map),
         }
     }
 }
@@ -903,14 +957,13 @@ impl<Reg: Copy + Eq> CompareOp<Reg> {
     }
 
     fn is_read_from_register(&self, reg: Reg) -> bool {
-        self.rhs.is_reg(reg) || self.lhs.is_reg(reg)
+        self.desc.is_read_from_register(reg)
     }
 }
 
 impl<Reg: Copy + Eq + Hash> CompareOp<Reg> {
     fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
-        self.lhs.collect_regs(regs);
-        self.rhs.collect_regs(regs);
+        self.desc.collect_read_regs(regs);
     }
 
     fn collect_set_regs(&self, regs: &mut HashSet<Reg>) {
@@ -919,18 +972,14 @@ impl<Reg: Copy + Eq + Hash> CompareOp<Reg> {
 
     fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> CompareOp<TargetReg> {
         CompareOp {
-            lhs: self.lhs.remap_reg(map),
-            rhs: self.rhs.remap_reg(map),
+            desc: self.desc.remap_regs(map),
             dst: self.dst.remap_reg(map),
-            kind: self.kind,
             dst_width: self.dst_width,
-            width: self.width,
-            sign: self.sign,
         }
     }
 
     fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
-        self.lhs.subs_reg(map) | self.rhs.subs_reg(map)
+        self.desc.subs_src_regs(map)
     }
 }
 
@@ -941,11 +990,37 @@ impl CompareOp<VirtualReg> {
         scope: &mut NameScope,
     ) -> Self {
         Self {
-            lhs: self.lhs.remap_reg(map),
-            rhs: self.rhs.remap_reg(map),
+            desc: self.desc.remap_regs(map),
             dst: self.dst.remap_reg_to_new_version(map, scope),
             ..self
         }
+    }
+}
+
+impl<Reg: Copy + Eq> CompareDesc<Reg> {
+    fn is_read_from_register(&self, reg: Reg) -> bool {
+        self.lhs.is_reg(reg) | self.rhs.is_reg(reg)
+    }
+}
+
+impl<Reg: Copy + Eq + Hash> CompareDesc<Reg> {
+    fn collect_read_regs(&self, regs: &mut HashSet<Reg>) {
+        self.lhs.collect_regs(regs);
+        self.rhs.collect_regs(regs);
+    }
+
+    fn remap_regs<TargetReg: Copy>(self, map: &HashMap<Reg, TargetReg>) -> CompareDesc<TargetReg> {
+        CompareDesc {
+            lhs: self.lhs.remap_reg(map),
+            rhs: self.rhs.remap_reg(map),
+            kind: self.kind,
+            width: self.width,
+            sign: self.sign,
+        }
+    }
+
+    fn subs_src_regs(&mut self, map: &HashMap<Reg, Scalar<Reg>>) -> bool {
+        self.lhs.subs_reg(map) | self.rhs.subs_reg(map)
     }
 }
 
@@ -1994,13 +2069,13 @@ where
         write!(
             f,
             "{}{}{}{} {}, {}, {}",
-            self.kind,
+            self.desc.kind,
             self.dst_width,
-            get_sign_char(self.sign),
-            self.width,
+            get_sign_char(self.desc.sign),
+            self.desc.width,
             self.dst,
-            self.lhs,
-            self.rhs
+            self.desc.lhs,
+            self.desc.rhs
         )
     }
 }
@@ -2241,6 +2316,26 @@ where
                 }
                 write!(f, "default: {}", default)
             }
+        }
+    }
+}
+
+impl<Reg> std::fmt::Display for JumpCondition<Reg>
+where
+    Reg: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            JumpCondition::StrictBool(r) => write!(f, "{}", r),
+            JumpCondition::RelaxedBool(r, w) => write!(f, "bool{}({})", w, r),
+            JumpCondition::Compare(op) => write!(
+                f,
+                "(cmp{}{} {}, {})",
+                get_sign_char(op.sign),
+                op.width,
+                op.lhs,
+                op.rhs
+            ),
         }
     }
 }

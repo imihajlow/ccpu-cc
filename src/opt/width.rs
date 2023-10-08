@@ -5,7 +5,9 @@ use replace_with::replace_with_or_abort_and_return;
 
 use crate::{
     generic_ir::{ArgOp, CallOp, ConvOp, IntrinCallVariant, LoadOp, VaArgOp},
-    ir::{self, BinaryOp, BinaryUnsignedOp, CompareOp, ShiftOp, Tail, UnaryUnsignedOp},
+    ir::{
+        self, BinaryOp, BinaryUnsignedOp, CompareOp, JumpCondition, ShiftOp, Tail, UnaryUnsignedOp,
+    },
 };
 
 pub fn optimize_width(blocks: &mut Vec<ir::Block>) -> bool {
@@ -288,7 +290,16 @@ fn update_max_width_phi(max_width: &mut HashMap<ir::VirtualReg, ir::Width>, phi:
 fn update_max_width_tail(max_width: &mut HashMap<ir::VirtualReg, ir::Width>, tail: &ir::Tail) {
     match tail {
         Tail::Jump(_) => (),
-        Tail::Cond(s, _, _) => update_max_width_scalar(max_width, s, ir::Width::Byte),
+        Tail::Cond(JumpCondition::StrictBool(s), _, _) => {
+            update_max_width_scalar(max_width, s, ir::Width::Byte)
+        }
+        Tail::Cond(JumpCondition::RelaxedBool(s, w), _, _) => {
+            update_max_width_scalar(max_width, s, *w)
+        }
+        Tail::Cond(JumpCondition::Compare(op), _, _) => {
+            update_max_width_scalar(max_width, &op.lhs, op.width);
+            update_max_width_scalar(max_width, &op.rhs, op.width);
+        }
         Tail::Ret => (),
         Tail::Switch(s, w, _, _) => update_max_width_scalar(max_width, s, *w),
     }
@@ -312,9 +323,9 @@ fn update_max_width_op(max_width: &mut HashMap<ir::VirtualReg, ir::Width>, op: &
             update_max_width_scalar(max_width, &op.rhs, ir::Width::Byte);
         }
         Op::Neg(op) | Op::Not(op) => update_max_width_scalar(max_width, &op.src, op.width),
-        Op::Compare(op) => {
-            update_max_width_scalar(max_width, &op.lhs, op.width);
-            update_max_width_scalar(max_width, &op.rhs, op.width);
+        Op::Compare(CompareOp { desc, .. }) => {
+            update_max_width_scalar(max_width, &desc.lhs, desc.width);
+            update_max_width_scalar(max_width, &desc.rhs, desc.width);
         }
         Op::Conv(op) => {
             let w = if op.dst_width < op.src_width {
