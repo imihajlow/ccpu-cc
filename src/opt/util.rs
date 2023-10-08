@@ -30,6 +30,15 @@ pub fn count_reg_usages(blocks: &Vec<ir::Block>) -> HashMap<ir::VirtualReg, u32>
     m
 }
 
+pub fn find_reg_origin(ops: &Vec<ir::Op>, reg: ir::VirtualReg) -> Option<&ir::Op> {
+    for op in ops {
+        if op.get_dst_reg() == Some(reg) {
+            return Some(&op);
+        }
+    }
+    None
+}
+
 fn count(map: &mut HashMap<ir::VirtualReg, u32>, r: ir::VirtualReg) {
     if let Some(c) = map.get_mut(&r) {
         *c += 1;

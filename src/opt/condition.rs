@@ -1,7 +1,7 @@
 use crate::{
     generic_ir::{JumpCondition, Op, Tail},
     ir,
-    opt::util::count_reg_usages,
+    opt::util::{count_reg_usages, find_reg_origin},
 };
 
 pub fn optimize_conditions(blocks: &mut Vec<ir::Block>) -> bool {
@@ -63,13 +63,4 @@ pub fn optimize_conditions(blocks: &mut Vec<ir::Block>) -> bool {
         }
     }
     modified
-}
-
-fn find_reg_origin(ops: &Vec<ir::Op>, reg: ir::VirtualReg) -> Option<&ir::Op> {
-    for op in ops {
-        if op.get_dst_reg() == Some(reg) {
-            return Some(&op);
-        }
-    }
-    None
 }

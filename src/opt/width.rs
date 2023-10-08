@@ -6,9 +6,12 @@ use replace_with::replace_with_or_abort_and_return;
 use crate::{
     generic_ir::{ArgOp, CallOp, ConvOp, IntrinCallVariant, LoadOp, VaArgOp},
     ir::{
-        self, BinaryOp, BinaryUnsignedOp, CompareOp, JumpCondition, ShiftOp, Tail, UnaryUnsignedOp,
+        self, BinaryOp, BinaryUnsignedOp, CompareDesc, CompareOp, JumpCondition, ShiftOp, Tail,
+        UnaryUnsignedOp, VirtualReg,
     },
 };
+
+use super::util::find_reg_origin;
 
 pub fn optimize_width(blocks: &mut Vec<ir::Block>) -> bool {
     let mut max_width = HashMap::new();
@@ -27,6 +30,73 @@ pub fn optimize_width(blocks: &mut Vec<ir::Block>) -> bool {
         modified |= try_shorten_phi(&max_width, &mut block.phi);
     }
     modified
+}
+
+pub fn optimize_comparison_width(blocks: &mut Vec<ir::Block>) -> bool {
+    let mut modified = false;
+    for block in blocks {
+        let mut origins = HashMap::new();
+        for op in &block.ops {
+            if let ir::Op::Compare(compare_op) = op {
+                if let Some(reg) = compare_op.desc.lhs.get_reg() {
+                    origins.insert(reg, find_reg_origin(&block.ops, reg).cloned());
+                }
+                if let Some(reg) = compare_op.desc.rhs.get_reg() {
+                    origins.insert(reg, find_reg_origin(&block.ops, reg).cloned());
+                }
+            }
+        }
+        if let ir::Tail::Cond(JumpCondition::Compare(desc), _, _) = &block.tail {
+            if let Some(reg) = desc.lhs.get_reg() {
+                origins.insert(reg, find_reg_origin(&block.ops, reg).cloned());
+            }
+            if let Some(reg) = desc.rhs.get_reg() {
+                origins.insert(reg, find_reg_origin(&block.ops, reg).cloned());
+            }
+        }
+
+        for op in &mut block.ops {
+            if let ir::Op::Compare(compare_op) = op {
+                modified |= try_shortcut_comparison(&mut compare_op.desc, &origins);
+            }
+        }
+        if let ir::Tail::Cond(JumpCondition::Compare(desc), _, _) = &mut block.tail {
+            modified |= try_shortcut_comparison(desc, &origins);
+        }
+    }
+    modified
+}
+
+fn try_shortcut_comparison(
+    desc: &mut CompareDesc,
+    origins: &HashMap<VirtualReg, Option<ir::Op>>,
+) -> bool {
+    match (desc.lhs.get_reg(), desc.rhs.get_reg()) {
+        (Some(lhs_reg), Some(rhs_reg)) => {
+            let lhs_origin = origins.get(&lhs_reg).unwrap();
+            let rhs_origin = origins.get(&rhs_reg).unwrap();
+            match (lhs_origin, rhs_origin) {
+                (Some(ir::Op::Conv(lhs_conv_op)), Some(ir::Op::Conv(rhs_conv_op))) => {
+                    // if widening same types and not signed to unsigned conversion
+                    if lhs_conv_op.src_width == rhs_conv_op.src_width // same width
+                        && lhs_conv_op.src_sign == rhs_conv_op.src_sign // same sign
+                        && lhs_conv_op.src_width < lhs_conv_op.dst_width // widening
+                        && !(lhs_conv_op.src_sign && !lhs_conv_op.dst_sign)
+                    // not signed to unsigned
+                    {
+                        desc.lhs = lhs_conv_op.src.clone();
+                        desc.rhs = rhs_conv_op.src.clone();
+                        desc.width = lhs_conv_op.src_width;
+                        desc.sign = lhs_conv_op.src_sign;
+                        return true;
+                    }
+                }
+                _ => (),
+            }
+        }
+        _ => (),
+    }
+    false
 }
 
 fn try_shorten_phi(max_width: &HashMap<ir::VirtualReg, ir::Width>, phi: &mut ir::Phi) -> bool {
