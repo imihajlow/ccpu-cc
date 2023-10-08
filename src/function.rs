@@ -1,6 +1,7 @@
 use crate::generic_ir::UnaryUnsignedOp;
 use crate::ir::{Op, VarLocation};
 use crate::opt::arithmetic::optimize_arithmetics;
+use crate::opt::condition::optimize_conditions;
 use crate::opt::copy::{drop_trivial_copies, reduce_copies};
 use crate::opt::width::optimize_width;
 use crate::regalloc::get_live_ranges;
@@ -169,6 +170,7 @@ impl Function<ir::VirtualReg> {
             modified |= optimize_arithmetics(&mut self.body);
             modified |= optimize_width(&mut self.body);
             modified |= reduce_copies(&mut self.body);
+            modified |= optimize_conditions(&mut self.body);
         }
     }
 

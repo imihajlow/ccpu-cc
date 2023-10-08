@@ -12,6 +12,8 @@ use crate::{
     translation_unit::TranslationUnit,
 };
 
+use self::compare::gen_compare_tail;
+
 use super::{
     global,
     instr::{InstructionWriter, Reg, Reg::*},
@@ -227,7 +229,9 @@ fn gen_cond_jump(
                 w.jmp();
             }
         }
-        JumpCondition::Compare(_) => todo!(),
+        JumpCondition::Compare(desc) => {
+            gen_compare_tail(w, desc, cur_idx, if_idx, else_idx, function_name)
+        }
         JumpCondition::StrictBool(Scalar::SymbolOffset(_, _)) => unimplemented!(),
         JumpCondition::RelaxedBool(Scalar::SymbolOffset(_, _), _) => unimplemented!(),
     }

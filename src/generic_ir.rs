@@ -2330,7 +2330,8 @@ where
             JumpCondition::RelaxedBool(r, w) => write!(f, "bool{}({})", w, r),
             JumpCondition::Compare(op) => write!(
                 f,
-                "(cmp{}{} {}, {})",
+                "(cmp{}{}{} {}, {})",
+                op.kind,
                 get_sign_char(op.sign),
                 op.width,
                 op.lhs,

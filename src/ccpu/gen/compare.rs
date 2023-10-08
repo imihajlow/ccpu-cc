@@ -1,5 +1,9 @@
 use crate::{
-    ccpu::{gen::util::load_scalar, instr::InstructionWriter, reg::FrameReg},
+    ccpu::{
+        gen::{make_block_label, util::load_scalar},
+        instr::InstructionWriter,
+        reg::FrameReg,
+    },
     generic_ir::{
         self,
         CompareKind::{self, *},
@@ -13,6 +17,28 @@ pub fn gen_compare(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameRe
         (NotEqual, _) => gen_compare_ne(w, op),
         (_, false) => gen_compare_unsigned(w, op),
         (_, true) => gen_compare_signed(w, op),
+    }
+}
+
+pub fn gen_compare_tail(
+    w: &mut InstructionWriter,
+    desc: &generic_ir::CompareDesc<FrameReg>,
+    cur_block_id: usize,
+    if_true: usize,
+    if_false: usize,
+    function_name: &str,
+) {
+    match (desc.kind, desc.sign) {
+        (Equal, _) => gen_compare_tail_eq(w, desc, cur_block_id, if_true, if_false, function_name),
+        (NotEqual, _) => {
+            gen_compare_tail_eq(w, desc, cur_block_id, if_false, if_true, function_name)
+        }
+        (_, false) => {
+            gen_compare_tail_unsigned(w, desc, cur_block_id, if_true, if_false, function_name)
+        }
+        (_, true) => {
+            gen_compare_tail_signed(w, desc, cur_block_id, if_true, if_false, function_name)
+        }
     }
 }
 
@@ -50,6 +76,38 @@ fn gen_compare_eq(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg
             w.inc(PL);
             w.st(A);
         }
+    }
+}
+
+fn gen_compare_tail_eq(
+    w: &mut InstructionWriter,
+    desc: &generic_ir::CompareDesc<FrameReg>,
+    cur_block_id: usize,
+    if_true: usize,
+    if_false: usize,
+    function_name: &str,
+) {
+    assert!(desc.kind == Equal || desc.kind == NotEqual);
+    use crate::ccpu::instr::Reg::*;
+
+    let label_eq = make_block_label(function_name, if_true);
+    let label_ne = make_block_label(function_name, if_false);
+
+    for o in 0..(desc.width as u16) {
+        load_scalar(w, A, &desc.lhs, o, true);
+        load_scalar(w, B, &desc.rhs, o, true);
+        w.sub(A, B);
+        if cur_block_id + 1 == if_false && o == (desc.width as u16) - 1 {
+            w.ldi_p_sym(label_eq.clone(), 0);
+            w.jz();
+        } else {
+            w.ldi_p_sym(label_ne.clone(), 0);
+            w.jnz();
+        }
+    }
+    if cur_block_id + 1 != if_true && cur_block_id + 1 != if_false {
+        w.ldi_p_sym(label_eq, 0);
+        w.jmp();
     }
 }
 
@@ -143,6 +201,73 @@ fn gen_compare_unsigned(w: &mut InstructionWriter, op: &generic_ir::CompareOp<Fr
     }
 }
 
+fn gen_compare_tail_unsigned(
+    w: &mut InstructionWriter,
+    desc: &generic_ir::CompareDesc<FrameReg>,
+    cur_block_id: usize,
+    if_true: usize,
+    if_false: usize,
+    function_name: &str,
+) {
+    assert_eq!(desc.sign, false);
+    use crate::ccpu::instr::Reg::*;
+
+    let (lhs, rhs, kind) = match desc.kind {
+        CompareKind::LessThan | CompareKind::GreaterOrEqual => (&desc.lhs, &desc.rhs, desc.kind),
+        CompareKind::LessOrEqual | CompareKind::GreaterThan => {
+            (&desc.rhs, &desc.lhs, desc.kind.flip())
+        }
+        _ => unreachable!(),
+    };
+
+    // subtract lhs - rhs
+    for offset in 0..(desc.width as u16) {
+        load_scalar(w, A, lhs, offset, offset == 0);
+        load_scalar(w, B, rhs, offset, offset == 0);
+        if offset == 0 {
+            w.sub(A, B);
+        } else {
+            w.sbb(A, B);
+        }
+    }
+    let label_true = make_block_label(function_name, if_true);
+    let label_false = make_block_label(function_name, if_false);
+
+    // lhs < rhs    S is set
+    // lhs >= rhs   S is not set
+    match kind {
+        CompareKind::LessThan => {
+            // on S go to label_true
+            if cur_block_id + 1 == if_true {
+                w.ldi_p_sym(label_false, 0);
+                w.jns();
+            } else {
+                w.ldi_p_sym(label_true, 0);
+                w.js();
+                if cur_block_id + 1 != if_false {
+                    w.ldi_p_sym(label_false, 0);
+                    w.jmp();
+                }
+            }
+        }
+        CompareKind::GreaterOrEqual => {
+            // on S go to label_false
+            if cur_block_id + 1 == if_true {
+                w.ldi_p_sym(label_false, 0);
+                w.js();
+            } else {
+                w.ldi_p_sym(label_true, 0);
+                w.jns();
+                if cur_block_id + 1 != if_false {
+                    w.ldi_p_sym(label_false, 0);
+                    w.jmp();
+                }
+            }
+        }
+        _ => unreachable!(),
+    };
+}
+
 /*
     signed:
         lt: S != O        easy
@@ -220,6 +345,82 @@ fn gen_compare_signed(w: &mut InstructionWriter, op: &generic_ir::CompareOp<Fram
         for _ in 1..(op.desc.width as u16) {
             w.inc(PL);
             w.st(A);
+        }
+    }
+}
+
+fn gen_compare_tail_signed(
+    w: &mut InstructionWriter,
+    desc: &generic_ir::CompareDesc<FrameReg>,
+    cur_block_id: usize,
+    if_true: usize,
+    if_false: usize,
+    function_name: &str,
+) {
+    assert_eq!(desc.sign, true);
+    use crate::ccpu::instr::Reg::*;
+
+    let (lhs, rhs, kind) = match desc.kind {
+        CompareKind::LessThan | CompareKind::GreaterOrEqual => (&desc.lhs, &desc.rhs, desc.kind),
+        CompareKind::LessOrEqual | CompareKind::GreaterThan => {
+            (&desc.rhs, &desc.lhs, desc.kind.flip())
+        }
+        _ => unreachable!(),
+    };
+
+    // subtract lhs - rhs
+    for offset in 0..(desc.width as u16) {
+        load_scalar(w, A, lhs, offset, offset == 0);
+        load_scalar(w, B, rhs, offset, offset == 0);
+        if offset == 0 {
+            w.sub(A, B);
+        } else {
+            w.sbb(A, B);
+        }
+    }
+
+    /*
+        case for lt (S != O):
+
+        jno  label_no
+        js   if_false
+        jmp  if_true
+    label_no:
+        jns  if_false
+    */
+    let label_no = w.alloc_label();
+    let label_true = make_block_label(function_name, if_true);
+    let label_false = make_block_label(function_name, if_false);
+    w.ldi_p_sym(label_no.clone(), 0);
+    w.jno();
+    w.ldi_p_sym(label_false.clone(), 0);
+    match kind {
+        CompareKind::LessThan => w.js(),
+        CompareKind::GreaterOrEqual => w.jns(),
+        _ => unreachable!(),
+    }
+    w.ldi_p_sym(label_true.clone(), 0);
+    w.jmp();
+    w.label(label_no);
+    if cur_block_id + 1 == if_true {
+        // next block is if_true
+        w.ldi_p_sym(label_false, 0);
+        match kind {
+            CompareKind::LessThan => w.jns(),
+            CompareKind::GreaterOrEqual => w.js(),
+            _ => unreachable!(),
+        }
+    } else {
+        // next block is not if_true
+        w.ldi_p_sym(label_true, 0);
+        match kind {
+            CompareKind::LessThan => w.js(),
+            CompareKind::GreaterOrEqual => w.jns(),
+            _ => unreachable!(),
+        }
+        if cur_block_id + 1 != if_false {
+            w.ldi_p_sym(label_false, 0);
+            w.jmp();
         }
     }
 }
