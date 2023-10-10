@@ -374,10 +374,10 @@ impl Function<ir::VirtualReg> {
             .fold(Some(1), |a, b| {
                 a.and_then(|a: usize| b.and_then(|b| a.checked_mul(b)))
             });
-        let repetitions = match phi_permutations {
-            Some(p) if p < 10000 => p * 5,
-            _ => 10000,
-        };
+        let repetitions = 1; /*match phi_permutations {
+                                 Some(p) if p < 10000 => p * 5,
+                                 _ => 10000,
+                             };*/
         let mut min_copies = None;
         let mut best_body = None;
         for _ in 0..repetitions {
