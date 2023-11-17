@@ -327,7 +327,18 @@ fn constant_to_bytes(
             }
             Ok(r)
         }
-        Constant::Struct(_) => todo!(),
+        Constant::Struct(initializers) => {
+            let size = check_16bit(val.t.t.sizeof(scope, span, ec)?, span, ec)? as usize;
+            let mut data = vec![0; size];
+            for initializer in initializers {
+                let sub_data = constant_to_bytes(&initializer.value, initializer.span, scope, ec)?;
+                assert!(initializer.offset as usize + sub_data.len() <= data.len());
+                let dst = &mut data
+                    [(initializer.offset as usize)..(initializer.offset as usize + sub_data.len())];
+                dst.copy_from_slice(&sub_data);
+            }
+            Ok(data)
+        }
     }
 }
 

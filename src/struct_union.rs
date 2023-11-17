@@ -126,6 +126,71 @@ impl StructUnion {
         result
     }
 
+    pub fn get_field_by_index(
+        &self,
+        index: usize,
+        scope: &NameScope,
+    ) -> Option<(Option<String>, QualifiedType)> {
+        self.get_field_by_index_or_field_count(index, scope).ok()
+    }
+
+    pub fn get_field_index(&self, name: &str, scope: &NameScope) -> Option<usize> {
+        self.get_field_index_or_field_count(name, scope).ok()
+    }
+
+    fn get_field_by_index_or_field_count(
+        &self,
+        index: usize,
+        scope: &NameScope,
+    ) -> Result<(Option<String>, QualifiedType), usize> {
+        let members = self
+            .members
+            .as_ref()
+            .expect("complete types only at this point");
+        let mut i = 0;
+        for (name, t) in members {
+            if let Some(id) = t.t.get_anon_struct_or_union_id() {
+                let nested = scope.get_struct_union(id);
+                match nested.get_field_by_index_or_field_count(index - i, scope) {
+                    Ok(r) => return Ok(r),
+                    Err(count) => i += count,
+                }
+            } else if i == index {
+                return Ok((name.clone(), t.clone()));
+            } else {
+                i += 1;
+            }
+        }
+        Err(i)
+    }
+
+    fn get_field_index_or_field_count(
+        &self,
+        name: &str,
+        scope: &NameScope,
+    ) -> Result<usize, usize> {
+        let members = self
+            .members
+            .as_ref()
+            .expect("complete types only at this point");
+        let mut i = 0;
+        for (field_name, t) in members {
+            if let Some(id) = t.t.get_anon_struct_or_union_id() {
+                let nested = scope.get_struct_union(id);
+                match nested.get_field_index_or_field_count(name, scope) {
+                    Ok(inner_index) => return Ok(i + inner_index),
+                    Err(inner_count) => i += inner_count,
+                }
+            } else {
+                match field_name {
+                    Some(field_name) if field_name == name => return Ok(i),
+                    _ => i += 1,
+                }
+            }
+        }
+        Err(i)
+    }
+
     fn sizeof_struct(
         &self,
         scope: &NameScope,

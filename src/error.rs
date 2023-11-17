@@ -56,6 +56,8 @@ pub enum CompileError {
     WrongInitializerForType(QualifiedType),
     ConstantOutOfRange,
     ArrayDesignatorIndexOutOfBounds(usize, usize),
+    ExcessElementsInInitializer,
+    ArrayDesignatorForStruct(QualifiedType),
     // General expression error
     ArithmeticTypeRequired,
     IntegerTypeRequired,
@@ -251,6 +253,14 @@ impl std::fmt::Display for CompileError {
                 f,
                 "array designator index ({}) exceeds array bounds ({})",
                 got, expected
+            ),
+            CompileError::ExcessElementsInInitializer => {
+                f.write_str("excess elements in struct initializer")
+            }
+            CompileError::ArrayDesignatorForStruct(t) => write!(
+                f,
+                "array designator cannot initialize non-array type '{}'",
+                t
             ),
             CompileError::NamedVoidParameter => f.write_str("argument may not have 'void' type"),
             CompileError::QualifiedVoidParameter => {

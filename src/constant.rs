@@ -9,6 +9,7 @@ use lang_c::{
     span::Node,
 };
 
+use crate::initializer::FieldInitializer;
 use crate::name_scope::NameScope;
 use crate::string::{self, parse_string_literal};
 use crate::{
@@ -723,8 +724,132 @@ fn process_initializer_list(
 ) -> Result<TypedConstant, ()> {
     if target_type.t.is_array() {
         process_array_initializer_list(&target_type, il, allow_var, scope, span, ec)
+    } else if target_type.t.is_object() {
+        process_object_initializer_list(&target_type, il, allow_var, scope, span, ec)
     } else {
         todo!()
+    }
+}
+
+fn process_object_initializer_list(
+    target_type: &QualifiedType,
+    il: Vec<Node<InitializerListItem>>,
+    allow_var: bool,
+    scope: &mut NameScope,
+    span: Span,
+    ec: &mut ErrorCollector,
+) -> Result<TypedConstant, ()> {
+    let id = if let CType::StructUnion(id) = &target_type.t {
+        id
+    } else {
+        panic!("must be an object");
+    };
+    let su = scope.get_struct_union(id).clone();
+
+    if !su.is_complete() {
+        ec.record_error(CompileError::IncompleteStruct(target_type.clone()), span)?;
+        unreachable!();
+    };
+
+    let mut maybe_zero = true;
+
+    let mut initializers = Vec::new();
+
+    let mut field_index = 0;
+    for item in il {
+        if field_index != 0 {
+            maybe_zero = false;
+        }
+        if item.node.designation.len() == 0 {
+            if let Some((field_name, field_type)) = su.get_field_by_index(field_index, scope) {
+                if let Some(field_name) = field_name {
+                    let value = compute_constant_initializer(
+                        *item.node.initializer,
+                        &field_type,
+                        allow_var,
+                        scope,
+                        ec,
+                    )?;
+                    if !value.is_zero() {
+                        maybe_zero = false;
+                    }
+                    let (offset, _) = su.get_field(&field_name, scope, item.span, ec)?.unwrap();
+                    initializers.push(FieldInitializer {
+                        offset,
+                        value,
+                        span: item.span,
+                    });
+                    field_index += 1;
+                } else {
+                    ec.record_error(
+                        CompileError::Unimplemented(
+                            "initializing unnamed struct fields".to_string(),
+                        ),
+                        item.span,
+                    )?;
+                    unreachable!();
+                }
+            } else {
+                ec.record_error(CompileError::ExcessElementsInInitializer, item.span)?;
+                unreachable!()
+            }
+        } else if item.node.designation.len() > 1 {
+            ec.record_error(
+                CompileError::Unimplemented("complex designators".to_string()),
+                item.span,
+            )?;
+            unreachable!();
+        } else {
+            maybe_zero = false;
+            let designation = item.node.designation.last().unwrap();
+            match &designation.node {
+                Designator::Member(id) => {
+                    let field_name = &id.node.name;
+                    let (offset, field_type) =
+                        target_type.get_field(field_name, scope, item.span, ec)?;
+                    let this_field_index = su.get_field_index(field_name, scope).unwrap();
+                    let value = compute_constant_initializer(
+                        *item.node.initializer,
+                        &field_type,
+                        allow_var,
+                        scope,
+                        ec,
+                    )?;
+                    initializers.push(FieldInitializer {
+                        offset,
+                        value,
+                        span: item.span,
+                    });
+                    field_index = this_field_index + 1;
+                }
+                Designator::Index(_) => {
+                    ec.record_error(
+                        CompileError::ArrayDesignatorForStruct(target_type.clone()),
+                        designation.span,
+                    )?;
+                    unreachable!()
+                }
+                Designator::Range(_) => {
+                    ec.record_error(
+                        CompileError::Unimplemented("range designator".to_string()),
+                        designation.span,
+                    )?;
+                    unreachable!()
+                }
+            }
+        }
+    }
+
+    if maybe_zero {
+        Ok(TypedConstant {
+            t: target_type.clone(),
+            val: Constant::Zero,
+        })
+    } else {
+        Ok(TypedConstant {
+            t: target_type.clone(),
+            val: Constant::Struct(initializers),
+        })
     }
 }
 

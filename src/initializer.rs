@@ -17,8 +17,9 @@ pub enum Constant {
 
 #[derive(Debug, Clone)]
 pub struct FieldInitializer {
-    offset: usize,
-    value: TypedConstant,
+    pub offset: u32,
+    pub value: TypedConstant,
+    pub span: Span,
 }
 
 /**
