@@ -24,6 +24,7 @@ use super::{
 mod add;
 mod bitwise;
 mod boolean;
+mod bswap;
 mod call;
 mod compare;
 mod conv;
@@ -146,6 +147,7 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, _function_na
         VaStart(op) => variadic::gen_va_start(w, op),
         VaArg(op) => variadic::gen_va_arg(w, op),
         VaListInc(op) => variadic::gen_va_list_inc(w, op),
+        ByteSwap(op) => bswap::gen_bswap(w, op),
         FramePointer(_) => {
             unreachable!("Frame pointer expansion step must be performed before generating code")
         }

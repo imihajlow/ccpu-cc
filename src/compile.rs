@@ -685,7 +685,7 @@ fn compile_call(
     }
 }
 
-fn compile_argument(
+pub fn compile_argument(
     arg_type: Option<QualifiedType>,
     arg_src: TypedRValue,
     span: Span,

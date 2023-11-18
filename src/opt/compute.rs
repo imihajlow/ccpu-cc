@@ -19,6 +19,7 @@ pub fn compute_const(op: &mut Op) -> bool {
         Op::Not(op) => compute_not(op),
         Op::Compare(op) => compute_compare(op),
         Op::Conv(op) => compute_conv(op),
+        Op::ByteSwap(op) => compute_byte_swap(op),
         Op::Store(_) => None,
         Op::Load(_) => None,
         Op::Call(_) => None,
@@ -345,6 +346,17 @@ fn compute_conv(op: &ConvOp) -> Option<Op> {
         }
     }
 }
+fn compute_byte_swap(op: &UnaryUnsignedOp) -> Option<Op> {
+    match &op.src {
+        Scalar::ConstInt(src) => Some(Op::Copy(UnaryUnsignedOp {
+            dst: op.dst.clone(),
+            src: Scalar::ConstInt(byte_swap(*src, op.width)),
+            width: op.width,
+        })),
+        Scalar::SymbolOffset(_, _) => unreachable!("WTF is this"),
+        _ => None,
+    }
+}
 
 fn clamp(c: u64, w: Width) -> u64 {
     if w == Width::Qword {
@@ -364,6 +376,24 @@ fn widen(c: u64, from_w: Width, to_w: Width, sign_extend: bool) -> u64 {
         clamp(clamped | sign_extension, to_w)
     } else {
         clamped
+    }
+}
+
+fn byte_swap(c: u64, w: Width) -> u64 {
+    match w {
+        Width::Byte => c,
+        Width::Word => {
+            let x = c as u16;
+            x.swap_bytes().into()
+        }
+        Width::Dword => {
+            let x = c as u32;
+            x.swap_bytes().into()
+        }
+        Width::Qword => {
+            let x = c as u64;
+            x.swap_bytes().into()
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::block_emitter::BlockEmitter;
+use crate::compile::compile_argument;
 use crate::error::CompileError;
-use crate::generic_ir::{Op, VaListIncOp, VaStartOp};
+use crate::generic_ir::{Op, UnaryUnsignedOp, VaListIncOp, VaStartOp, Width};
 use crate::name_scope::NameScope;
 use crate::rvalue::{RValue, TypedRValue};
 use crate::ErrorCollector;
@@ -14,6 +15,7 @@ use crate::ctype::{CType, FunctionArgs, QualifiedType, Qualifiers};
 pub enum BuiltinFunction {
     VaStart,
     VaIncrement,
+    BSwap(Width),
 }
 
 pub fn is_builtin_name(name: &str) -> bool {
@@ -21,6 +23,8 @@ pub fn is_builtin_name(name: &str) -> bool {
         "__builtin_va_list" => true,
         "__builtin_va_start" => true,
         "__builtin_va_increment" => true,
+        "__builtin_bswap16" => true,
+        "__builtin_bswap32" => true,
         _ => false,
     }
 }
@@ -70,6 +74,48 @@ pub fn get_builtin_function(name: &str) -> Option<(BuiltinFunction, QualifiedTyp
                             t: CType::VaList,
                         },
                         Some("ap".to_owned()),
+                        Span::none(),
+                    )]),
+                    vararg: false,
+                },
+            },
+        )),
+        "__builtin_bswap16" => Some((
+            BuiltinFunction::BSwap(Width::Word),
+            QualifiedType {
+                qualifiers: Qualifiers::empty(),
+                t: CType::Function {
+                    result: Box::new(QualifiedType {
+                        qualifiers: Qualifiers::empty(),
+                        t: CType::Int(2, false),
+                    }),
+                    args: FunctionArgs::List(vec![(
+                        QualifiedType {
+                            qualifiers: Qualifiers::empty(),
+                            t: CType::Int(2, false),
+                        },
+                        Some("x16".to_owned()),
+                        Span::none(),
+                    )]),
+                    vararg: false,
+                },
+            },
+        )),
+        "__builtin_bswap32" => Some((
+            BuiltinFunction::BSwap(Width::Dword),
+            QualifiedType {
+                qualifiers: Qualifiers::empty(),
+                t: CType::Function {
+                    result: Box::new(QualifiedType {
+                        qualifiers: Qualifiers::empty(),
+                        t: CType::Int(4, false),
+                    }),
+                    args: FunctionArgs::List(vec![(
+                        QualifiedType {
+                            qualifiers: Qualifiers::empty(),
+                            t: CType::Int(4, false),
+                        },
+                        Some("x16".to_owned()),
                         Span::none(),
                     )]),
                     vararg: false,
@@ -136,6 +182,34 @@ pub fn compile_builtin_call(
                 },
             })
         }
+        BuiltinFunction::BSwap(w) => {
+            if args.len() > 1 {
+                ec.record_error(CompileError::TooManyArguments(args.len(), 1), span)?;
+                unreachable!()
+            }
+            if args.len() < 1 {
+                ec.record_error(CompileError::TooFewArguments(args.len(), 1), span)?;
+                unreachable!()
+            }
+            let (arg, arg_span) = args.pop().unwrap();
+            let arg_type = QualifiedType {
+                qualifiers: Qualifiers::empty(),
+                t: CType::Int(w as u8, false),
+            };
+            let (arg_location, arg_width) =
+                compile_argument(Some(arg_type.clone()), arg, arg_span, scope, be, ec)?;
+            assert!(arg_width == w);
+            let dst = scope.alloc_temp();
+            be.append_operation(Op::ByteSwap(UnaryUnsignedOp {
+                dst: dst.clone(),
+                src: arg_location,
+                width: w,
+            }));
+            Ok(TypedRValue {
+                src: RValue::new_var(dst),
+                t: arg_type,
+            })
+        }
     }
 }
 
@@ -144,6 +218,9 @@ impl std::fmt::Display for BuiltinFunction {
         match self {
             BuiltinFunction::VaStart => f.write_str("__builtin_va_start"),
             BuiltinFunction::VaIncrement => f.write_str("__builtin_va_increment"),
+            BuiltinFunction::BSwap(Width::Word) => f.write_str("__buitin_bswap16"),
+            BuiltinFunction::BSwap(Width::Dword) => f.write_str("__buitin_bswap32"),
+            BuiltinFunction::BSwap(_) => unreachable!(),
         }
     }
 }

@@ -9,7 +9,7 @@ use crate::name_scope::NameScope;
 use crate::rvalue::{RValue, TypedRValue};
 use crate::{ctype, ir};
 
-use super::{compile_expression, usual_arithmetic_convert, integer_promote};
+use super::{compile_expression, integer_promote, usual_arithmetic_convert};
 
 pub fn compile_equal_to(
     lhs: Node<Expression>,
@@ -219,7 +219,10 @@ pub fn compile_cmp_inner(
     } else if (lhs.t.t.is_integer() && rhs.t.t.is_pointer())
         || (lhs.t.t.is_pointer() && rhs.t.t.is_integer())
     {
-        ec.record_warning(CompileWarning::IncompatibleTypes(lhs.t.clone(), rhs.t.clone()), lhs_span)?;
+        ec.record_warning(
+            CompileWarning::IncompatibleTypes(lhs.t.clone(), rhs.t.clone()),
+            lhs_span,
+        )?;
         let (pointer, integer, integer_span, kind) = if lhs.t.t.is_dereferencable() {
             (lhs, rhs, rhs_span, kind)
         } else {
@@ -234,7 +237,7 @@ pub fn compile_cmp_inner(
             dst_width: Width::PTR_WIDTH,
             src_width: integer_width,
             src_sign: integer_sign,
-            src: integer.unwrap_scalar()
+            src: integer.unwrap_scalar(),
         }));
         let dst = scope.alloc_temp();
         be.append_operation(ir::Op::Compare(ir::CompareOp {
@@ -246,7 +249,7 @@ pub fn compile_cmp_inner(
                 rhs: ir::Scalar::Var(rhs_reg),
                 width: Width::PTR_WIDTH,
                 sign: false,
-            }
+            },
         }));
         Ok(TypedRValue {
             src: RValue::new_var(dst),

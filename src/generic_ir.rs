@@ -76,6 +76,7 @@ pub enum Op<Reg> {
     VaStart(VaStartOp<Reg>),
     VaArg(VaArgOp<Reg>),
     VaListInc(VaListIncOp<Reg>),
+    ByteSwap(UnaryUnsignedOp<Reg>),
     #[cfg(test)]
     Dummy(usize),
 }
@@ -308,6 +309,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::VaStart(op) => op.get_dst_reg(),
             Op::VaArg(op) => op.get_dst_reg(),
             Op::VaListInc(op) => op.get_dst_reg(),
+            Op::ByteSwap(op) => op.get_dst_reg(),
             #[cfg(test)]
             Op::Dummy(_) => None,
         }
@@ -343,6 +345,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::VaStart(_) => false,
             Op::VaArg(op) => op.is_read_from_register(reg),
             Op::VaListInc(op) => op.is_read_from_register(reg),
+            Op::ByteSwap(op) => op.is_read_from_register(reg),
             #[cfg(test)]
             Op::Dummy(_) => false,
         }
@@ -378,6 +381,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::VaStart(_) => false,
             Op::VaArg(_) => false,
             Op::VaListInc(_) => false,
+            Op::ByteSwap(_) => false,
             #[cfg(test)]
             Op::Dummy(_) => false,
         }
@@ -413,6 +417,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::VaStart(_) => false,
             Op::VaArg(_) => false,
             Op::VaListInc(_) => false,
+            Op::ByteSwap(_) => false,
             #[cfg(test)]
             Op::Dummy(_) => false,
         }
@@ -448,6 +453,7 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::VaStart(_) => Some(Width::VA_LIST_WIDTH),
             Op::VaArg(op) => Some(op.width),
             Op::VaListInc(_) => Some(Width::VA_LIST_WIDTH),
+            Op::ByteSwap(op) => Some(op.width),
             #[cfg(test)]
             Op::Dummy(_) => None,
         }
@@ -485,6 +491,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::VaStart(_) => (),
             Op::VaArg(op) => op.collect_read_regs(set),
             Op::VaListInc(op) => op.collect_read_regs(set),
+            Op::ByteSwap(op) => op.collect_read_regs(set),
             #[cfg(test)]
             Op::Dummy(_) => (),
         }
@@ -521,6 +528,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::VaStart(op) => op.collect_set_regs(set),
             Op::VaArg(op) => op.collect_set_regs(set),
             Op::VaListInc(op) => op.collect_set_regs(set),
+            Op::ByteSwap(op) => op.collect_set_regs(set),
             #[cfg(test)]
             Op::Dummy(_) => (),
         }
@@ -566,6 +574,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::VaStart(op) => Op::VaStart(op.remap_regs(map)),
             Op::VaArg(op) => Op::VaArg(op.remap_regs(map)),
             Op::VaListInc(op) => Op::VaListInc(op.remap_regs(map)),
+            Op::ByteSwap(op) => Op::ByteSwap(op.remap_regs(map)),
             #[cfg(test)]
             Op::Dummy(x) => Op::Dummy(x),
         }
@@ -607,6 +616,7 @@ impl<Reg: Copy + Eq + Hash> Op<Reg> {
             Op::VaStart(_) => false,
             Op::VaArg(op) => op.subs_src_regs(map),
             Op::VaListInc(op) => op.subs_src_regs(map),
+            Op::ByteSwap(op) => op.subs_src_regs(map),
             #[cfg(test)]
             Op::Dummy(_) => false,
         }
@@ -660,6 +670,7 @@ impl Op<VirtualReg> {
             Op::VaStart(op) => Op::VaStart(op.remap_regs_to_new_version(map, scope)),
             Op::VaArg(op) => Op::VaArg(op.remap_regs_to_new_version(map, scope)),
             Op::VaListInc(op) => Op::VaListInc(op.remap_regs_to_new_version(map, scope)),
+            Op::ByteSwap(op) => Op::ByteSwap(op.remap_regs_to_new_version(map, scope)),
             #[cfg(test)]
             Op::Dummy(x) => Op::Dummy(x),
         }
@@ -1982,6 +1993,7 @@ where
             Self::VaStart(op) => write!(f, "va_start{}", op),
             Self::VaArg(op) => write!(f, "va_arg{}", op),
             Self::VaListInc(op) => write!(f, "va_inc{}", op),
+            Self::ByteSwap(op) => write!(f, "bswap{}", op),
             #[cfg(test)]
             Self::Dummy(n) => write!(f, "dummy {}", n),
         }
