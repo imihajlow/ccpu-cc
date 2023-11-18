@@ -184,8 +184,8 @@ fn gen_compare_unsigned(w: &mut InstructionWriter, op: &generic_ir::CompareOp<Fr
     w.mov(A, Zero);
     w.ldi_p_sym(label.clone(), 0);
     match kind {
-        CompareKind::LessThan => w.jns(),
-        CompareKind::GreaterOrEqual => w.js(),
+        CompareKind::LessThan => w.jnc(),
+        CompareKind::GreaterOrEqual => w.jc(),
         _ => unreachable!(),
     };
     w.inc(A);
@@ -233,17 +233,17 @@ fn gen_compare_tail_unsigned(
     let label_true = make_block_label(function_name, if_true);
     let label_false = make_block_label(function_name, if_false);
 
-    // lhs < rhs    S is set
-    // lhs >= rhs   S is not set
+    // lhs < rhs    C is set
+    // lhs >= rhs   C is not set
     match kind {
         CompareKind::LessThan => {
-            // on S go to label_true
+            // on C go to label_true
             if cur_block_id + 1 == if_true {
                 w.ldi_p_sym(label_false, 0);
-                w.jns();
+                w.jnc();
             } else {
                 w.ldi_p_sym(label_true, 0);
-                w.js();
+                w.jc();
                 if cur_block_id + 1 != if_false {
                     w.ldi_p_sym(label_false, 0);
                     w.jmp();
@@ -251,13 +251,13 @@ fn gen_compare_tail_unsigned(
             }
         }
         CompareKind::GreaterOrEqual => {
-            // on S go to label_false
+            // on C go to label_false
             if cur_block_id + 1 == if_true {
                 w.ldi_p_sym(label_false, 0);
-                w.js();
+                w.jc();
             } else {
                 w.ldi_p_sym(label_true, 0);
-                w.jns();
+                w.jnc();
                 if cur_block_id + 1 != if_false {
                     w.ldi_p_sym(label_false, 0);
                     w.jmp();
