@@ -595,7 +595,12 @@ impl TypeBuilder {
             cur_value += 1;
         }
         let name = e.node.identifier.map(|n| n.node.name);
-        let id = scope.declare_enum(name, Some(enum_values), span, ec)?;
+        let enum_values = if enum_values.is_empty() {
+            None
+        } else {
+            Some(enum_values)
+        };
+        let id = scope.declare_enum(name, enum_values, span, ec)?;
         for (name, value, span) in const_values {
             scope.declare_int_constant(
                 &name,
