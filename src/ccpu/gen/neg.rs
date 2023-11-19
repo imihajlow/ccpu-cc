@@ -41,8 +41,9 @@ fn gen_neg_word(
     w.ld(B);
     w.inc(PL);
     w.ld(A);
+    w.not(B);
     w.not(A);
-    w.neg(B);
+    w.inc(B);
     w.adc(A, Zero);
     w.ldi_p_var_location(dst, 1, true);
     w.st(A);
@@ -73,6 +74,8 @@ fn gen_neg_long(
             w.ld(A);
             w.ldi_p_var_location(src, wo * 2 + 1, true);
             w.ld(B);
+            w.not(A);
+            w.not(B);
             w.ldi_p_var_location(dst, wo * 2, true);
             w.st(A);
             w.ldi_p_var_location(dst, wo * 2 + 1, true);
