@@ -555,16 +555,25 @@ impl NameScope {
         ec: &mut ErrorCollector,
     ) -> Result<TypedConstant, ()> {
         if let Some(val) = self.get(name) {
-            if val.is_var() {
-                if let Value::StaticVar(t, _, _, initializer) = val {
-                    if !t.is_const() || initializer.is_none() {
+            if !val.is_type() {
+                match val {
+                    Value::StaticVar(t, _, _, initializer) => {
+                        if !t.is_const() || initializer.is_none() {
+                            ec.record_error(CompileError::NonConstInConstExpr, span)?;
+                            unreachable!();
+                        }
+                        return Ok(initializer.unwrap());
+                    }
+                    Value::IntConstant(t, c) => {
+                        return Ok(TypedConstant {
+                            t,
+                            val: crate::initializer::Constant::Int(c),
+                        })
+                    }
+                    _ => {
                         ec.record_error(CompileError::NonConstInConstExpr, span)?;
                         unreachable!();
                     }
-                    return Ok(initializer.unwrap());
-                } else {
-                    ec.record_error(CompileError::NonConstInConstExpr, span)?;
-                    unreachable!();
                 }
             } else {
                 ec.record_error(CompileError::NotAVar(name.to_string()), span)?;
@@ -922,7 +931,14 @@ impl Value {
     }
 
     pub fn is_type(&self) -> bool {
-        !self.is_var()
+        match self {
+            Value::Type(_) => true,
+            Value::AutoVar(_, _) => false,
+            Value::StaticVar(_, _, _, _) => false,
+            Value::Object(_, _) => false,
+            Value::Builtin(_, _) => false,
+            Value::IntConstant(_, _) => false,
+        }
     }
 
     pub fn get_type(&self) -> &QualifiedType {
