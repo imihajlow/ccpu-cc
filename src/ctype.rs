@@ -583,11 +583,13 @@ impl CType {
         let rhs = other;
         let (lhs_size, lhs_sign) = match lhs {
             CType::Int(size, sign) => (*size, *sign),
-            _ => panic!("this function must be used on integer types"),
+            CType::Enum(_) => (machine::INT_SIZE, true),
+            _ => panic!("this function must be used on integer types and not on {}", lhs),
         };
         let (rhs_size, rhs_sign) = match rhs {
             CType::Int(size, sign) => (*size, *sign),
-            _ => panic!("this function must be used on integer types"),
+            CType::Enum(_) => (machine::INT_SIZE, true),
+            _ => panic!("this function must be used on integer types and not on {}", rhs),
         };
         if lhs_sign == rhs_sign {
             // Otherwise, if both operands have signed integer types or both have unsigned integer types,
