@@ -1,6 +1,6 @@
 use crate::{
     ccpu::{instr::InstructionWriter, reg::FrameReg},
-    generic_ir::{self, Scalar, Width},
+    generic_ir::{self, Scalar},
 };
 
 pub fn gen_bool(w: &mut InstructionWriter, op: &generic_ir::UnaryUnsignedOp<FrameReg>) {
@@ -22,34 +22,26 @@ fn gen_bool_common(
     } else {
         unreachable!("const propagation must be performed before emitting code");
     }
-    w.ld(A);
-    if op.width == Width::Byte {
-        w.add(A, Zero);
-    } else {
-        for _ in 1..(op.width as usize) {
-            w.inc(PL);
-            w.ld(B);
-            w.or(A, B);
-        }
+    w.ld(B);
+    for _ in 1..(op.width as usize) {
+        w.inc(PL);
+        w.ld(A);
+        w.or(B, A);
     }
-    if inv {
-        let label_zero = w.alloc_label();
-        w.ldi_p_sym(label_zero.clone(), 0);
-        w.jz();
-        w.ldi_const(A, 0xff, true);
-        w.label(label_zero);
-        w.inc(A);
+    // If B was not 0, carry will be set after neg B
+    if !inv {
+        w.mov(A, Zero);
+        w.neg(B);
+        w.adc(A, Zero);
     } else {
-        let label = w.alloc_label();
-        w.ldi_p_sym(label.clone(), 0);
-        w.jz();
         w.ldi_const(A, 1, true);
-        w.label(label);
+        w.neg(B);
+        w.sbb(A, Zero);
     }
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
     if op.width as usize > 1 {
-        w.ldi_const(A, 0, true);
+        w.mov(A, Zero);
         for _ in 1..(op.width as usize) {
             w.inc(PL);
             w.st(A);
