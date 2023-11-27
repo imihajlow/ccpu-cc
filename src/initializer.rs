@@ -291,6 +291,13 @@ impl TypedConstant {
         self.val.is_bss()
     }
 
+    pub fn is_const(&self) -> bool {
+        match &self.t.t {
+            CType::Array(el_type, _) => el_type.is_const(),
+            _ => self.t.is_const(),
+        }
+    }
+
     pub fn negate(self) -> Self {
         let negated = match self.val {
             Constant::Int(x) => Self {

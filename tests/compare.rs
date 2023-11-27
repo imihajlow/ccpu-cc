@@ -158,7 +158,6 @@ fn test_compare_tail_signed_16() {
     );
 }
 
-
 #[test]
 fn test_compare_signed_16() {
     let (bin, map) = build(
@@ -207,4 +206,3 @@ fn test_compare_signed_16() {
         ],
     );
 }
-

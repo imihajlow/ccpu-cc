@@ -119,7 +119,6 @@ fn test_neg_32() {
     );
 }
 
-
 #[test]
 fn test_neg_32_reg() {
     let (bin, map) = build(

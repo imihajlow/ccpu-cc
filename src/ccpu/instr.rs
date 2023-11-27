@@ -14,7 +14,6 @@ pub struct InstructionWriter {
     text: Vec<(String, Vec<TextItem>)>,
     bss: HashMap<String, DataItem<u16>>,
     data: HashMap<String, DataItem<DataValue>>,
-    rodata: HashMap<String, DataItem<DataValue>>,
     last: [Option<u8>; 5],
     next_label: usize,
 }
@@ -30,12 +29,22 @@ enum TextItem {
 struct DataItem<Inner> {
     data: Inner,
     align: usize,
+    section: Section,
 }
 
 #[derive(Debug, Clone)]
 enum DataValue {
     Int(u64, Width),
     String(Vec<u8>),
+}
+
+#[derive(Debug, Clone)]
+enum Section {
+    Text,
+    Data,
+    Rodata,
+    Bss,
+    Custom(String),
 }
 
 #[derive(Debug, Clone)]
@@ -106,7 +115,6 @@ impl InstructionWriter {
             imports: HashSet::new(),
             bss: HashMap::new(),
             data: HashMap::new(),
-            rodata: HashMap::new(),
             last: [None, None, None, None, Some(0)],
             next_label: 0,
         }
@@ -143,41 +151,52 @@ impl InstructionWriter {
     }
 
     pub fn bss(&mut self, label: String, size: u16, align: usize) {
-        if let Some(_) = self.bss.insert(label, DataItem { data: size, align }) {
+        if let Some(_) = self.bss.insert(
+            label,
+            DataItem {
+                data: size,
+                align,
+                section: Section::Bss,
+            },
+        ) {
             panic!("duplicate bss label");
         }
     }
 
-    pub fn data_int(&mut self, label: String, val: u64, width: Width, align: usize) {
+    pub fn data_int(&mut self, label: String, val: u64, width: Width, align: usize, ro: bool) {
+        let section = if val == 0 {
+            Section::Bss
+        } else if ro {
+            Section::Rodata
+        } else {
+            Section::Data
+        };
         if let Some(_) = self.data.insert(
             label,
             DataItem {
                 data: DataValue::Int(val, width),
                 align,
+                section,
             },
         ) {
             panic!("duplicate data label");
         }
     }
 
-    pub fn data_vec(&mut self, label: String, val: Vec<u8>, align: usize) {
+    pub fn data_vec(&mut self, label: String, val: Vec<u8>, align: usize, ro: bool) {
+        let section = if val.iter().all(|x| *x == 0) {
+            Section::Bss
+        } else if ro {
+            Section::Rodata
+        } else {
+            Section::Data
+        };
         if let Some(_) = self.data.insert(
             label,
             DataItem {
                 data: DataValue::String(val),
                 align,
-            },
-        ) {
-            panic!("duplicate data label");
-        }
-    }
-
-    pub fn ro_data_vec(&mut self, label: String, val: Vec<u8>, align: usize) {
-        if let Some(_) = self.rodata.insert(
-            label,
-            DataItem {
-                data: DataValue::String(val),
-                align,
+                section,
             },
         ) {
             panic!("duplicate data label");
@@ -392,14 +411,6 @@ impl InstructionWriter {
         self.push(TextItem::Op(Op::St(dst)));
     }
 
-    pub fn get_ro_size(&self) -> usize {
-        self.text
-            .iter()
-            .map(|(_, v)| v.iter().map(|op| op.get_size()).sum::<usize>())
-            .sum::<usize>()
-            + self.rodata.iter().map(|(_, v)| v.get_size()).sum::<usize>()
-    }
-
     fn arithm(&mut self, op: ArithmOp, dst: Reg, src: Reg) {
         let (inv, src) = if let Reg::A = dst {
             if let Reg::A = src {
@@ -495,7 +506,7 @@ impl std::fmt::Display for InstructionWriter {
         }
         writeln!(f, "")?;
         for (symbol, item) in &self.data {
-            writeln!(f, "\t.section data.{}", symbol)?;
+            writeln!(f, "\t.section {}.{}", item.section, symbol)?;
             writeln!(f, "\t.align {}", item.align)?;
             writeln!(f, "{}: {}", symbol, item.data)?
         }
@@ -504,12 +515,6 @@ impl std::fmt::Display for InstructionWriter {
             writeln!(f, "\t.section bss.{}", symbol)?;
             writeln!(f, "\t.align {}", item.align)?;
             writeln!(f, "{}: res {}", symbol, item.data)?
-        }
-        writeln!(f, "")?;
-        for (symbol, item) in &self.rodata {
-            writeln!(f, "\t.section rodata.{}", symbol)?;
-            writeln!(f, "\t.align {}", item.align)?;
-            writeln!(f, "{}: {}", symbol, item.data)?
         }
         Ok(())
     }
@@ -629,6 +634,18 @@ impl std::fmt::Display for Op {
             Op::Jc(Cond::NO) => f.write_str("jno"),
             Op::Jc(Cond::S) => f.write_str("js"),
             Op::Jc(Cond::NS) => f.write_str("jns"),
+        }
+    }
+}
+
+impl std::fmt::Display for Section {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Section::Bss => f.write_str("bss"),
+            Section::Data => f.write_str("data"),
+            Section::Text => f.write_str("text"),
+            Section::Rodata => f.write_str("rodata"),
+            Section::Custom(s) => f.write_str(s),
         }
     }
 }

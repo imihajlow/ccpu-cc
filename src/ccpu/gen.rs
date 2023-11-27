@@ -278,11 +278,11 @@ fn gen_static_data(
         match val.val {
             Constant::Int(x) => {
                 let width = Width::new(size as u8);
-                w.data_int(label, x as u64, width, align as usize);
+                w.data_int(label, x as u64, width, align as usize, val.is_const());
             }
             Constant::Array(_, _) | Constant::Struct(_) => {
                 let bytes = constant_to_bytes(&val, span, scope, ec)?;
-                w.data_vec(label, bytes, align as usize);
+                w.data_vec(label, bytes, align as usize, val.is_const());
             }
             Constant::Void | Constant::Zero => {
                 // is_bss
@@ -347,7 +347,7 @@ fn constant_to_bytes(
 fn gen_ro_data(w: &mut InstructionWriter, idx: usize, buf: &Vec<u8>, align: usize) {
     let id = GlobalVarId::Literal(idx);
     let label = get_global_var_label(&id);
-    w.ro_data_vec(label, buf.clone(), align);
+    w.data_vec(label, buf.clone(), align, true);
 }
 
 fn check_16bit(val: u32, span: Span, ec: &mut ErrorCollector) -> Result<u16, ()> {
