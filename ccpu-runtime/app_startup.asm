@@ -9,15 +9,6 @@
     ; start-up code
     .section init
     .align 0x10000 ; make sure this is at address 0
-    ; save return address
-    mov a, pl
-    mov b, a
-    mov a, ph
-    ldi pl, lo(ret)
-    ldi ph, hi(ret)
-    st b
-    inc pl
-    st a
 
     ; enable memory segments a-b, d-e lo RAM
     ldi ph, 0xff
@@ -88,29 +79,13 @@ bss_loop_end:
     ldi ph, hi(main)
     jmp
 
-    ; disable hardware stack
-    ldi pl, lo(0xFC03)
-    ldi ph, hi(0xFC03)
-    mov a, 0
-    st a
-
-    ; enable memory segments a-b, d-e lo ram
-    ldi ph, 0xff
-    ldi pl, 0x02
-    ldi a, 0xdf
-    st a
-
-    ldi pl, lo(ret)
-    ldi ph, hi(ret)
-    ld a
-    inc pl
-    ld ph
-    mov pl, a
+    ; syscall number 12 - restart
+    ldi a, 12
+    ldi ph, 0xc8
+    ldi pl, 0
+    st  a
+    ldi ph, 0xb0
     jmp
-
-    .section bss
-    .align 2
-ret: res 2
 
     .const tmp = 0xc800
 
