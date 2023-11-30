@@ -125,7 +125,7 @@ impl TranslationUnit<ir::VirtualReg> {
         let init_declarator_span = init_declarator.span;
         let init_declarator = init_declarator.node;
         let type_builder = type_builder.stage2(init_declarator_span, ec)?;
-        let (id, t) = type_builder.process_declarator_node(
+        let (id, t, attrs) = type_builder.process_declarator_node(
             init_declarator.declarator,
             &mut self.scope,
             ec,
@@ -140,10 +140,15 @@ impl TranslationUnit<ir::VirtualReg> {
         };
         match id {
             None => ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator_span)?,
-            Some(id) => {
-                self.scope
-                    .declare(&id, t, storage_class, initializer, init_declarator_span, ec)?
-            }
+            Some(id) => self.scope.declare(
+                &id,
+                t,
+                storage_class,
+                initializer,
+                attrs,
+                init_declarator_span,
+                ec,
+            )?,
         }
         Ok(())
     }

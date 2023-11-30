@@ -11,7 +11,7 @@ pub struct InstructionWriter {
     exports: HashSet<String>,
     weaks: HashSet<String>,
     imports: HashSet<String>,
-    text: Vec<(String, Vec<TextItem>)>,
+    text: Vec<(String, Section, Vec<TextItem>)>,
     bss: HashMap<String, DataItem<u16>>,
     data: HashMap<String, DataItem<DataValue>>,
     last: [Option<u8>; 5],
@@ -120,11 +120,16 @@ impl InstructionWriter {
         }
     }
 
-    pub fn begin_function(&mut self, name: &GlobalVarId) {
+    pub fn begin_function(&mut self, name: &GlobalVarId, custom_secion: Option<&str>) {
         let name = get_global_var_label(&name);
         self.reset_last();
         let segment_name = format!("{}_{:X}", name, *TRANSLATION_UNIT_UID);
-        self.text.push((segment_name, Vec::new()));
+        let section = if let Some(custom_section) = custom_secion {
+            Section::Custom(custom_section.to_string())
+        } else {
+            Section::Text
+        };
+        self.text.push((segment_name, section, Vec::new()));
         self.label(name);
     }
 
@@ -163,8 +168,18 @@ impl InstructionWriter {
         }
     }
 
-    pub fn data_int(&mut self, label: String, val: u64, width: Width, align: usize, ro: bool) {
-        let section = if val == 0 {
+    pub fn data_int(
+        &mut self,
+        label: String,
+        val: u64,
+        width: Width,
+        align: usize,
+        ro: bool,
+        custom_secion: Option<&str>,
+    ) {
+        let section = if let Some(custom_section) = custom_secion {
+            Section::Custom(custom_section.to_string())
+        } else if val == 0 {
             Section::Bss
         } else if ro {
             Section::Rodata
@@ -183,8 +198,17 @@ impl InstructionWriter {
         }
     }
 
-    pub fn data_vec(&mut self, label: String, val: Vec<u8>, align: usize, ro: bool) {
-        let section = if val.iter().all(|x| *x == 0) {
+    pub fn data_vec(
+        &mut self,
+        label: String,
+        val: Vec<u8>,
+        align: usize,
+        ro: bool,
+        custom_secion: Option<&str>,
+    ) {
+        let section = if let Some(custom_section) = custom_secion {
+            Section::Custom(custom_section.to_string())
+        } else if val.iter().all(|x| *x == 0) {
             Section::Bss
         } else if ro {
             Section::Rodata
@@ -438,7 +462,7 @@ impl InstructionWriter {
     }
 
     fn push(&mut self, item: TextItem) {
-        self.text.last_mut().unwrap().1.push(item);
+        self.text.last_mut().unwrap().2.push(item);
     }
 
     fn reset_last(&mut self) {
@@ -498,8 +522,8 @@ impl std::fmt::Display for InstructionWriter {
             writeln!(f, "\t.global {}", symbol)?;
         }
         writeln!(f, "")?;
-        for (id, text) in &self.text {
-            writeln!(f, "\t.section text.{}", id)?;
+        for (id, section, text) in &self.text {
+            writeln!(f, "\t.section {}.{}", section, id)?;
             for item in text {
                 write!(f, "{}", item)?;
             }

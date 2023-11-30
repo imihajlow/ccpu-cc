@@ -412,7 +412,8 @@ pub fn compile_declaration(
         TypeBuilder::new_from_specifiers(decl.node.specifiers, scope, ec)?;
     for init_declarator in decl.node.declarators {
         let tb = type_builder.stage2(init_declarator.span, ec)?;
-        let (name, t) = tb.process_declarator_node(init_declarator.node.declarator, scope, ec)?;
+        let (name, t, attrs) =
+            tb.process_declarator_node(init_declarator.node.declarator, scope, ec)?;
         if name.is_none() {
             ec.record_warning(CompileWarning::EmptyDeclaration, init_declarator.span)?;
             continue;
@@ -433,9 +434,17 @@ pub fn compile_declaration(
             } else {
                 (t, None)
             };
-            scope.declare(&name, t, &stclass, initializer, init_declarator.span, ec)?;
+            scope.declare(
+                &name,
+                t,
+                &stclass,
+                initializer,
+                attrs,
+                init_declarator.span,
+                ec,
+            )?;
         } else {
-            scope.declare(&name, t, &stclass, None, init_declarator.span, ec)?;
+            scope.declare(&name, t, &stclass, None, attrs, init_declarator.span, ec)?;
             if let Some(initializer) = init_declarator.node.initializer {
                 compile_initializer(initializer, &name, init_declarator.span, scope, be, ec)?;
             } else {
@@ -516,7 +525,8 @@ fn compile_cast(
 ) -> Result<TypedRValue, ()> {
     let type_span = c.node.type_name.span;
     let expr_span = c.node.expression.span;
-    let target_type = type_builder::build_type_from_ast_type_name(c.node.type_name, scope, ec)?;
+    let (target_type, _attrs) =
+        type_builder::build_type_from_ast_type_name(c.node.type_name, scope, ec)?;
     let val = compile_expression(*c.node.expression, scope, be, ec)?;
 
     if target_type.t.is_void() {
@@ -789,7 +799,8 @@ pub fn compile_va_arg(
         unreachable!();
     }
     let va_list_scalar = va_list.src.unwrap_scalar();
-    let target_type = type_builder::build_type_from_ast_type_name(va.node.type_name, scope, ec)?;
+    let (target_type, _attrs) =
+        type_builder::build_type_from_ast_type_name(va.node.type_name, scope, ec)?;
 
     if target_type.t.is_scalar() {
         let width = target_type.t.get_scalar_width().unwrap();

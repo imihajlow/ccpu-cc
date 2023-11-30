@@ -6,6 +6,7 @@ use lang_c::{
 use std::collections::HashMap;
 
 use crate::{
+    attribute::Attributes,
     builtin::{get_builtin_function, is_builtin_name, BuiltinFunction},
     ctype::{EnumIdentifier, FunctionArgs, QualifiedType, StructUnionIdentifier, StructUnionKind},
     enums::Enum,
@@ -36,7 +37,7 @@ pub struct NameScope {
     last_reg: VirtualReg,
     last_static_id: u32,
     defs: Vec<Scope>,
-    pub static_initializers: HashMap<GlobalVarId, (TypedConstant, Span)>,
+    pub static_initializers: HashMap<GlobalVarId, (TypedConstant, Attributes, Span)>,
     tagged_types: Vec<(Tagged, Span)>,
     function_frame: Option<FunctionFrame>,
     local_statics: Vec<GlobalVarId>,
@@ -49,12 +50,13 @@ pub struct NameScope {
 pub enum Value {
     Type(QualifiedType),
     AutoVar(QualifiedType, VirtualReg),
-    StaticVar(
-        QualifiedType,
-        GlobalVarId,
-        GlobalStorageClass,
-        Option<TypedConstant>,
-    ),
+    StaticVar {
+        t: QualifiedType,
+        id: GlobalVarId,
+        storage_class: GlobalStorageClass,
+        initializer: Option<TypedConstant>,
+        attrs: Attributes,
+    },
     Object(QualifiedType, ir::Scalar),
     Builtin(QualifiedType, BuiltinFunction),
     IntConstant(QualifiedType, i128),
@@ -131,9 +133,17 @@ impl NameScope {
             panic!("NameScope is popped above the global level");
         }
         for (_key, (val, span)) in m.default {
-            if let Value::StaticVar(t, id, _, initializer) = val {
+            if let Value::StaticVar {
+                t,
+                id,
+                initializer,
+                attrs,
+                ..
+            } = val
+            {
                 let initializer = initializer.unwrap_or_else(|| TypedConstant::new_default(t));
-                self.static_initializers.insert(id, (initializer, span));
+                self.static_initializers
+                    .insert(id, (initializer, attrs, span));
             }
         }
     }
@@ -145,14 +155,21 @@ impl NameScope {
         assert_eq!(self.defs.len(), 1);
         for (_key, (val, span)) in &self.defs.first().unwrap().default {
             match val {
-                Value::StaticVar(t, id, stclass, initializer) => match stclass {
+                Value::StaticVar {
+                    t,
+                    id,
+                    storage_class,
+                    initializer,
+                    attrs,
+                    ..
+                } => match storage_class {
                     GlobalStorageClass::Default | GlobalStorageClass::Static => {
                         if !t.t.is_function() {
                             let initializer = initializer
                                 .clone()
                                 .unwrap_or_else(|| TypedConstant::new_default(t.clone()));
                             self.static_initializers
-                                .insert(id.clone(), (initializer, *span));
+                                .insert(id.clone(), (initializer, attrs.clone(), *span));
                         }
                     }
                     GlobalStorageClass::Extern => (),
@@ -263,6 +280,7 @@ impl NameScope {
         t: QualifiedType,
         storage_class: &Option<Node<StorageClassSpecifier>>,
         initializer: Option<TypedConstant>,
+        attrs: Attributes,
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
@@ -331,12 +349,17 @@ impl NameScope {
                 }
 
                 // check initializers
-                let (old_var_id, old_initializer) =
-                    if let Value::StaticVar(_, id, _, stclass) = old_val {
-                        (id, stclass)
-                    } else {
-                        unreachable!()
-                    };
+                let (old_var_id, old_initializer, mut old_attrs) = if let Value::StaticVar {
+                    id,
+                    initializer,
+                    attrs,
+                    ..
+                } = old_val
+                {
+                    (id, initializer, attrs)
+                } else {
+                    unreachable!()
+                };
                 if old_initializer.is_some() && initializer.is_some() {
                     return ec.record_error(CompileError::VarRedefinition(name.to_string()), span);
                 }
@@ -348,10 +371,17 @@ impl NameScope {
                     combined_storage_class = GlobalStorageClass::Default;
                 }
                 let combined_initializer = initializer.or(old_initializer);
+                old_attrs.update(attrs, span, ec)?;
 
                 self.insert(
                     name,
-                    Value::StaticVar(t, old_var_id, combined_storage_class, combined_initializer),
+                    Value::StaticVar {
+                        t,
+                        id: old_var_id,
+                        storage_class: combined_storage_class,
+                        initializer: combined_initializer,
+                        attrs: old_attrs,
+                    },
                     span,
                 );
             } else {
@@ -363,7 +393,13 @@ impl NameScope {
                 };
                 self.insert(
                     name,
-                    Value::StaticVar(t, var_id, storage_class, initializer),
+                    Value::StaticVar {
+                        t,
+                        id: var_id,
+                        storage_class,
+                        initializer,
+                        attrs,
+                    },
                     span,
                 );
             }
@@ -398,14 +434,26 @@ impl NameScope {
                         self.local_statics.push(id.clone());
                         self.insert(
                             name,
-                            Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
+                            Value::StaticVar {
+                                t,
+                                id,
+                                storage_class: GlobalStorageClass::Static,
+                                initializer,
+                                attrs,
+                            },
                             span,
                         );
                     } else if t.t.is_object() || t.t.is_array() {
                         self.local_statics.push(id.clone());
                         self.insert(
                             name,
-                            Value::StaticVar(t, id, GlobalStorageClass::Static, initializer),
+                            Value::StaticVar {
+                                t,
+                                id,
+                                storage_class: GlobalStorageClass::Static,
+                                initializer,
+                                attrs,
+                            },
                             span,
                         );
                     } else if t.t.is_valist() {
@@ -557,7 +605,7 @@ impl NameScope {
         if let Some(val) = self.get(name) {
             if !val.is_type() {
                 match val {
-                    Value::StaticVar(t, _, _, initializer) => {
+                    Value::StaticVar { t, initializer, .. } => {
                         if !t.is_const() || initializer.is_none() {
                             ec.record_error(CompileError::NonConstInConstExpr, span)?;
                             unreachable!();
@@ -596,7 +644,7 @@ impl NameScope {
                     t,
                     src: RValue::new_var(VarLocation::Local(r)),
                 }),
-                Value::StaticVar(t, id, _, _) => {
+                Value::StaticVar { t, id, .. } => {
                     if t.t.is_object() || t.t.is_function() || t.t.is_array() {
                         Ok(TypedRValue {
                             t,
@@ -646,7 +694,7 @@ impl NameScope {
                     t,
                     lv: LValue::Var(VarLocation::Local(r)),
                 }),
-                Value::StaticVar(t, id, _, _) => {
+                Value::StaticVar { t, id, .. } => {
                     if t.t.is_object() || t.t.is_array() || t.t.is_function() {
                         Ok(TypedLValue {
                             t,
@@ -923,7 +971,7 @@ impl Value {
         match self {
             Value::Type(_) => false,
             Value::AutoVar(_, _) => true,
-            Value::StaticVar(_, _, _, _) => true,
+            Value::StaticVar { .. } => true,
             Value::Object(_, _) => true,
             Value::Builtin(_, _) => true,
             Value::IntConstant(_, _) => false,
@@ -934,7 +982,7 @@ impl Value {
         match self {
             Value::Type(_) => true,
             Value::AutoVar(_, _) => false,
-            Value::StaticVar(_, _, _, _) => false,
+            Value::StaticVar { .. } => false,
             Value::Object(_, _) => false,
             Value::Builtin(_, _) => false,
             Value::IntConstant(_, _) => false,
@@ -945,7 +993,7 @@ impl Value {
         match self {
             Value::Type(t) => t,
             Value::AutoVar(t, _) => t,
-            Value::StaticVar(t, _, _, _) => t,
+            Value::StaticVar { t, .. } => t,
             Value::Object(t, _) => t,
             Value::Builtin(t, _) => t,
             Value::IntConstant(t, _) => t,
@@ -956,7 +1004,7 @@ impl Value {
         match self {
             Value::Type(t) => t,
             Value::AutoVar(t, _) => t,
-            Value::StaticVar(t, _, _, _) => t,
+            Value::StaticVar { t, .. } => t,
             Value::Object(t, _) => t,
             Value::Builtin(t, _) => t,
             Value::IntConstant(t, _) => t,
@@ -964,8 +1012,8 @@ impl Value {
     }
 
     pub fn unwrap_storage_class(&self) -> GlobalStorageClass {
-        if let Value::StaticVar(_, _, class, _) = self {
-            *class
+        if let Value::StaticVar { storage_class, .. } = self {
+            *storage_class
         } else {
             panic!("Can only unwrap storage class for a static variable");
         }
@@ -979,9 +1027,17 @@ impl Value {
         GlobalVarId,
         GlobalStorageClass,
         Option<TypedConstant>,
+        Attributes,
     ) {
-        if let Value::StaticVar(t, id, stcl, init) = self {
-            (t, id, stcl, init)
+        if let Value::StaticVar {
+            t,
+            id,
+            storage_class,
+            initializer,
+            attrs,
+        } = self
+        {
+            (t, id, storage_class, initializer, attrs)
         } else {
             panic!("Not a static var")
         }

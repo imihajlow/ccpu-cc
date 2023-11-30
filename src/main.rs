@@ -3,6 +3,7 @@
 #![feature(iter_intersperse)]
 #![feature(map_try_insert)]
 
+mod attribute;
 mod block_emitter;
 mod builtin;
 mod ccpu;

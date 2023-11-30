@@ -1,5 +1,6 @@
 use lang_c::span::Span;
 
+use crate::attribute::Attributes;
 use crate::ccpu::gen::switch::gen_switch;
 use crate::ccpu::global::{get_global_var_label, get_static_frame_symbol};
 use crate::error::{CompileError, ErrorCollector};
@@ -63,8 +64,8 @@ pub fn gen_tu(
         gen_function(&mut w, f, ec)?;
     }
 
-    for (id, (val, span)) in &tu.scope.static_initializers {
-        gen_static_data(&mut w, id, val, *span, &tu.scope, ec)?;
+    for (id, (val, attrs, span)) in &tu.scope.static_initializers {
+        gen_static_data(&mut w, id, val, attrs, *span, &tu.scope, ec)?;
     }
 
     for (idx, data) in tu.scope.literals.iter().enumerate() {
@@ -79,7 +80,7 @@ fn gen_function(
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     let name = f.get_id();
-    w.begin_function(&name);
+    w.begin_function(&name, f.get_custom_section());
     // save return address
     w.mov(A, PL);
     w.mov(B, A);
@@ -265,6 +266,7 @@ fn gen_static_data(
     w: &mut InstructionWriter,
     id: &GlobalVarId,
     val: &TypedConstant,
+    attrs: &Attributes,
     span: Span,
     scope: &NameScope,
     ec: &mut ErrorCollector,
@@ -272,22 +274,42 @@ fn gen_static_data(
     let label = get_global_var_label(id);
     let size = check_16bit(val.t.t.sizeof(scope, span, ec)?, span, ec)?;
     let align = check_16bit(val.t.t.alignof(scope, span, ec)?, span, ec)?;
-    if val.is_bss() {
+    if val.is_bss() && attrs.get_section().is_none() {
         w.bss(label, size, align as usize);
     } else {
         match val.val {
             Constant::Int(x) => {
                 let width = Width::new(size as u8);
-                w.data_int(label, x as u64, width, align as usize, val.is_const());
+                w.data_int(
+                    label,
+                    x as u64,
+                    width,
+                    align as usize,
+                    val.is_const(),
+                    attrs.get_section(),
+                );
             }
             Constant::Array(_, _) | Constant::Struct(_) => {
                 let bytes = constant_to_bytes(&val, span, scope, ec)?;
-                w.data_vec(label, bytes, align as usize, val.is_const());
+                w.data_vec(
+                    label,
+                    bytes,
+                    align as usize,
+                    val.is_const(),
+                    attrs.get_section(),
+                );
             }
-            Constant::Void | Constant::Zero => {
-                // is_bss
-                unreachable!()
+            Constant::Zero => {
+                let zeroes = vec![0; size as usize];
+                w.data_vec(
+                    label,
+                    zeroes,
+                    align as usize,
+                    val.is_const(),
+                    attrs.get_section(),
+                );
             }
+            Constant::Void => unreachable!(),
         }
     }
     Ok(())
@@ -347,7 +369,7 @@ fn constant_to_bytes(
 fn gen_ro_data(w: &mut InstructionWriter, idx: usize, buf: &Vec<u8>, align: usize) {
     let id = GlobalVarId::Literal(idx);
     let label = get_global_var_label(&id);
-    w.data_vec(label, buf.clone(), align, true);
+    w.data_vec(label, buf.clone(), align, true, None);
 }
 
 fn check_16bit(val: u32, span: Span, ec: &mut ErrorCollector) -> Result<u16, ()> {

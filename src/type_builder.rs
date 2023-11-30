@@ -1,3 +1,5 @@
+use crate::attribute::Attribute;
+use crate::attribute::Attributes;
 use crate::builtin::get_builtin_type;
 use crate::constant;
 use crate::constant::check_static_assert;
@@ -38,7 +40,7 @@ pub struct TypeBuilder {
     modifier: TypeModifier,
     sign: SignModifier,
     qualifiers: Qualifiers,
-    packed: bool,
+    attrs: Attributes,
 }
 
 /**
@@ -46,6 +48,7 @@ pub struct TypeBuilder {
  */
 pub struct TypeBuilderStage2 {
     base_type: QualifiedType,
+    attrs: Attributes,
 }
 
 pub struct ExtraSpecifiers {
@@ -87,7 +90,7 @@ impl TypeBuilder {
             modifier: TypeModifier::None,
             sign: SignModifier::Default,
             qualifiers: Qualifiers::empty(),
-            packed: false,
+            attrs: Attributes::new(),
         }
     }
 
@@ -136,7 +139,9 @@ impl TypeBuilder {
                     )?;
                     unreachable!()
                 }
-                DeclarationSpecifier::Extension(_) => (),
+                DeclarationSpecifier::Extension(_) => {
+                    // already processed
+                }
             }
         }
         Ok((type_builder, storage_class, extra))
@@ -225,24 +230,24 @@ impl TypeBuilder {
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         let span = ext.span;
-        match &ext.node {
-            Extension::Attribute(a) => match &a.name.node[..] {
-                "packed" => self.set_packed(),
-                x => ec.record_warning(
-                    CompileWarning::Unimplemented(format!("attribute {}", x)),
-                    span,
-                )?,
-            },
+        let attr = match &ext.node {
+            Extension::Attribute(a) => Attribute::parse(a.clone(), span, ec)?,
             Extension::AsmLabel(_) => {
                 ec.record_warning(CompileWarning::Unimplemented("asm label".to_string()), span)?;
+                None
             }
             Extension::AvailabilityAttribute(_) => {
                 ec.record_warning(
                     CompileWarning::Unimplemented("availability attribute".to_string()),
                     span,
                 )?;
+                None
             }
+        };
+        if let Some(attr) = attr {
+            self.attrs.add_attribute(attr, span, ec)?;
         }
+
         Ok(())
     }
 
@@ -258,7 +263,12 @@ impl TypeBuilder {
             SpecifierQualifier::TypeSpecifier(spec) => {
                 self.add_type_specifier_node(spec, scope, ec)
             }
-            SpecifierQualifier::Extension(_) => Ok(()),
+            SpecifierQualifier::Extension(ve) => {
+                for ext in ve {
+                    self.add_extension_node(&ext, ec)?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -314,6 +324,7 @@ impl TypeBuilder {
                 t,
                 qualifiers: self.qualifiers | extra_qualifiers,
             },
+            attrs: self.attrs.clone(),
         })
     }
 
@@ -495,11 +506,24 @@ impl TypeBuilder {
                                     unreachable!()
                                 }
                                 let stage2 = type_builder.stage2(decl.span, ec)?;
-                                let (name, t) = if let Some(decl) = decl.node.declarator {
+                                let (name, t, attrs) = if let Some(decl) = decl.node.declarator {
                                     stage2.process_declarator_node(decl, scope, ec)?
                                 } else {
-                                    (None, stage2.finalize())
+                                    let (t, attrs) = stage2.finalize();
+                                    (None, t, attrs)
                                 };
+                                if attrs.is_packed() {
+                                    ec.record_warning(
+                                        CompileWarning::AttributeIgnored("packed".to_string()),
+                                        decl.span,
+                                    )?;
+                                }
+                                if attrs.get_section().is_some() {
+                                    ec.record_warning(
+                                        CompileWarning::AttributeIgnored("section".to_string()),
+                                        decl.span,
+                                    )?;
+                                }
                                 if let Some(name) = name {
                                     if used_names.insert(name.to_string(), decl.span).is_some() {
                                         ec.record_error(
@@ -536,7 +560,19 @@ impl TypeBuilder {
                                 }
                             }
                         } else {
-                            let t = type_builder.stage2(f.span, ec)?.finalize();
+                            let (t, attrs) = type_builder.stage2(f.span, ec)?.finalize();
+                            if attrs.is_packed() {
+                                ec.record_warning(
+                                    CompileWarning::AttributeIgnored("packed".to_string()),
+                                    f.span,
+                                )?;
+                            }
+                            if attrs.get_section().is_some() {
+                                ec.record_warning(
+                                    CompileWarning::AttributeIgnored("section".to_string()),
+                                    f.span,
+                                )?;
+                            }
                             if let Some(tti) = t.t.get_anon_struct_or_union_id() {
                                 let inner_names =
                                     scope.get_struct_union(tti).collect_member_names(scope);
@@ -563,8 +599,12 @@ impl TypeBuilder {
             None
         };
         let t = match kind {
-            StructKind::Struct => scope.declare_struct(name, members, self.packed, span, ec)?,
-            StructKind::Union => scope.declare_union(name, members, self.packed, span, ec)?,
+            StructKind::Struct => {
+                scope.declare_struct(name, members, self.attrs.is_packed(), span, ec)?
+            }
+            StructKind::Union => {
+                scope.declare_union(name, members, self.attrs.is_packed(), span, ec)?
+            }
         };
         self.set_base_type(BaseType::StructUnion(t), span, ec)
     }
@@ -615,44 +655,38 @@ impl TypeBuilder {
         }
         self.set_base_type(BaseType::Enum(id), span, ec)
     }
-
-    fn set_packed(&mut self) {
-        assert!(self.base_type.is_none());
-        self.packed = true;
-    }
 }
 
 impl TypeBuilderStage2 {
     /**
-     * Recursively continue building the type and return the name and the type.
+     * Recursively continue building the type and return the name, the type and attributes.
      */
     pub fn process_declarator_node(
         mut self,
         declarator: Node<lang_c::ast::Declarator>,
         scope: &mut NameScope,
         ec: &mut ErrorCollector,
-    ) -> Result<(Option<String>, QualifiedType), ()> {
+    ) -> Result<(Option<String>, QualifiedType, Attributes), ()> {
         use lang_c::ast::DeclaratorKind;
         let Node {
-            node: declarator,
-            span,
+            node: declarator, ..
         } = declarator;
 
         for derived in declarator.derived {
             self.add_derived_declarator_node(derived, scope, ec)?;
         }
 
-        if !declarator.extensions.is_empty() {
-            ec.record_warning(CompileWarning::Unimplemented("extension".to_string()), span)?;
+        for ext in declarator.extensions {
+            self.add_extension_node(&ext, ec)?;
         }
 
         let kind = declarator.kind.node;
         match kind {
             DeclaratorKind::Abstract | DeclaratorKind::Identifier(_) => {
-                let qt = self.finalize();
+                let (qt, attrs) = self.finalize();
                 match kind {
-                    DeclaratorKind::Abstract => Ok((None, qt)),
-                    DeclaratorKind::Identifier(id) => Ok((Some(id.node.name), qt)),
+                    DeclaratorKind::Abstract => Ok((None, qt, attrs)),
+                    DeclaratorKind::Identifier(id) => Ok((Some(id.node.name), qt, attrs)),
                     DeclaratorKind::Declarator(_) => unreachable!(),
                 }
             }
@@ -660,8 +694,35 @@ impl TypeBuilderStage2 {
         }
     }
 
-    pub fn finalize(self) -> QualifiedType {
-        self.base_type
+    pub fn finalize(self) -> (QualifiedType, Attributes) {
+        (self.base_type, self.attrs)
+    }
+
+    fn add_extension_node(
+        &mut self,
+        ext: &Node<lang_c::ast::Extension>,
+        ec: &mut ErrorCollector,
+    ) -> Result<(), ()> {
+        let span = ext.span;
+        let attr = match &ext.node {
+            Extension::Attribute(a) => Attribute::parse(a.clone(), span, ec)?,
+            Extension::AsmLabel(_) => {
+                ec.record_warning(CompileWarning::Unimplemented("asm label".to_string()), span)?;
+                None
+            }
+            Extension::AvailabilityAttribute(_) => {
+                ec.record_warning(
+                    CompileWarning::Unimplemented("availability attribute".to_string()),
+                    span,
+                )?;
+                None
+            }
+        };
+        if let Some(attr) = attr {
+            self.attrs.add_attribute(attr, span, ec)?;
+        }
+
+        Ok(())
     }
 
     fn add_derived_declarator_node(
@@ -681,7 +742,9 @@ impl TypeBuilderStage2 {
                         }
                         PointerQualifier::Extension(_) => {
                             ec.record_error(
-                                CompileError::Unimplemented("extension".to_string()),
+                                CompileError::Unimplemented(
+                                    "extension in pointer qualifiers".to_string(),
+                                ),
                                 pq.span,
                             )?;
                             unreachable!()
@@ -717,15 +780,35 @@ impl TypeBuilderStage2 {
                             }
                             DeclarationSpecifier::Alignment(_) => todo!(),
                             DeclarationSpecifier::Function(_) => (), // ignore _Noreturn and inline
-                            DeclarationSpecifier::Extension(_) => (),
+                            DeclarationSpecifier::Extension(_) => {
+                                ec.record_warning(
+                                    CompileWarning::Unimplemented(
+                                        "extension in function declaration".to_string(),
+                                    ),
+                                    declspec.span,
+                                )?;
+                            }
                         }
                     }
                     let builder = builder.stage2(param_decl.span, ec)?;
-                    let (name, t) = if let Some(decl) = param_decl.node.declarator {
+                    let (name, t, attrs) = if let Some(decl) = param_decl.node.declarator {
                         builder.process_declarator_node(decl, scope, ec)?
                     } else {
-                        (None, builder.finalize())
+                        let (t, attrs) = builder.finalize();
+                        (None, t, attrs)
                     };
+                    if attrs.is_packed() {
+                        ec.record_warning(
+                            CompileWarning::AttributeIgnored("packed".to_string()),
+                            param_decl.span,
+                        )?;
+                    }
+                    if attrs.get_section().is_some() {
+                        ec.record_warning(
+                            CompileWarning::AttributeIgnored("section".to_string()),
+                            param_decl.span,
+                        )?;
+                    }
                     if t.t.is_void() {
                         if name.is_some() {
                             ec.record_error(CompileError::NamedVoidParameter, param_decl.span)?;
@@ -829,7 +912,7 @@ pub fn build_type_from_ast_type_name(
     node: Node<TypeName>,
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
-) -> Result<QualifiedType, ()> {
+) -> Result<(QualifiedType, Attributes), ()> {
     let mut builder = TypeBuilder::new();
     for sq in &node.node.specifiers {
         if let SpecifierQualifier::Extension(vext) = &sq.node {
@@ -843,7 +926,8 @@ pub fn build_type_from_ast_type_name(
     }
     let stage2 = builder.stage2(node.span, ec)?;
     if let Some(declarator) = node.node.declarator {
-        Ok(stage2.process_declarator_node(declarator, scope, ec)?.1)
+        let (_name, t, attrs) = stage2.process_declarator_node(declarator, scope, ec)?;
+        Ok((t, attrs))
     } else {
         Ok(stage2.finalize())
     }

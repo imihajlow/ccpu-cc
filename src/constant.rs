@@ -169,7 +169,7 @@ fn process_size_of_ty_node(
     ec: &mut ErrorCollector,
 ) -> Result<TypedConstant, ()> {
     let span = node.span;
-    let t = type_builder::build_type_from_ast_type_name(node.node.0, scope, ec)?;
+    let (t, _attrs) = type_builder::build_type_from_ast_type_name(node.node.0, scope, ec)?;
     let size = t.t.sizeof(scope, span, ec)?;
     Ok(TypedConstant::new_integer(size.into(), ctype::SIZE_TYPE))
 }
@@ -201,7 +201,7 @@ fn process_align_of_node(
     ec: &mut ErrorCollector,
 ) -> Result<TypedConstant, ()> {
     let span = node.span;
-    let t = type_builder::build_type_from_ast_type_name(*node.node.0, scope, ec)?;
+    let (t, _attrs) = type_builder::build_type_from_ast_type_name(*node.node.0, scope, ec)?;
     let size = t.t.alignof(scope, span, ec)?;
     Ok(TypedConstant::new_integer(size.into(), ctype::SIZE_TYPE))
 }
@@ -670,7 +670,7 @@ fn process_cast_expression_node(
     let new_type = if let Some(decl) = c.node.type_name.node.declarator {
         type_builder.process_declarator_node(decl, scope, ec)?.1
     } else {
-        type_builder.finalize()
+        type_builder.finalize().0
     };
     let value = compute_constant_expr(*c.node.expression, allow_var, scope, ec)?;
 
@@ -702,7 +702,7 @@ fn process_compound_literal_node(
     let target_type = if let Some(decl) = c.node.type_name.node.declarator {
         type_builder.process_declarator_node(decl, scope, ec)?.1
     } else {
-        type_builder.finalize()
+        type_builder.finalize().0
     };
     process_initializer_list(
         &target_type,

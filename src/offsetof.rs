@@ -11,7 +11,7 @@ pub fn compute_offsetof(
     scope: &mut NameScope,
     ec: &mut ErrorCollector,
 ) -> Result<u32, ()> {
-    let t = type_builder::build_type_from_ast_type_name(node.node.type_name, scope, ec)?;
+    let (t, _attrs) = type_builder::build_type_from_ast_type_name(node.node.type_name, scope, ec)?;
 
     let designator = node.node.designator.node;
     let (mut offset, mut t) =

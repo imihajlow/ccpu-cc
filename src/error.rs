@@ -2,7 +2,7 @@ use lang_c::{
     loc::{get_location_for_offset, Location},
     span::Span,
 };
-use std::fmt::Formatter;
+use std::{fmt::Formatter, string::FromUtf8Error};
 
 use crate::{
     ctype::{CType, QualifiedType, StructUnionIdentifier},
@@ -53,6 +53,7 @@ pub enum CompileError {
     DivisionByZero,
     CharParseError(StringParseError),
     StringParseError(StringParseError),
+    FromUtf8Error(FromUtf8Error),
     WrongInitializerForType(QualifiedType),
     ConstantOutOfRange,
     ArrayDesignatorIndexOutOfBounds(usize, usize),
@@ -108,6 +109,9 @@ pub enum CompileWarning {
     ImplicitArgumentTypes,
     ArrayOfPacked(QualifiedType),
     PriorInitializationOverridden,
+    SectionOverridden,
+    AttributeIgnored(String),
+    WrongAttributeParameters(String, String),
 }
 
 pub struct CompileErrorWithSpan(pub CompileError, pub Span);
@@ -245,6 +249,7 @@ impl std::fmt::Display for CompileError {
             CompileError::StringParseError(e) => {
                 write!(f, "error while parsing string literal: {}", e)
             }
+            CompileError::FromUtf8Error(e) => write!(f, "error decoding UTF-8: {}", e),
             CompileError::WrongInitializerForType(t) => {
                 write!(f, "'{}' cannot be initialized with this initializer", t)
             }
@@ -390,6 +395,13 @@ impl std::fmt::Display for CompileWarning {
             }
             CompileWarning::PriorInitializationOverridden => {
                 f.write_str("initializer overrides prior initialization of this subobject")
+            }
+            CompileWarning::SectionOverridden => {
+                f.write_str("section does not match previous declaration")
+            }
+            CompileWarning::AttributeIgnored(attr) => write!(f, "'{}' attribute ignored", attr),
+            CompileWarning::WrongAttributeParameters(attr, what) => {
+                write!(f, "wrong parameters for attribute '{}': {}", attr, what)
             }
         }
     }

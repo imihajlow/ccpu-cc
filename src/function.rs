@@ -36,6 +36,7 @@ pub struct Function<Reg: Eq + Hash> {
     is_noreturn: bool,
     is_vararg: bool,
     is_reentrant: bool,
+    custom_section: Option<String>,
     name: String,
     storage_class: GlobalStorageClass,
     return_type: QualifiedType,
@@ -64,6 +65,10 @@ impl<Reg: Hash + Eq> Function<Reg> {
 
     pub fn get_span(&self) -> Span {
         self.span
+    }
+
+    pub fn get_custom_section(&self) -> Option<&str> {
+        self.custom_section.as_ref().map(|s| s.as_str())
     }
 
     pub fn get_id(&self) -> GlobalVarId {
@@ -105,9 +110,11 @@ impl Function<ir::VirtualReg> {
         let (type_builder, storage_class, extra) =
             TypeBuilder::new_from_specifiers(node.node.specifiers, scope, ec)?;
         let type_builder = type_builder.stage2(node.span, ec)?;
-        let (name, t) = type_builder.process_declarator_node(node.node.declarator, scope, ec)?;
+        let (name, t, attrs) =
+            type_builder.process_declarator_node(node.node.declarator, scope, ec)?;
         let name = name.unwrap();
-        scope.declare(&name, t.clone(), &storage_class, None, node.span, ec)?;
+        let custom_section = attrs.get_section().map(|s| s.to_string());
+        scope.declare(&name, t.clone(), &storage_class, None, attrs, node.span, ec)?;
         let (return_type, args, is_vararg) = if let CType::Function {
             result,
             args,
@@ -144,6 +151,7 @@ impl Function<ir::VirtualReg> {
             is_inline: extra.is_inline,
             is_noreturn: extra.is_noreturn,
             is_reentrant: false,
+            custom_section,
             storage_class,
             is_vararg,
             return_type,
@@ -374,10 +382,10 @@ impl Function<ir::VirtualReg> {
             .fold(Some(1), |a, b| {
                 a.and_then(|a: usize| b.and_then(|b| a.checked_mul(b)))
             });
-        let repetitions = 1; /*match phi_permutations {
-                                 Some(p) if p < 10000 => p * 5,
-                                 _ => 10000,
-                             };*/
+        let repetitions = match phi_permutations {
+            Some(p) if p < 10000 => p * 5,
+            _ => 10000,
+        };
         let mut min_copies = None;
         let mut best_body = None;
         for _ in 0..repetitions {
@@ -399,6 +407,7 @@ impl Function<ir::VirtualReg> {
             is_noreturn: self.is_noreturn,
             is_vararg: self.is_vararg,
             is_reentrant: self.is_reentrant,
+            custom_section: self.custom_section,
             name: self.name,
             storage_class: self.storage_class,
             return_type: self.return_type,

@@ -43,7 +43,7 @@ pub fn compile_sizeof_type(
     let t = if let Some(decl) = si.node.0.node.declarator {
         stage2.process_declarator_node(decl, scope, ec)?.1
     } else {
-        stage2.finalize()
+        stage2.finalize().0
     };
 
     Ok(TypedRValue {
@@ -66,7 +66,7 @@ pub fn compile_alignof(
     let t = if let Some(decl) = si.node.0.node.declarator {
         stage2.process_declarator_node(decl, scope, ec)?.1
     } else {
-        stage2.finalize()
+        stage2.finalize().0
     };
 
     Ok(TypedRValue {
