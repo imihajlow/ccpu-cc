@@ -38,11 +38,12 @@ impl Attribute {
                 }
                 let arg = attr.arguments.pop().unwrap();
                 if let Expression::StringLiteral(s) = arg.node {
-                    let (_, name) = parse_string_literal(s.node).map_err(|e| {
+                    let (_, mut name) = parse_string_literal(s.node).map_err(|e| {
                         ec.record_error(CompileError::StringParseError(e), s.span)
                             .err()
                             .unwrap()
                     })?;
+                    name.pop(); // discard terminating zero
                     let name = match String::from_utf8(name) {
                         Ok(s) => s,
                         Err(e) => {
