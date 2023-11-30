@@ -26,10 +26,10 @@
     .section init
     .align 0x10000 ; make sure this is at address 0
     nop
-    ; enable memory segments a-b
+    ; enable memory segments a-b, d-e
     ldi ph, 0xff
     ldi pl, 0x02
-    ldi a, 0x1e
+    ldi a, 0xde
     st a
 
     ; enable hardware stack

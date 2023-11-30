@@ -19,10 +19,10 @@
     inc pl
     st a
 
-    ; enable memory segments a-b, lo RAM
+    ; enable memory segments a-b, d-e lo RAM
     ldi ph, 0xff
     ldi pl, 0x02
-    ldi a, 0x1f
+    ldi a, 0xdf
     st a
 
     ; enable hardware stack
@@ -94,10 +94,10 @@ bss_loop_end:
     mov a, 0
     st a
 
-    ; enable memory segments a-c, lo ram
+    ; enable memory segments a-b, d-e lo ram
     ldi ph, 0xff
     ldi pl, 0x02
-    ldi a, 0x3f
+    ldi a, 0xdf
     st a
 
     ldi pl, lo(ret)
@@ -112,5 +112,5 @@ bss_loop_end:
     .align 2
 ret: res 2
 
-    .const tmp = 0xc000
+    .const tmp = 0xc800
 
