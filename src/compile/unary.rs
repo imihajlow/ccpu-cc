@@ -270,7 +270,13 @@ fn compile_deref(
 
     match operand_type.dereference() {
         Ok(pointee) => {
-            if let Some(width) = pointee.t.get_scalar_width() {
+            if pointee.t.is_array() {
+                // Pointer to an array points to its first element, nothing to load
+                Ok(TypedRValue {
+                    src: RValue::Object(ObjectLocation::PointedBy(operand_scalar)),
+                    t: pointee,
+                })
+            } else if let Some(width) = pointee.t.get_scalar_width() {
                 let dst = scope.alloc_temp();
                 be.append_operation(ir::Op::Load(ir::LoadOp {
                     dst: dst.clone(),
