@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::mem;
 use std::{collections::HashMap, hash::Hash};
 
@@ -10,7 +11,7 @@ use crate::generic_ir;
  * The first argument of the return tuple indicates if any changes have been made.
  */
 pub fn drop_orphan_blocks<Reg: Hash + Eq + Copy>(
-    blocks: Vec<generic_ir::Block<Reg>>,
+    mut blocks: Vec<generic_ir::Block<Reg>>,
 ) -> (bool, Vec<generic_ir::Block<Reg>>) {
     assert!(!blocks.is_empty());
     let mut visited = vec![false; blocks.len()];
@@ -20,11 +21,17 @@ pub fn drop_orphan_blocks<Reg: Hash + Eq + Copy>(
     }
     let mut offsets = Vec::with_capacity(blocks.len());
     let mut offset = 0;
+    let mut to_drop = HashSet::new();
     for i in 0..blocks.len() {
         if !visited[i] {
+            to_drop.insert(i);
             offset += 1;
         }
         offsets.push(offset);
+    }
+
+    for block in &mut blocks {
+        block.phi.delete_srcs_from_set(&to_drop);
     }
 
     let mut result = Vec::new();

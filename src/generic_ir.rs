@@ -919,6 +919,12 @@ impl<Reg: Copy + Eq + Hash> Phi<Reg> {
         }
         result
     }
+
+    pub fn delete_srcs_from_set(&mut self, set: &HashSet<usize>) {
+        for (_, (_, src)) in &mut self.srcs {
+            src.retain(|(block_id, _)| !set.contains(block_id));
+        }
+    }
 }
 
 impl<Reg: Copy + Eq> ArgOp<Reg> {

@@ -24,12 +24,5 @@ fn test_array_ptr() {
     ",
     );
 
-    run(
-        &bin,
-        &map,
-        &[
-            "u main_exit",
-            "check w baz 30",
-        ],
-    );
+    run(&bin, &map, &["u main_exit", "check w baz 30"]);
 }
