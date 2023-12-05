@@ -70,9 +70,9 @@ fn gen_compare_eq(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg
     w.label(label_end);
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
-    if op.desc.width as u16 > 1 {
+    if op.dst_width as u16 > 1 {
         w.mov(A, Zero);
-        for _ in 1..(op.desc.width as u16) {
+        for _ in 1..(op.dst_width as u16) {
             w.inc(PL);
             w.st(A);
         }
@@ -141,9 +141,9 @@ fn gen_compare_ne(w: &mut InstructionWriter, op: &generic_ir::CompareOp<FrameReg
     w.label(label_end);
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
-    if op.desc.width as u16 > 1 {
+    if op.dst_width as u16 > 1 {
         w.mov(A, Zero);
-        for _ in 1..(op.desc.width as u16) {
+        for _ in 1..(op.dst_width as u16) {
             w.inc(PL);
             w.st(A);
         }
@@ -192,9 +192,9 @@ fn gen_compare_unsigned(w: &mut InstructionWriter, op: &generic_ir::CompareOp<Fr
     w.label(label);
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
-    if op.desc.width as u16 > 1 {
+    if op.dst_width as u16 > 1 {
         w.mov(A, Zero);
-        for _ in 1..(op.desc.width as u16) {
+        for _ in 1..(op.dst_width as u16) {
             w.inc(PL);
             w.st(A);
         }
@@ -340,9 +340,9 @@ fn gen_compare_signed(w: &mut InstructionWriter, op: &generic_ir::CompareOp<Fram
 
     w.ldi_p_var_location(&op.dst, 0, true);
     w.st(A);
-    if op.desc.width as u16 > 1 {
+    if op.dst_width as u16 > 1 {
         w.mov(A, Zero);
-        for _ in 1..(op.desc.width as u16) {
+        for _ in 1..(op.dst_width as u16) {
             w.inc(PL);
             w.st(A);
         }
