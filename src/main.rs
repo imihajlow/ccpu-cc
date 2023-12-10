@@ -30,6 +30,7 @@ mod regalloc;
 mod register;
 mod rvalue;
 mod ssa;
+mod stats;
 mod string;
 mod struct_union;
 mod translation_unit;
@@ -58,7 +59,7 @@ use clap::{Parser, ValueEnum};
 #[derive(Parser)]
 #[command(name = "CCPU compiler")]
 struct Cli {
-    /// Be verbose
+    /// Print output from intermediate stages
     #[arg(short, long)]
     verbose: bool,
 
@@ -85,6 +86,10 @@ struct Cli {
     /// C dialect
     #[arg(long = "std")]
     std: Option<Standard>,
+
+    /// Show staticstics
+    #[arg(long = "show-stats")]
+    show_stats: bool,
 
     /// Input file name
     input: PathBuf,
@@ -176,15 +181,19 @@ fn main() {
             println!("========== GENERATE ===========");
         }
         let mut ec = ErrorCollector::new();
-        let w = ccpu::gen::gen_tu(tu, &mut ec);
+        let r = ccpu::gen::gen_tu(tu, &mut ec);
         ec.print_issues_src(&p.source);
-        let w = if let Ok(w) = w {
-            w
+        let (w, stats) = if let Ok(r) = r {
+            r
         } else {
             exit(1);
         };
         if cli.verbose {
             println!("{}", w);
+        }
+
+        if cli.show_stats {
+            stats.print_stats();
         }
 
         if let Err(e) = File::create(output_path.clone()).and_then(|mut f| write!(f, "{}", w)) {

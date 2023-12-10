@@ -16,6 +16,7 @@ pub struct InstructionWriter {
     data: HashMap<String, DataItem<DataValue>>,
     last: [Option<u8>; 5],
     next_label: usize,
+    text_bytes: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -117,7 +118,12 @@ impl InstructionWriter {
             data: HashMap::new(),
             last: [None, None, None, None, Some(0)],
             next_label: 0,
+            text_bytes: 0,
         }
+    }
+
+    pub fn get_text_bytes(&self) -> usize {
+        self.text_bytes
     }
 
     pub fn begin_function(&mut self, name: &GlobalVarId, custom_secion: Option<&str>) {
@@ -462,6 +468,9 @@ impl InstructionWriter {
     }
 
     fn push(&mut self, item: TextItem) {
+        if let TextItem::Op(op) = &item {
+            self.text_bytes += op.get_size();
+        }
         self.text.last_mut().unwrap().2.push(item);
     }
 

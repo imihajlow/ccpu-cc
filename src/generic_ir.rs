@@ -5,9 +5,9 @@ use std::{
     mem,
 };
 
-use crate::{machine, name_scope::NameScope};
+use crate::{machine, name_scope::NameScope, stats};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, Hash)]
 pub enum Width {
     Byte = 1,
     Word = 2,
@@ -456,6 +456,93 @@ impl<Reg: Copy + Eq> Op<Reg> {
             Op::ByteSwap(op) => Some(op.width),
             #[cfg(test)]
             Op::Dummy(_) => None,
+        }
+    }
+
+    pub fn get_class(&self) -> stats::InstructionClass {
+        use crate::stats::InstructionClass;
+        match self {
+            Op::Undefined(_) => InstructionClass::Other,
+            Op::Arg(_) => InstructionClass::Other,
+            Op::FramePointer(_) => InstructionClass::Other,
+            Op::Copy(op) => InstructionClass::Copy(op.width),
+            Op::Bool(op) => InstructionClass::Bool(op.width),
+            Op::BoolInv(op) => InstructionClass::BoolInv(op.width),
+            Op::Add(op) => InstructionClass::Add {
+                w: op.width,
+                has_const: op.lhs.is_const() || op.rhs.is_const(),
+            },
+            Op::Sub(op) => InstructionClass::Sub {
+                w: op.width,
+                lhs_const: op.lhs.is_const(),
+                rhs_const: op.rhs.is_const(),
+            },
+            Op::Mul(op) => InstructionClass::Mul {
+                w: op.width,
+                has_const: op.lhs.is_const() || op.rhs.is_const(),
+            },
+            Op::Div(op) => InstructionClass::Div {
+                w: op.width,
+                lhs_const: op.lhs.is_const(),
+                rhs_const: op.rhs.is_const(),
+            },
+            Op::Mod(op) => InstructionClass::Mod {
+                w: op.width,
+                lhs_const: op.lhs.is_const(),
+                rhs_const: op.rhs.is_const(),
+            },
+            Op::BAnd(op) => InstructionClass::BAnd {
+                w: op.width,
+                has_const: op.lhs.is_const() || op.rhs.is_const(),
+            },
+            Op::BOr(op) => InstructionClass::BOr {
+                w: op.width,
+                has_const: op.lhs.is_const() || op.rhs.is_const(),
+            },
+            Op::BXor(op) => InstructionClass::BXor {
+                w: op.width,
+                has_const: op.lhs.is_const() || op.rhs.is_const(),
+            },
+            Op::LShift(op) => InstructionClass::LShift {
+                w: op.lhs_width,
+                lhs_const: op.lhs.is_const(),
+                rhs_const: op.rhs.is_const(),
+            },
+            Op::RShift(op) => InstructionClass::RShift {
+                w: op.lhs_width,
+                lhs_const: op.lhs.is_const(),
+                rhs_const: op.rhs.is_const(),
+            },
+            Op::Neg(op) => InstructionClass::Neg(op.width),
+            Op::Not(op) => InstructionClass::Not(op.width),
+            Op::Compare(op) => InstructionClass::Compare {
+                w: op.desc.width,
+                lhs_const: op.desc.lhs.is_const(),
+                rhs_const: op.desc.rhs.is_const(),
+            },
+            Op::Conv(op) => InstructionClass::Conv {
+                from: op.src_width,
+                to: op.dst_width,
+                sign: op.dst_sign,
+            },
+            Op::Store(op) => InstructionClass::Store {
+                addr_const: op.dst_addr.is_const(),
+                val_const: op.src.is_const(),
+                w: op.width,
+            },
+            Op::Load(op) => InstructionClass::Load {
+                addr_const: op.src_addr.is_const(),
+                w: op.width,
+            },
+            Op::Call(_) => InstructionClass::Call,
+            Op::IntrinCall(_) => InstructionClass::IntrinCall,
+            Op::Memcpy(_) => InstructionClass::Memcpy,
+            Op::VaStart(_) => InstructionClass::Other,
+            Op::VaArg(_) => InstructionClass::Other,
+            Op::VaListInc(_) => InstructionClass::Other,
+            Op::ByteSwap(op) => InstructionClass::ByteSwap(op.width),
+            #[cfg(test)]
+            Op::Dummy(_) => InstructionClass::Other,
         }
     }
 }
@@ -1873,6 +1960,14 @@ impl<Reg: Copy + Eq> Scalar<Reg> {
             x.is_reg(reg)
         } else {
             false
+        }
+    }
+
+    fn is_const(&self) -> bool {
+        if let Self::Var(_) = self {
+            false
+        } else {
+            true
         }
     }
 }

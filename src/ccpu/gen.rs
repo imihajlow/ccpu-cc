@@ -7,6 +7,7 @@ use crate::error::{CompileError, ErrorCollector};
 use crate::generic_ir::{GlobalVarId, JumpCondition, Width};
 use crate::initializer::{Constant, TypedConstant};
 use crate::name_scope::{ExportClass, NameScope};
+use crate::stats::Stats;
 use crate::{
     function::Function,
     generic_ir::{self, ArgOp, Scalar, VarLocation},
@@ -44,8 +45,9 @@ mod variadic;
 pub fn gen_tu(
     tu: TranslationUnit<FrameReg>,
     ec: &mut ErrorCollector,
-) -> Result<InstructionWriter, ()> {
+) -> Result<(InstructionWriter, Stats), ()> {
     let mut w = InstructionWriter::new();
+    let mut stats = Stats::new();
     w.import(global::RET_VALUE_REG_SYMBOL.to_string());
     intrin::gen_intrin_imports(&mut w);
 
@@ -61,7 +63,7 @@ pub fn gen_tu(
     }
 
     for f in tu.functions.into_iter() {
-        gen_function(&mut w, f, ec)?;
+        gen_function(&mut w, f, ec, &mut stats)?;
     }
 
     for (id, (val, attrs, span)) in &tu.scope.static_initializers {
@@ -71,13 +73,14 @@ pub fn gen_tu(
     for (idx, data) in tu.scope.literals.iter().enumerate() {
         gen_ro_data(&mut w, idx, data, 1);
     }
-    Ok(w)
+    Ok((w, stats))
 }
 
 fn gen_function(
     w: &mut InstructionWriter,
     f: Function<FrameReg>,
     ec: &mut ErrorCollector,
+    stats: &mut Stats,
 ) -> Result<(), ()> {
     let name = f.get_id();
     w.begin_function(&name, f.get_custom_section());
@@ -102,7 +105,7 @@ fn gen_function(
         w.label(make_block_label(f.get_name(), i));
         for op in block.ops.iter() {
             w.comment(format!("{}", op));
-            gen_op(w, op, f.get_name());
+            gen_op(w, op, stats, f.get_name());
         }
         w.comment(format!("{}", block.tail));
         gen_tail(w, &block.tail, i, f.get_name());
@@ -118,8 +121,15 @@ fn gen_function(
     Ok(())
 }
 
-fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, _function_name: &str) {
+fn gen_op(
+    w: &mut InstructionWriter,
+    op: &generic_ir::Op<FrameReg>,
+    stats: &mut Stats,
+    _function_name: &str,
+) {
     use generic_ir::Op::*;
+    let op_class = op.get_class();
+    let text_bytes_before = w.get_text_bytes();
     match op {
         Undefined(_) => (),
         Arg(op) => check_arg(op),
@@ -155,6 +165,8 @@ fn gen_op(w: &mut InstructionWriter, op: &generic_ir::Op<FrameReg>, _function_na
         #[cfg(test)]
         Dummy(_) => (),
     }
+    let text_bytes_after = w.get_text_bytes();
+    stats.rec(op_class, text_bytes_after - text_bytes_before);
 }
 
 fn gen_tail(
