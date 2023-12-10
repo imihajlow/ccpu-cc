@@ -47,20 +47,210 @@ pub fn gen_add_reg_const(
     width: Width,
 ) {
     use crate::ccpu::instr::Reg::*;
+    if width == Width::Byte {
+        return gen_add_reg_const_byte(w, dst, r, c);
+    }
+    if width == Width::Word {
+        return gen_add_reg_const_word(w, dst, r, c);
+    }
     let width = width as u16;
+    let mut carry_significant = false;
     for offset in 0..width {
-        w.ldi_p_var_location(r, offset, offset == 0);
-        w.ld(B);
-        w.ldi_const(A, (c & 0xff) as u8, offset == 0);
-        if offset == 0 {
-            w.add(B, A);
+        let cur_byte = (c & 0xff) as u8;
+        if cur_byte == 0 {
+            if carry_significant {
+                w.ldi_p_var_location(r, offset, false);
+                w.ld(A);
+                w.adc(A, Zero);
+                w.ldi_p_var_location(dst, offset, false);
+                w.st(A);
+            } else if dst != r {
+                w.ldi_p_var_location(r, offset, true);
+                w.ld(B);
+                w.ldi_p_var_location(dst, offset, true);
+                w.st(B);
+            }
         } else {
-            w.adc(B, A);
+            if carry_significant {
+                w.ldi_p_var_location(r, offset, false);
+                w.ld(B);
+                w.ldi_const(A, cur_byte, false);
+                w.adc(B, A);
+                w.ldi_p_var_location(dst, offset, false);
+                w.st(B);
+            } else {
+                if cur_byte == 1 {
+                    w.ldi_p_var_location(r, offset, true);
+                    w.ld(B);
+                    w.inc(B);
+                    w.ldi_p_var_location(dst, offset, false);
+                    w.st(B);
+                } else {
+                    w.ldi_p_var_location(r, offset, false);
+                    w.ld(B);
+                    w.ldi_const(A, cur_byte, false);
+                    w.add(B, A);
+                    w.ldi_p_var_location(dst, offset, false);
+                    w.st(B);
+                }
+                carry_significant = true;
+            }
         }
-        w.ldi_p_var_location(dst, offset, offset == width - 1);
-        w.st(B);
 
         c >>= 8;
+    }
+}
+
+fn gen_add_reg_const_byte(
+    w: &mut InstructionWriter,
+    dst: &VarLocation<FrameReg>,
+    r: &VarLocation<FrameReg>,
+    c: u64,
+) {
+    use crate::ccpu::instr::Reg::*;
+    let c = (c & 0xff) as u8;
+    if c == 0 && dst == r {
+        // nothing to do
+        return;
+    }
+    w.ldi_p_var_location(r, 0, true);
+    w.ld(B);
+    match c {
+        0 => (),
+        1 => w.inc(B),
+        0xff => w.dec(B),
+        _ => {
+            w.ldi_const(A, c, true);
+            w.add(B, A);
+        }
+    }
+    w.ldi_p_var_location(dst, 0, true);
+    w.st(B);
+}
+
+fn gen_add_reg_const_word(
+    w: &mut InstructionWriter,
+    dst: &VarLocation<FrameReg>,
+    r: &VarLocation<FrameReg>,
+    c: u64,
+) {
+    use crate::ccpu::instr::Reg::*;
+
+    let c = (c & 0xffff) as u16;
+    if dst == r {
+        return gen_add_reg_const_word_inplace(w, dst, c);
+    }
+    let lo = (c & 0xff) as u8;
+    let hi = (c >> 8) as u8;
+    if lo == 0 {
+        w.ldi_p_var_location(r, 0, true);
+        w.ld(A);
+        w.inc(PL);
+        w.ld(B);
+        w.ldi_p_var_location(dst, 0, true);
+        w.st(A);
+        w.inc(PL);
+        match hi {
+            0 => (),
+            1 => w.inc(B),
+            0xff => w.dec(B),
+            _ => {
+                w.ldi_const(A, hi, true);
+                w.add(B, A)
+            }
+        }
+        w.st(B);
+    } else if hi == 0 {
+        w.ldi_p_var_location(r, 0, true);
+        w.ld(B);
+        w.inc(PL);
+        match lo {
+            0 => unreachable!(),
+            1 => w.inc(B),
+            _ => {
+                w.ldi_const(A, lo, true);
+                w.add(B, A);
+            }
+        }
+        w.ld(A);
+        w.adc(A, Zero);
+        w.ldi_p_var_location(dst, 1, true);
+        w.st(A);
+        w.dec(PL);
+        w.st(B);
+    } else {
+        w.ldi_p_var_location(r, 0, true);
+        w.ld(B);
+        w.inc(PL);
+        match lo {
+            0 => unreachable!(),
+            1 => w.inc(B),
+            _ => {
+                w.ldi_const(A, lo, true);
+                w.add(B, A);
+            }
+        }
+        w.ld(A);
+        w.ldi_const(PL, hi, false);
+        w.adc(A, PL);
+        w.ldi_p_var_location(dst, 1, true);
+        w.st(A);
+        w.dec(PL);
+        w.st(B);
+    }
+}
+
+fn gen_add_reg_const_word_inplace(w: &mut InstructionWriter, dst: &VarLocation<FrameReg>, c: u16) {
+    use crate::ccpu::instr::Reg::*;
+    if c == 0 {
+        // nothing to do
+        return;
+    }
+    let lo = (c & 0xff) as u8;
+    let hi = (c >> 8) as u8;
+    if lo == 0 {
+        w.ldi_p_var_location(dst, 1, true);
+        w.ld(B);
+        match hi {
+            0 => unreachable!(),
+            1 => w.inc(B),
+            0xff => w.dec(B),
+            _ => {
+                w.ldi_const(A, hi, true);
+                w.add(B, A);
+            }
+        }
+        w.st(B);
+    } else if hi == 0 {
+        w.ldi_p_var_location(dst, 0, true);
+        w.ld(B);
+        w.inc(PL);
+        if lo == 1 {
+            w.inc(B);
+        } else {
+            w.ldi_const(A, lo, true);
+            w.add(B, A);
+        }
+        w.ld(A);
+        w.adc(A, Zero);
+        w.st(A);
+        w.dec(PL);
+        w.st(B);
+    } else {
+        w.ldi_p_var_location(dst, 0, true);
+        w.ld(B);
+        if lo == 1 {
+            w.inc(B);
+        } else {
+            w.ldi_const(A, lo, true);
+            w.add(B, A);
+        }
+        w.st(B);
+        w.ldi_pl_var_location_lo(dst, 1, false);
+        w.ld(B);
+        w.ldi_const(A, hi, false);
+        w.adc(B, A);
+        w.st(B);
     }
 }
 

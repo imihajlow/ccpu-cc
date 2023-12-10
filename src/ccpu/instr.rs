@@ -355,6 +355,26 @@ impl InstructionWriter {
         }
     }
 
+    pub fn ldi_pl_var_location_lo(
+        &mut self,
+        v: &VarLocation<FrameReg>,
+        offset: u16,
+        allow_incdec: bool,
+    ) {
+        match v {
+            VarLocation::Local(reg) => {
+                let addr = reg.get_address();
+                self.ldi_const(Reg::PL, (addr + offset) as u8, allow_incdec);
+            }
+            VarLocation::Global(g) => {
+                self.ldi_lo(Reg::PL, global::get_global_var_label(g), offset);
+            }
+            VarLocation::Return => {
+                self.ldi_lo(Reg::PL, global::RET_VALUE_REG_SYMBOL.to_string(), offset);
+            }
+        }
+    }
+
     pub fn mov(&mut self, dst: Reg, src: Reg) {
         self.last[dst as usize] = self.last[src as usize];
         self.arithm(ArithmOp::MOV, dst, src);
