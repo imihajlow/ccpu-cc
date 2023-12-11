@@ -7,6 +7,7 @@ mod attribute;
 mod block_emitter;
 mod builtin;
 mod ccpu;
+mod cmdline;
 mod compile;
 mod constant;
 mod ctype;
@@ -48,59 +49,12 @@ extern crate lazy_static;
 
 use std::fs::File;
 use std::io::Write;
-use std::{path::PathBuf, process::exit};
+use std::process::exit;
 
 use crate::{error::ErrorCollector, translation_unit::TranslationUnit};
 
+use cmdline::{Cli, Standard};
 use lang_c::driver::{parse, Flavor};
-
-use clap::{Parser, ValueEnum};
-
-#[derive(Parser)]
-#[command(name = "CCPU compiler")]
-struct Cli {
-    /// Print output from intermediate stages
-    #[arg(short, long)]
-    verbose: bool,
-
-    /// Output file name
-    #[arg(short)]
-    output: Option<PathBuf>,
-
-    /// Define macro
-    #[arg(short = 'D')]
-    define: Vec<String>,
-
-    /// Add directory to the end of the list of include search paths
-    #[arg(short = 'I')]
-    include: Vec<String>,
-
-    /// Add directory to SYSTEM include search path
-    #[arg(long = "isystem")]
-    isystem: Vec<String>,
-
-    /// Add directory to QUOTE include search path
-    #[arg(long = "iquote")]
-    iquote: Vec<String>,
-
-    /// C dialect
-    #[arg(long = "std")]
-    std: Option<Standard>,
-
-    /// Show staticstics
-    #[arg(long = "show-stats")]
-    show_stats: bool,
-
-    /// Input file name
-    input: PathBuf,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-enum Standard {
-    C11,
-    Gnu11,
-    Clang11,
-}
 
 impl From<Standard> for Flavor {
     fn from(s: Standard) -> Self {
@@ -115,8 +69,10 @@ impl From<Standard> for Flavor {
 fn main() {
     let cli = Cli::parse();
 
+    let input = cli.get_input().clone();
+
     let cfg = preprocess::get_config(
-        cli.std.unwrap_or(Standard::Gnu11).into(),
+        cli.get_dialect().into(),
         cli.define,
         cli.include,
         cli.isystem,
@@ -126,12 +82,12 @@ fn main() {
     let output_path = if let Some(output) = cli.output {
         output
     } else {
-        let mut output = cli.input.clone();
+        let mut output = input.clone();
         output.set_extension("asm");
         output
     };
 
-    let p = match parse(&cfg, cli.input) {
+    let p = match parse(&cfg, input) {
         Ok(p) => p,
         Err(e) => {
             println!("{}", e);
