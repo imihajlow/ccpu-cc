@@ -24,8 +24,7 @@ pub fn run(bin: &Path, map: &Path, script: &[&str]) {
 }
 
 pub fn build(code: &str) -> (PathBuf, PathBuf) {
-    let asm = compile(code);
-    let obj = assemble(&asm);
+    let obj = compile(code);
     link(
         &obj.with_extension("bin"),
         &[&obj, &RUNTIME_OBJ, &STARTUP_OBJ, &MEMCPY_OBJ, &DIVIDE32_OBJ],
@@ -37,17 +36,17 @@ fn compile(code: &str) -> PathBuf {
     let mut filename = temp_dir();
     filename.push(format!("{:016X}.c", rand::random::<u64>()));
     std::fs::write(&filename, code).unwrap();
-    let asm_filename = filename.with_extension("s");
+    let obj_filename = filename.with_extension("o");
     Command::cargo_bin("ccpu-cc")
         .unwrap()
-        .arg("--std=gnu11")
+        .arg("-std=gnu11")
         .arg("-o")
-        .arg(&asm_filename)
+        .arg(&obj_filename)
         .arg(filename)
         .unwrap()
         .assert()
         .success();
-    asm_filename
+    obj_filename
 }
 
 fn assemble(file: &Path) -> PathBuf {

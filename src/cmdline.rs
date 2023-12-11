@@ -36,6 +36,9 @@ pub struct Cli {
 
     /// Input file name
     input: Option<PathBuf>,
+
+    /// Produce assembly file
+    pub produce_assembly: bool,
 }
 
 impl Cli {
@@ -122,6 +125,10 @@ impl Cli {
 
                 "-show-stats" => result.show_stats = true,
 
+                "-S" => result.produce_assembly = true,
+
+                "-c" => (),
+
                 s if s.starts_with("-") => die(&format!("Unrecognized parameter: {}", s)),
 
                 s => result.set_input(s),
@@ -158,6 +165,7 @@ impl Cli {
             dialect: None,
             show_stats: false,
             input: None,
+            produce_assembly: false,
         }
     }
 
@@ -213,6 +221,7 @@ Arguments:
 
 Options:
   -v                       Print output from intermediate stages
+  -S                       Produce an assembly file
   -o <OUTPUT>              Output file name
   -D<DEFINE>               Define macro
   -I <dir>                 Add directory to the end of the list of include search paths

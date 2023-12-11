@@ -83,7 +83,11 @@ fn main() {
         output
     } else {
         let mut output = input.clone();
-        output.set_extension("asm");
+        if cli.produce_assembly {
+            output.set_extension("asm");
+        } else {
+            output.set_extension("o");
+        }
         output
     };
 
@@ -152,9 +156,19 @@ fn main() {
             stats.print_stats();
         }
 
-        if let Err(e) = File::create(output_path.clone()).and_then(|mut f| write!(f, "{}", w)) {
-            println!("Cannot open {} for writing: {}", output_path.display(), e);
-            exit(1);
+        let mut f = match File::create(output_path.clone()) {
+            Ok(f) => f,
+            Err(e) => {
+                println!("Cannot open {} for writing: {}", output_path.display(), e);
+                exit(1);
+            }
+        };
+
+        if cli.produce_assembly {
+            write!(f, "{}", w).unwrap();
+        } else {
+            let obj = ccpu::Object::new(&w);
+            obj.write_to_file(&mut f).unwrap()
         }
     } else {
         exit(1);

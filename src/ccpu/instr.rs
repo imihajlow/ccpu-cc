@@ -8,39 +8,39 @@ use super::reg::FrameReg;
 
 #[derive(Clone)]
 pub struct InstructionWriter {
-    exports: HashSet<String>,
-    weaks: HashSet<String>,
-    imports: HashSet<String>,
-    text: Vec<(String, Section, Vec<TextItem>)>,
-    bss: HashMap<String, DataItem<u16>>,
-    data: HashMap<String, DataItem<DataValue>>,
+    pub(super) exports: HashSet<String>,
+    pub(super) weaks: HashSet<String>,
+    pub(super) imports: HashSet<String>,
+    pub(super) text: Vec<(String, Section, Vec<TextItem>)>,
+    pub(super) bss: HashMap<String, DataItem<u16>>,
+    pub(super) data: HashMap<String, DataItem<DataValue>>,
     last: [Option<u8>; 5],
     next_label: usize,
     text_bytes: usize,
 }
 
 #[derive(Debug, Clone)]
-enum TextItem {
+pub(super) enum TextItem {
     Op(Op),
     Label(String),
     Comment(String),
 }
 
 #[derive(Debug, Clone)]
-struct DataItem<Inner> {
-    data: Inner,
-    align: usize,
-    section: Section,
+pub(super) struct DataItem<Inner> {
+    pub(super) data: Inner,
+    pub(super) align: usize,
+    pub(super) section: Section,
 }
 
 #[derive(Debug, Clone)]
-enum DataValue {
+pub(super) enum DataValue {
     Int(u64, Width),
     String(Vec<u8>),
 }
 
 #[derive(Debug, Clone)]
-enum Section {
+pub(super) enum Section {
     Text,
     Data,
     Rodata,
@@ -49,7 +49,7 @@ enum Section {
 }
 
 #[derive(Debug, Clone)]
-enum Op {
+pub(super) enum Op {
     Arithm(ArithmOp, Reg, bool),
     Ldi(Reg, Imm),
     Ld(Reg),
@@ -60,7 +60,7 @@ enum Op {
 }
 
 #[derive(Debug, Clone)]
-enum Imm {
+pub(super) enum Imm {
     Const(u8),
     Lo(String, u16),
     Hi(String, u16),
@@ -76,7 +76,7 @@ pub enum Reg {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Cond {
+pub(super) enum Cond {
     C,
     NC,
     Z,
@@ -88,7 +88,7 @@ enum Cond {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum ArithmOp {
+pub(super) enum ArithmOp {
     MOV,
     ADD,
     ADC,
