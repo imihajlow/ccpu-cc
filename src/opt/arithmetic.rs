@@ -1,4 +1,7 @@
-use crate::ir::{self, Scalar};
+use crate::{
+    generic_ir::BinaryUnsignedOp,
+    ir::{self, Scalar},
+};
 
 pub fn optimize_arithmetics(blocks: &mut Vec<ir::Block>) -> bool {
     let mut changed = false;
@@ -14,6 +17,7 @@ fn optimize_op(op: &mut ir::Op) -> bool {
     let new_op = match op {
         ir::Op::Mul(op) => optimize_mul(op),
         ir::Op::Div(op) => optimize_div(op),
+        ir::Op::Mod(op) => optimize_mod(op),
         ir::Op::Add(op) => optimize_add(op),
         ir::Op::Sub(op) => optimize_sub(op),
         _ => None,
@@ -69,6 +73,24 @@ fn optimize_div(op: &ir::BinaryOp) -> Option<ir::Op> {
             lhs_sign: op.sign,
             lhs_width: op.width,
             rhs: Scalar::ConstInt(log2(x)),
+        })),
+        _ => None,
+    }
+}
+
+fn optimize_mod(op: &ir::BinaryOp) -> Option<ir::Op> {
+    match op.rhs {
+        Scalar::ConstInt(0) => todo!("handle division by zero"),
+        Scalar::ConstInt(1) => Some(ir::Op::Copy(ir::UnaryUnsignedOp {
+            dst: op.dst.clone(),
+            src: Scalar::ConstInt(0),
+            width: op.width,
+        })),
+        Scalar::ConstInt(x) if x.is_power_of_two() => Some(ir::Op::BAnd(BinaryUnsignedOp {
+            dst: op.dst.clone(),
+            lhs: op.lhs.clone(),
+            rhs: Scalar::ConstInt(x - 1),
+            width: op.width,
         })),
         _ => None,
     }
