@@ -133,7 +133,7 @@ impl TranslationUnit<ir::VirtualReg> {
 
         let (t, initializer) = if let Some(initializer) = init_declarator.initializer {
             let initializer =
-                compute_constant_initializer(initializer, &t, false, &mut self.scope, ec)?;
+                compute_constant_initializer(initializer, &t, true, &mut self.scope, ec)?;
             (initializer.t.clone(), Some(initializer))
         } else {
             (t, None)

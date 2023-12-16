@@ -999,6 +999,7 @@ fn cast(
                 ec.record_error(CompileError::NonConstInConstExpr, span)?;
                 unreachable!()
             }
+            CType::Enum(_) => cast_int(machine::INT_SIZE, true, new_size, new_sign, constant.val),
             _ => unreachable!(),
         },
         CType::Bool => match constant.t.t {
