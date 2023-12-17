@@ -595,6 +595,7 @@ impl BlockEmitter {
         } else {
             body_block_id
         };
+        let step_block_id = self.alloc_block_id();
         let continue_block_id = self.alloc_block_id();
 
         scope.push();
@@ -635,12 +636,17 @@ impl BlockEmitter {
 
             scope.push();
             self.set_break(continue_block_id);
-            self.set_continue(condition_block_id);
+            self.set_continue(step_block_id);
             let r = compile_statement(*fors.node.statement, scope, self, ec);
             scope.pop_and_collect_initializers();
             r?;
             self.pop_continue();
             self.pop_break();
+
+            self.finish_block(
+                LabeledTail::Tail(ir::Tail::Jump(step_block_id)),
+                step_block_id,
+            );
             if let Some(step) = fors.node.step {
                 compile_expression(*step, scope, self, ec)?;
             }
