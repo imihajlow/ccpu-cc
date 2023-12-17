@@ -141,7 +141,7 @@ pub fn check_static_assert(
     ec: &mut ErrorCollector,
 ) -> Result<(), ()> {
     let expr_span = sa.node.expression.span;
-    let val = compute_constant_expr(*sa.node.expression, false, scope, ec)?;
+    let val = compute_constant_expr(*sa.node.expression, true, scope, ec)?;
     let msg = match parse_string_literal(sa.node.message.node) {
         Ok((t, data)) => match t {
             CType::Int(1, _) => String::from_utf8(data).expect("Expected utf-8"),
