@@ -1,6 +1,9 @@
+use crate::constant::compute_constant_expr;
 use crate::error::CompileError;
 use crate::error::CompileWarning;
 use crate::error::ErrorCollector;
+use crate::machine;
+use crate::name_scope::NameScope;
 use crate::string::parse_string_literal;
 use lang_c::ast::Expression;
 use lang_c::span::Span;
@@ -9,17 +12,20 @@ use lang_c::span::Span;
 pub enum Attribute {
     Section(String),
     Packed,
+    Aligned(Option<u32>),
 }
 
 #[derive(Debug, Clone)]
 pub struct Attributes {
     section: Option<String>,
     packed: bool,
+    aligned: Option<u32>,
 }
 
 impl Attribute {
     pub fn parse(
         mut attr: lang_c::ast::Attribute,
+        scope: &mut NameScope,
         span: Span,
         ec: &mut ErrorCollector,
     ) -> Result<Option<Self>, ()> {
@@ -63,6 +69,29 @@ impl Attribute {
                     return Ok(None);
                 }
             }
+            "aligned" => {
+                if attr.arguments.is_empty() {
+                    return Ok(Some(Attribute::Aligned(None)));
+                }
+                if attr.arguments.len() != 1 {
+                    ec.record_warning(
+                        CompileWarning::WrongAttributeParameters(
+                            attr.name.node.to_string(),
+                            "must be 0 or 1 parameter".to_string(),
+                        ),
+                        span,
+                    )?;
+                    return Ok(None);
+                }
+                let arg = attr.arguments.pop().unwrap();
+                let arg_span = arg.span;
+                let r = compute_constant_expr(arg, true, scope, ec)?;
+                if !r.t.t.is_integer() {
+                    ec.record_error(CompileError::IntegerTypeRequired, arg_span)?;
+                    unreachable!();
+                }
+                Ok(Some(Attribute::Aligned(Some(r.unwrap_integer() as u32))))
+            }
             x => {
                 ec.record_warning(
                     CompileWarning::Unimplemented(format!("attribute {}", x)),
@@ -79,6 +108,7 @@ impl Attributes {
         Self {
             section: None,
             packed: false,
+            aligned: None,
         }
     }
 
@@ -88,6 +118,10 @@ impl Attributes {
 
     pub fn get_section(&self) -> Option<&str> {
         self.section.as_ref().map(|x| x.as_str())
+    }
+
+    pub fn get_align(&self, default: u32) -> u32 {
+        self.aligned.unwrap_or(default)
     }
 
     pub fn add_attribute(
@@ -103,6 +137,12 @@ impl Attributes {
                     ec.record_warning(CompileWarning::SectionOverridden, span)?;
                 }
                 self.section = Some(new_section)
+            }
+            Attribute::Aligned(None) => {
+                self.aligned = Some(machine::LLONG_ALIGN);
+            }
+            Attribute::Aligned(Some(x)) => {
+                self.aligned = Some(x);
             }
         }
         Ok(())

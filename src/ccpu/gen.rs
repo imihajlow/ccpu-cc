@@ -285,7 +285,7 @@ fn gen_static_data(
 ) -> Result<(), ()> {
     let label = get_global_var_label(id);
     let size = check_16bit(val.t.t.sizeof(scope, span, ec)?, span, ec)?;
-    let align = check_16bit(val.t.t.alignof(scope, span, ec)?, span, ec)?;
+    let align = check_16bit(attrs.get_align(val.t.t.alignof(scope, span, ec)?), span, ec)?;
     if val.is_bss() && attrs.get_section().is_none() {
         w.bss(label, size, align as usize);
     } else {

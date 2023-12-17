@@ -109,7 +109,7 @@ impl TypeBuilder {
         for declspec in &specs {
             if let DeclarationSpecifier::Extension(ve) = &declspec.node {
                 for ext in ve {
-                    type_builder.add_extension_node(ext, ec)?;
+                    type_builder.add_extension_node(ext, scope, ec)?;
                 }
             }
         }
@@ -156,7 +156,7 @@ impl TypeBuilder {
         for sq in &sqs {
             if let SpecifierQualifier::Extension(vext) = &sq.node {
                 for ext in vext {
-                    r.add_extension_node(ext, ec)?;
+                    r.add_extension_node(ext, scope, ec)?;
                 }
             }
         }
@@ -227,11 +227,12 @@ impl TypeBuilder {
     fn add_extension_node(
         &mut self,
         ext: &Node<lang_c::ast::Extension>,
+        scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         let span = ext.span;
         let attr = match &ext.node {
-            Extension::Attribute(a) => Attribute::parse(a.clone(), span, ec)?,
+            Extension::Attribute(a) => Attribute::parse(a.clone(), scope, span, ec)?,
             Extension::AsmLabel(_) => {
                 ec.record_warning(CompileWarning::Unimplemented("asm label".to_string()), span)?;
                 None
@@ -265,7 +266,7 @@ impl TypeBuilder {
             }
             SpecifierQualifier::Extension(ve) => {
                 for ext in ve {
-                    self.add_extension_node(&ext, ec)?;
+                    self.add_extension_node(&ext, scope, ec)?;
                 }
                 Ok(())
             }
@@ -677,7 +678,7 @@ impl TypeBuilderStage2 {
         }
 
         for ext in declarator.extensions {
-            self.add_extension_node(&ext, ec)?;
+            self.add_extension_node(&ext, scope, ec)?;
         }
 
         let kind = declarator.kind.node;
@@ -701,11 +702,12 @@ impl TypeBuilderStage2 {
     fn add_extension_node(
         &mut self,
         ext: &Node<lang_c::ast::Extension>,
+        scope: &mut NameScope,
         ec: &mut ErrorCollector,
     ) -> Result<(), ()> {
         let span = ext.span;
         let attr = match &ext.node {
-            Extension::Attribute(a) => Attribute::parse(a.clone(), span, ec)?,
+            Extension::Attribute(a) => Attribute::parse(a.clone(), scope, span, ec)?,
             Extension::AsmLabel(_) => {
                 ec.record_warning(CompileWarning::Unimplemented("asm label".to_string()), span)?;
                 None
@@ -762,7 +764,7 @@ impl TypeBuilderStage2 {
                     for declspec in &param_decl.node.specifiers {
                         if let DeclarationSpecifier::Extension(vext) = &declspec.node {
                             for ext in vext {
-                                builder.add_extension_node(ext, ec)?;
+                                builder.add_extension_node(ext, scope, ec)?;
                             }
                         }
                     }
@@ -917,7 +919,7 @@ pub fn build_type_from_ast_type_name(
     for sq in &node.node.specifiers {
         if let SpecifierQualifier::Extension(vext) = &sq.node {
             for ext in vext {
-                builder.add_extension_node(ext, ec)?;
+                builder.add_extension_node(ext, scope, ec)?;
             }
         }
     }
