@@ -95,10 +95,8 @@ pub fn compile_index(
             src: RValue::new_var(dst),
             t: pointee,
         })
-    } else if pointee.t.is_array() {
-        todo!()
     } else {
-        assert!(pointee.t.is_object());
+        assert!(pointee.t.is_object() || pointee.t.is_array());
         let location = offset.unwrap_scalar();
         Ok(TypedRValue {
             src: RValue::Object(ObjectLocation::PointedBy(location)),
