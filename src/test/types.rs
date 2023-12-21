@@ -82,3 +82,84 @@ fn test_function_decl_5() {
         CompileError::NamedVoidParameter
     );
 }
+
+#[test]
+fn test_2d_array_decl_1() {
+    let (tu_result, ec) = translate("int a[2][3];"); // declare a as array 2 of array 3 of int
+    assert!(tu_result.is_ok());
+    assert_eq!(ec.get_error_count(), 0);
+    let tu = tu_result.unwrap();
+    let decl = tu.scope.get("a").unwrap().unwrap_static_var();
+    assert_eq!(
+        decl.0.t,
+        CType::Array(
+            Box::new(QualifiedType {
+                t: CType::Array(
+                    Box::new(QualifiedType {
+                        t: ctype::INT_TYPE,
+                        qualifiers: Qualifiers::empty()
+                    }),
+                    Some(3)
+                ),
+                qualifiers: Qualifiers::empty()
+            }),
+            Some(2)
+        )
+    );
+}
+
+#[test]
+fn test_2d_array_decl_2() {
+    let (tu_result, ec) = translate("typedef int arr[3]; arr a[2];");
+    assert!(tu_result.is_ok());
+    assert_eq!(ec.get_error_count(), 0);
+    let tu = tu_result.unwrap();
+    let decl = tu.scope.get("a").unwrap().unwrap_static_var();
+    assert_eq!(
+        decl.0.t,
+        CType::Array(
+            Box::new(QualifiedType {
+                t: CType::Array(
+                    Box::new(QualifiedType {
+                        t: ctype::INT_TYPE,
+                        qualifiers: Qualifiers::empty()
+                    }),
+                    Some(3)
+                ),
+                qualifiers: Qualifiers::empty()
+            }),
+            Some(2)
+        )
+    );
+}
+
+#[test]
+fn test_2d_array_decl_3() {
+    let (tu_result, ec) = translate("int * const * volatile a[2][4];");
+    assert!(tu_result.is_ok());
+    assert_eq!(ec.get_error_count(), 0);
+    let tu = tu_result.unwrap();
+    let decl = tu.scope.get("a").unwrap().unwrap_static_var();
+    assert_eq!(
+        decl.0.t,
+        CType::Array(
+            Box::new(QualifiedType {
+                t: CType::Array(
+                    Box::new(QualifiedType {
+                        t: CType::Pointer(Box::new(QualifiedType {
+                            t: CType::Pointer(Box::new(QualifiedType {
+                                t: ctype::INT_TYPE,
+                                qualifiers: Qualifiers::empty()
+                            })),
+                            qualifiers: Qualifiers::CONST
+                        })),
+                        qualifiers: Qualifiers::VOLATILE
+                    }),
+                    Some(4)
+                ),
+                qualifiers: Qualifiers::empty()
+            }),
+            Some(2)
+        )
+    );
+}

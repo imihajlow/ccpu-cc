@@ -669,11 +669,32 @@ impl TypeBuilderStage2 {
         ec: &mut ErrorCollector,
     ) -> Result<(Option<String>, QualifiedType, Attributes), ()> {
         use lang_c::ast::DeclaratorKind;
+        use lang_c::ast::DerivedDeclarator;
         let Node {
             node: declarator, ..
         } = declarator;
 
+        // Rearrange derived declarators. Pointer should come as they are, arrays and functions in reversed order.
+        let mut pointer_declarators = Vec::new();
+        let mut rest_declarators = Vec::new();
+        let mut pointers_done = false;
         for derived in declarator.derived {
+            match &derived.node {
+                DerivedDeclarator::Pointer(_) => {
+                    assert!(!pointers_done);
+                    pointer_declarators.push(derived);
+                }
+                _ => {
+                    rest_declarators.push(derived);
+                    pointers_done = true;
+                }
+            }
+        }
+
+        for derived in pointer_declarators {
+            self.add_derived_declarator_node(derived, scope, ec)?;
+        }
+        for derived in rest_declarators.into_iter().rev() {
             self.add_derived_declarator_node(derived, scope, ec)?;
         }
 
