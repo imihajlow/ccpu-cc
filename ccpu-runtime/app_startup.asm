@@ -16,19 +16,6 @@
     ldi a, 0xdf
     st a
 
-    ; enable hardware stack
-    ldi pl, lo(0xFC03)
-    ldi ph, hi(0xFC03)
-    ldi a, 1
-    st a
-    ; set SP1 to 1, SP0 to 0
-    ; stack grows upwards
-    ldi pl, lo(0xFC01)
-    st a
-    dec pl
-    dec a
-    st a
-
     ; initialize BSS
     ldi pl, lo(tmp)
     ldi ph, hi(tmp)
@@ -87,5 +74,5 @@ bss_loop_end:
     ldi ph, 0xb0
     jmp
 
-    .const tmp = 0xc800
+    .const tmp = 0xc000
 
